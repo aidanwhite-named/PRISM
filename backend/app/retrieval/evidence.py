@@ -29,6 +29,7 @@ from .extraction import (
 )
 from .prompts import NOT_FOUND_PHRASE
 from .search import IndexedDocument
+from .source_pool import SourcePool
 from .versions import EXTRACTOR_VERSION, INDEX_VERSION
 
 BUNDLE_VERSION = 1
@@ -164,18 +165,26 @@ _ROLE_LABEL = {
 
 def identity_excerpt(document: IndexedDocument) -> str:
     """서지사항 확인용 첫 페이지 발췌. 요약하지 않고 원문 그대로 자른다."""
+    return identity_excerpt_location(document)[1]
+
+
+def identity_excerpt_location(document: IndexedDocument) -> tuple[int | None, str]:
+    """Keep the actual page when empty leading pages require a fallback."""
     for page in range(1, max(1, document.page_count) + 1):
         rows = document.index.page_rows(page)
         text = "\n".join(row.text for row in rows).strip()
         if text:
-            return text[:IDENTITY_EXCERPT_CHARS]
-    return ""
+            return page, text[:IDENTITY_EXCERPT_CHARS]
+    return None, ""
 
 
-def _document_entry(document: IndexedDocument, excerpt: str = "") -> dict:
+def _document_entry(
+    document: IndexedDocument, excerpt: str = "", identity_page: int | None = None
+) -> dict:
     report = document.report or {}
     return {
         "identity_excerpt": excerpt,
+        "identity_excerpt_pdf_page": identity_page,
         "attachment": document.alias,
         "attachment_id": document.attachment_id,
         "role": document.role,
@@ -224,7 +233,8 @@ class EvidenceBuilder:
         self._by_alias = {document.alias: document for document in corpus}
         self._used_chars = 0
         self.truncated = False
-        self._included_sources: set[tuple] = set()
+        self._source_entries: list[tuple[str, int, str]] = []
+        self._source_chars = 0
 
     # ------------------------------------------------------------ 근거 수집
 
@@ -300,10 +310,13 @@ class EvidenceBuilder:
         # 보고 청크를 통째로 얹으면, 마지막 하나가 상한을 훌쩍 넘겨 preflight 가
         # 안내한 최댓값이 상한이 아니게 된다. 여기서 넘기면 Provider 호출 직전
         # 바이트 검사에 걸려, 검색 비용을 다 쓰고 나서 실행이 실패한다.
-        source_key = _finding_source_key(finding)
         addition = len(finding["ai_relevance"]) + FINDING_OVERHEAD_CHARS
-        if source_key not in self._included_sources:
-            addition += len(row.text) + len(before) + len(after)
+        entries = self._source_entries + [
+            (document.alias, row.page_number, text)
+            for text in (row.text, before, after) if text
+        ]
+        source_chars = SourcePool(entries).text_chars
+        addition += source_chars - self._source_chars
         remaining = self.budget.max_evidence_chars - self._used_chars
         if addition > remaining:
             self.truncated = True
@@ -312,7 +325,8 @@ class EvidenceBuilder:
                 f"(필요 {addition:,}자, 남은 {max(0, remaining):,}자)."
             )
         self._used_chars += addition
-        self._included_sources.add(source_key)
+        self._source_entries = entries
+        self._source_chars = source_chars
         return finding, ""
 
     # ------------------------------------------------------------ 상태 확정
@@ -385,10 +399,15 @@ class EvidenceBuilder:
         # 서지 발췌를 먼저 뽑아 예산에서 뺀다. 근거를 다 담은 뒤에 더하면 실제
         # 프롬프트가 preflight 가 안내한 최댓값을 넘어선다.
         excerpts: dict[str, str] = {}
+        identity_pages: dict[str, int | None] = {}
         for document in self.corpus:
-            excerpt = identity_excerpt(document)
+            page, excerpt = identity_excerpt_location(document)
+            identity_pages[document.attachment_id] = page
             excerpts[document.attachment_id] = excerpt
-            self._used_chars += len(excerpt)
+            if page and excerpt:
+                self._source_entries.append((document.alias, page, excerpt))
+        self._source_chars = SourcePool(self._source_entries).text_chars
+        self._used_chars += self._source_chars
 
         blockers: list[str] = []
         for document in self.corpus:
@@ -545,7 +564,12 @@ class EvidenceBuilder:
             corpus=self.corpus,
             finding_pages=finding_pages,
             neighbours=self.budget.neighbor_pages,
-            char_budget=max(0, self.budget.max_evidence_chars - self._used_chars),
+            # Pages contain many of the same excerpts already accounted for
+            # above. Reserve metadata, but let pages reuse that source space;
+            # fit() measures the final shared representation in chars AND bytes.
+            char_budget=max(0, self.budget.max_evidence_chars - (
+                self._used_chars - self._source_chars
+            )),
             skipped=page_reductions,
         )
 
@@ -558,7 +582,8 @@ class EvidenceBuilder:
             "ocr_performed": False,
             "claim_chars": len(self.claim_text or ""),
             "documents": [
-                _document_entry(document, excerpts.get(document.attachment_id, ""))
+                _document_entry(document, excerpts.get(document.attachment_id, ""),
+                                identity_pages.get(document.attachment_id))
                 for document in self.corpus
             ],
             "components": components,
@@ -597,11 +622,13 @@ class EvidenceBuilder:
 def _finding_source_key(finding: dict) -> tuple:
     # 위치뿐 아니라 원문과 문맥까지 같은 경우에만 공유한다.
     return tuple(finding.get(key) or "" for key in (
-        "attachment", "chunk_id", "source_text", "context_before", "context_after"
+        "attachment", "pdf_page", "chunk_id", "source_text", "context_before", "context_after"
     ))
 
 
-def _finding_lines(finding: dict, *, shared: bool = False) -> list[str]:
+def _finding_lines(
+    finding: dict, *, pool: SourcePool, shared: bool = False
+) -> list[str]:
     location = [f"{finding['attachment']} · PDF {finding['pdf_page']}쪽"]
     if finding.get("printed_page"):
         location.append(f"인쇄 {finding['printed_page']}쪽")
@@ -620,21 +647,17 @@ def _finding_lines(finding: dict, *, shared: bool = False) -> list[str]:
         if finding.get("ai_relevance"):
             lines.append(f"    [검색 단계 AI 의 관련성 메모 — 원문 아님] {finding['ai_relevance']}")
         return lines
-    if finding.get("context_before"):
-        lines += [
-            "    --- 앞 문맥 (PRISM 이 PDF 에서 그대로 꺼낸 원문) ---",
-            *[f"    {line}" for line in finding["context_before"].split("\n")],
-        ]
-    lines += [
-        "    --- 원문 시작 (PRISM 이 PDF 에서 그대로 꺼낸 원문) ---",
-        *[f"    {line}" for line in finding["source_text"].split("\n")],
-        "    --- 원문 끝 ---",
-    ]
-    if finding.get("context_after"):
-        lines += [
-            "    --- 뒤 문맥 (PRISM 이 PDF 에서 그대로 꺼낸 원문) ---",
-            *[f"    {line}" for line in finding["context_after"].split("\n")],
-        ]
+    for key, label in (
+        ("context_before", "앞 문맥"),
+        ("source_text", "근거 원문"),
+        ("context_after", "뒤 문맥"),
+    ):
+        if finding.get(key):
+            lines.append(
+                f"    {label}: " + pool.describe(
+                    finding["attachment"], finding["pdf_page"], finding[key]
+                )
+            )
     if finding.get("ai_relevance"):
         lines.append(f"    [검색 단계 AI 의 관련성 메모 — 원문 아님] {finding['ai_relevance']}")
     return lines
@@ -646,11 +669,33 @@ def _finding_lines(finding: dict, *, shared: bool = False) -> list[str]:
 PLACEHOLDER_KEY = "__preflight_placeholder__"
 
 
+def source_pool(bundle: dict) -> SourcePool:
+    entries = [
+        (document["attachment"], page["pdf_page"], page["text"])
+        for document in bundle.get("evidence_pages") or []
+        for page in document.get("pages") or []
+    ]
+    entries += [
+        (finding["attachment"], finding["pdf_page"], finding[key])
+        for component in bundle.get("components") or []
+        for finding in component.get("findings") or []
+        for key in ("source_text", "context_before", "context_after")
+        if finding.get(key)
+    ]
+    entries += [
+        (document["attachment"], document["identity_excerpt_pdf_page"], document["identity_excerpt"])
+        for document in bundle.get("documents") or []
+        if document.get("identity_excerpt") and document.get("identity_excerpt_pdf_page")
+    ]
+    return SourcePool(entries)
+
+
 def render(bundle: dict) -> str:
     """최종 분석 프롬프트에 넣을 근거 패키지 본문."""
     placeholder = (bundle or {}).get(PLACEHOLDER_KEY)
     if placeholder is not None:
         return str(placeholder)
+    pool = source_pool(bundle)
 
     lines = [
         "[PRISM 로컬 검색 근거 패키지]",
@@ -698,6 +743,12 @@ def render(bundle: dict) -> str:
         if detail:
             lines.append(f"  · {' · '.join(detail)}")
         if document.get("identity_excerpt"):
+            identity_page = document.get("identity_excerpt_pdf_page")
+            if identity_page:
+                lines.append(f"  서지사항 원문 발췌 · PDF {identity_page}쪽: " + pool.describe(
+                    document["attachment"], identity_page, document["identity_excerpt"]
+                ))
+                continue
             lines += [
                 "  --- 첫 페이지 원문 발췌 (서지사항 확인용, PRISM 이 그대로 꺼낸 원문) ---",
                 *[
@@ -748,12 +799,14 @@ def render(bundle: dict) -> str:
             f"- 검색 채널: {', '.join(component.get('search_channels_used') or []) or '(없음)'}",
             f"- PRISM 확정 상태: {component['status']} — {component['status_label']}",
         ]
-        if component.get("status_reasons"):
+        # Shared limitations have already been stated in the global scope.
+        local_reasons = list(dict.fromkeys(
+            reason for reason in component.get("status_reasons") or []
+            if reason not in (bundle.get("coverage_blockers") or [])
+        ))
+        if local_reasons:
             lines.append("- 확정하지 못한 사유:")
-            lines += [f"  · {reason}" for reason in component["status_reasons"]]
-        if component.get("priority_reasons"):
-            lines.append("- 우선순위 재평가 사유:")
-            lines += [f"  · {reason}" for reason in component["priority_reasons"]]
+            lines += [f"  · {reason}" for reason in local_reasons]
         reviewed = component.get("reviewed_pages") or {}
         if reviewed:
             lines.append(
@@ -778,7 +831,7 @@ def render(bundle: dict) -> str:
             lines.append("- 근거 구간:")
             for finding in component["findings"]:
                 key = _finding_source_key(finding)
-                lines += _finding_lines(finding, shared=key in included_sources)
+                lines += _finding_lines(finding, shared=key in included_sources, pool=pool)
                 included_sources.add(key)
         else:
             lines.append("- 근거 구간: 없음")
@@ -801,8 +854,10 @@ def render(bundle: dict) -> str:
     # 예산이 허락하는 만큼 페이지를 통째로 덧붙인다. 예산이 모자라면 fit() 이
     # 여기서부터 줄인다 — 덧붙임이므로 압박이 오면 가장 먼저 사라진다.
     lines += pages_module.render(
-        bundle.get("evidence_pages") or [], bundle.get("page_reductions") or []
+        bundle.get("evidence_pages") or [], bundle.get("page_reductions") or [],
+        source_reference=pool.describe,
     )
+    lines += pool.render()
 
     lines += [
         "",

@@ -47,6 +47,7 @@ export type Lineage = {
   inheritedAttachments: JobAttachment[];
   priorMapping: CitationMapping | null;
   priorClaimChars: number;
+  priorClaimText?: string;
   priorReportChars: number;
 };
 

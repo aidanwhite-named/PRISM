@@ -589,10 +589,17 @@ def test_final_package_shares_only_identical_source_and_context():
     assert evidence.render(bundle) == rendered  # 별도 호출에서도 원문이 다시 들어간다.
     bundle["components"][0]["findings"] = []
     assert "UNIQUE_SOURCE" in evidence.render(bundle)  # 첫 참조가 없어져도 고아 참조 없음.
-    for changed in ({"attachment": "ATT-02"}, {"context_after": "DIFFERENT_CONTEXT"}):
+    for changed in ({"attachment": "ATT-02"}, {"pdf_page": 2}):
         bundle = deepcopy(saved)
         bundle["components"][1]["findings"][0].update(changed)
         assert evidence.render(bundle).count("UNIQUE_SOURCE") == 2
+    bundle = deepcopy(saved)
+    bundle["components"][1]["findings"][0]["context_after"] = "DIFFERENT_CONTEXT"
+    rendered = evidence.render(bundle)
+    # Different context keeps its own reference while the unchanged source is shared.
+    assert rendered.count("UNIQUE_SOURCE") == 1
+    assert "LIMITATION_CONTEXT" in rendered and "DIFFERENT_CONTEXT" in rendered
+    assert rendered.count("뒤 문맥:") == 2
 
 
 def test_repeated_finding_keeps_provenance_without_charging_source_twice(agent):

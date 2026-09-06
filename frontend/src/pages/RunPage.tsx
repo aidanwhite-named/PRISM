@@ -303,6 +303,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
   // 이 화면이 다루는 실행은 주소가 가리키는 축의 것 하나뿐이다.
   const job = jobs[kind];
+  const addingDependentClaims = lineage?.relationType === "MAPPED";
   const workspace = WORKSPACE_BY_ID[kind];
   const otherWorkspace =
     WORKSPACE_BY_ID[
@@ -684,7 +685,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     if (!promptId) return;
     if (!claimText.trim()) {
       setError(
-        "구성대비 분석에는 출원발명 청구항이 필요합니다. 분석할 청구항을 입력하십시오.",
+        addingDependentClaims
+          ? "추가할 종속항을 번호와 함께 입력하십시오."
+          : "구성대비 분석에는 출원발명 청구항이 필요합니다. 분석할 청구항을 입력하십시오.",
       );
       return;
     }
@@ -818,6 +821,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const startFollowUp = (relationType: RelationType) => {
     if (!job) return;
     const carriesClaims = relationType !== "REANALYZED";
+    const priorClaimText = [job.prior_claim_text, job.claim_text]
+      .filter((text, index, all) => text && all.indexOf(text) === index)
+      .join("\n\n");
     setLineage({
       sourceJobId: job.id,
       sourceLabel: jobLabel(job),
@@ -826,11 +832,12 @@ export default function RunPage({ kind }: { kind: JobKind }) {
       // 분석 자료가 아니었으므로, 후속 실행에서 조용히 되살아나면 안 된다.
       inheritedAttachments: job.attachments.filter((a) => a.included),
       priorMapping: carriesClaims ? job.citation_mapping : null,
-      priorClaimChars: carriesClaims ? job.claim_text.length : 0,
+      priorClaimChars: carriesClaims ? priorClaimText.length : 0,
+      priorClaimText: carriesClaims ? priorClaimText : "",
       priorReportChars:
         relationType === "CONTINUED" ? (job.result_text ?? "").length : 0,
     });
-    setClaimText(job.claim_text);
+    setClaimText(relationType === "MAPPED" ? "" : job.claim_text);
     setFollowupInstruction("");
     setGapSearchOpen(false);
     setSelectedGapIds([]);
@@ -1161,9 +1168,17 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               )}
             </ul>
             <div className="faint">
-              아래 청구항 칸에는 원본 실행의 청구항이 채워져 있습니다. 종속항을 덧붙이거나
-              수정한 뒤 실행하십시오. 인용발명 PDF 를 더 추가할 수도 있습니다.
+              {addingDependentClaims
+                ? "이전 청구항은 참고자료로 자동 전달됩니다. 1번 칸에는 새로 분석할 종속항만 번호와 함께 입력하십시오."
+                : "아래 청구항 칸에는 원본 실행의 청구항이 채워져 있습니다. 수정한 뒤 실행하십시오."}
+              {" 인용발명 PDF를 더 추가할 수도 있습니다."}
             </div>
+            {addingDependentClaims && lineage.priorClaimText && (
+              <details className="prior-claims">
+                <summary>이전 청구항 보기 (참고용 · 자동 전달)</summary>
+                <div className="prior-claim-text">{lineage.priorClaimText}</div>
+              </details>
+            )}
           </div>
         )}
 
@@ -1172,18 +1187,24 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             <div className="input-panel-head">
               <span className="input-step">1</span>
               <div>
-                <strong>출원발명의 청구항</strong>
-                <div className="hint">분석할 청구항을 그대로 붙여넣으십시오.</div>
+                <strong>{addingDependentClaims ? "추가할 종속항" : "출원발명의 청구항"}</strong>
+                <div className="hint">
+                  {addingDependentClaims
+                    ? "종속항 번호와 전문을 붙여넣으십시오. 이전 독립항은 다시 입력하지 않아도 됩니다."
+                    : "분석할 청구항을 그대로 붙여넣으십시오."}
+                </div>
               </div>
             </div>
             <textarea
               id="claimText"
               className="claim-input"
-              aria-label="출원발명의 청구항"
+              aria-label={addingDependentClaims ? "추가할 종속항" : "출원발명의 청구항"}
               value={claimText}
               onChange={(e) => setClaimText(e.target.value)}
               placeholder={
-                "예: 청구항 1. ...\n\n여러 청구항을 한 번에 입력할 수 있습니다."
+                addingDependentClaims
+                  ? "예: 청구항 13\n제12항에 있어서, ...\n\n여러 종속항을 한 번에 입력할 수 있습니다. 실제 청구항 번호를 쓰십시오."
+                  : "예: 청구항 1. ...\n\n여러 청구항을 한 번에 입력할 수 있습니다."
               }
               disabled={running}
             />
@@ -1264,21 +1285,23 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         </div>
 
         {lineage && (
-          <section className="input-panel followup-panel">
+          <details
+            key={`${lineage.sourceJobId}-${lineage.relationType}`}
+            className="input-panel followup-panel"
+            open={!addingDependentClaims || Boolean(followupInstruction)}
+          >
+            <summary>추가 요청사항 (선택)</summary>
             <div className="input-panel-head">
-              <span className="input-step">3</span>
               <div>
-                <strong>후속 지시 (선택)</strong>
                 <div className="hint">
-                  이번 실행에서 무엇을 해야 하는지 직접 쓰십시오. PRISM 은 이 문장을
-                  만들거나 보태지 않고 그대로 전달합니다. 비워 두면 분석 프롬프트의
-                  「후속 처리 규칙」만 적용됩니다.
+                  분석 범위나 보고서 형식에 대한 요청이 있을 때만 쓰십시오.
+                  청구항 본문은 위의 1번 칸에 입력하고, 이 칸은 비워 두어도 됩니다.
                 </div>
               </div>
             </div>
             <textarea
               className="claim-input followup-input"
-              aria-label="후속 지시"
+              aria-label="추가 요청사항"
               value={followupInstruction}
               onChange={(e) => setFollowupInstruction(e.target.value)}
               placeholder={
@@ -1286,7 +1309,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               }
               disabled={running}
             />
-          </section>
+          </details>
         )}
 
         {uploading && (
@@ -1385,7 +1408,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           {searching
             ? "3. 검색 시작"
             : lineage
-              ? "4. 후속 분석 시작"
+              ? "3. 후속 분석 시작"
               : "3. 분석 시작"}
         </h2>
         <div className="run-ready">
@@ -1394,7 +1417,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             <strong>{jobKindLabel}</strong>
           </div>
           <div className="run-ready-row">
-            <span>청구항</span>
+            <span>{!searching && addingDependentClaims ? "추가할 종속항" : "청구항"}</span>
             <strong>
               {(searching ? searchClaimText : claimText).trim()
                 ? `${(searching ? searchClaimText : claimText).length.toLocaleString()}자`
@@ -1454,7 +1477,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
         {!searching && !claimText.trim() && (
           <div className="notice danger" style={{ marginBottom: 12 }}>
-            <strong>출원발명 청구항이 필요합니다</strong>
+            <strong>{addingDependentClaims ? "추가할 종속항이 필요합니다" : "출원발명 청구항이 필요합니다"}</strong>
             <div style={{ marginTop: 4 }}>
               분석할 청구항을 위쪽 입력 칸에 붙여넣으십시오.
             </div>

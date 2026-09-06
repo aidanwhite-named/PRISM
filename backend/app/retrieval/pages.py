@@ -23,6 +23,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 # 페이지 전문을 담을 때 한 페이지가 예산에서 차지할 수 있는 최대 비율.
 # 한 페이지가 예산을 통째로 먹으면 다른 문헌이 한 페이지도 못 들어간다.
 MAX_PAGE_SHARE = 0.25
@@ -254,7 +256,10 @@ def truncations(documents: list[dict]) -> list[dict]:
     ]
 
 
-def render(documents: list[dict], dropped: list[str] | None = None) -> list[str]:
+def render(
+    documents: list[dict], dropped: list[str] | None = None, *,
+    source_reference: Callable[[str, int, str], str] | None = None,
+) -> list[str]:
     """근거 패키지 안에 들어갈 페이지 절. 담을 것도 뺀 것도 없으면 빈 목록.
 
     dropped 는 예산 때문에 뺀 페이지의 짧은 이름들이다. 이 목록을
@@ -314,7 +319,8 @@ def render(documents: list[dict], dropped: list[str] | None = None) -> list[str]
                 "",
                 f"--- {document['attachment']} p.{page['pdf_page']}{printed} · "
                 f"{mark} · 추출 {page['extraction_status']} ---",
-                page["text"],
+                (source_reference(document["attachment"], page["pdf_page"], page["text"])
+                 if source_reference and page["text"] else page["text"]),
             ]
             if page.get("truncated"):
                 # 원문과 구분된 행에 위치·포함량·누락량을 남긴다.

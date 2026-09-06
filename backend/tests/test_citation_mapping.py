@@ -346,6 +346,26 @@ def test_mapped_follow_up_carries_numbers_but_not_the_report(
         assert f"인용발명 {item['citation_number']} = {item['document_number']}" in text
 
 
+def test_dependent_only_followups_keep_ancestor_claims(client, capable_prompt) -> None:
+    parent = _run(client, capable_prompt, claim_text="청구항 12. 독립항.",
+                  batch_id=_upload(client, "c1.txt"))
+    child = _run(client, capable_prompt, claim_text="청구항 13. 제12항에 있어서, 한정.",
+                 source_job_id=parent["id"], relation_type="MAPPED")
+    payload = {"prompt_id": capable_prompt["id"], "provider": "test",
+               "claim_text": "청구항 14. 제13항에 있어서, 추가 한정.",
+               "source_job_id": child["id"], "relation_type": "MAPPED"}
+    preflight = client.post("/api/jobs/preflight", json=payload)
+    assert preflight.status_code == 200, preflight.text
+    leaf = _run(client, capable_prompt, **payload)
+    assert leaf["prior_claim_text"] == parent["claim_text"] + "\n\n" + child["claim_text"]
+    assert leaf["claim_text"] == payload["claim_text"]
+    assert leaf["followup_instruction"] == ""
+    assert leaf["prior_report"] == ""
+    text = _final_prompt(client, leaf["id"])
+    assert parent["claim_text"] in text and child["claim_text"] in text
+    assert preflight.json()["chars"] == leaf["final_prompt_chars"]
+
+
 def test_mapped_follow_up_rebinds_the_mapping_to_cloned_files(
     client, capable_prompt
 ) -> None:

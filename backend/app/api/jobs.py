@@ -372,6 +372,12 @@ def _job_out(job: ExecutionJob) -> JobOut:
     )
 
 
+def inherited_claim_text(job: ExecutionJob) -> str:
+    """종속항만 입력한 실행을 이어가도 선행항 원문을 함께 보존한다."""
+    parts = [job.prior_claim_text or "", job.claim_text or ""]
+    return "\n\n".join(dict.fromkeys(part for part in parts if part))
+
+
 def source_label(job: ExecutionJob) -> str:
     """원본 실행이 삭제된 뒤에도 화면에 남길 표시용 라벨."""
     stamp = job.created_at.strftime("%Y-%m-%d %H:%M") if job.created_at else ""
@@ -865,7 +871,7 @@ async def create_job(payload: JobCreate, session: Session = Depends(get_db)) -> 
         followup_instruction=payload.followup_instruction or "",
         # 원본이 나중에 지워져도 이 실행의 입력은 바뀌면 안 된다. prompt_snapshot
         # 과 같은 이유로 생성 시점에 복사해 둔다.
-        prior_claim_text=(source_job.claim_text or "") if carries_claims else "",
+        prior_claim_text=inherited_claim_text(source_job) if carries_claims else "",
         prior_report=(
             (source_job.result_text or "")
             if relation_kind is not None and relation_kind.inherits_report
@@ -1013,7 +1019,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
         # 읽지만 본문 길이는 같다.
         attachments.extend(row_to_ingested(row) for row in source_job.attachments)
         if relation is not None and relation.inherits_mapping:
-            prior_claim_text = source_job.claim_text or ""
+            prior_claim_text = inherited_claim_text(source_job)
             prior_mapping = source_job.prior_citation_mapping or source_job.citation_mapping
         if relation is RelationType.CONTINUED:
             prior_report = source_job.result_text or ""

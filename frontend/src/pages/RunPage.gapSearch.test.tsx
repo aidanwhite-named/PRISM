@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { HashRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Job, ProviderInfo } from "../lib/types";
+import type { Job, Prompt, ProviderInfo } from "../lib/types";
 
 const JOB_ID = "job-1";
 
@@ -97,13 +97,52 @@ vi.mock("../lib/api", () => ({
     })),
     historyItem: vi.fn(async () => job),
     getJob: vi.fn(async () => job),
+    preflight: vi.fn(async () => null),
+    createJob: vi.fn(async () => job),
   },
 }));
 
 const { RunSessionProvider } = await import("../lib/runSession");
 const { default: RunPage } = await import("./RunPage");
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  sessionStorage.clear();
+  vi.clearAllMocks();
+});
+
+describe("종속항 추가 분석", () => {
+  it("빈 종속항 칸으로 시작하고 요청사항 없이 종속항을 분석 대상으로 보낸다", async () => {
+    const { api } = await import("../lib/api");
+    const source = {
+      ...job,
+      claim_text: "청구항 12. 독립항 본문",
+      citation_mapping: { version: 1, items: [] },
+      attachments: [{ attachment_id: "a1", original_filename: "인용.pdf", included: true, read_ok: true, char_count: 100, role: "CITATION" }],
+    } as unknown as Job;
+    vi.mocked(api.historyItem).mockResolvedValueOnce(source);
+    vi.mocked(api.listProviders).mockResolvedValueOnce([{ ...provider, usable: true }]);
+    vi.mocked(api.listPrompts).mockResolvedValueOnce([
+      { id: source.prompt_id, name: source.prompt_name, enabled: true, body: "분석" } as Prompt,
+    ]);
+    window.location.hash = `#/analysis?job=${JOB_ID}`;
+    render(<RunSessionProvider><HashRouter><RunPage kind="patent_analysis" /></HashRouter></RunSessionProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: "종속항 추가 분석" }));
+    const input = screen.getByRole("textbox", { name: "추가할 종속항" }) as HTMLTextAreaElement;
+    expect(input.value).toBe("");
+    expect(screen.queryByRole("textbox", { name: "출원발명의 청구항" })).toBeNull();
+    expect(document.querySelector(".prior-claim-text")?.textContent).toBe(source.claim_text);
+    expect((document.querySelector(".followup-panel") as HTMLDetailsElement).open).toBe(false);
+    const start = screen.getByRole("button", { name: "분석 시작" }) as HTMLButtonElement;
+    expect(start.disabled).toBe(true);
+    const dependent = "청구항 13. 제12항에 있어서, 추가 한정.";
+    await userEvent.type(input, dependent);
+    await userEvent.click(start);
+    expect(api.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      claim_text: dependent, followup_instruction: "", source_job_id: JOB_ID, relation_type: "MAPPED",
+    }));
+  });
+});
 
 describe("미대응 구성 검색", () => {
   it("구성 블록 오류를 보고서 앞에 표시하고 본문은 유지한다", async () => {

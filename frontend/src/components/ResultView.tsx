@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 
-import { hardenLinks, renderMarkdown } from "../lib/markdown";
+import { hardenLinks, renderReportMarkdown } from "../lib/markdown";
 
 interface Props {
   text: string;
@@ -12,7 +12,7 @@ export default function ResultView({ text, outputMode, streaming }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   const html = useMemo(
-    () => (outputMode === "markdown" ? renderMarkdown(text) : ""),
+    () => (outputMode === "markdown" ? renderReportMarkdown(text) : ""),
     [text, outputMode],
   );
 

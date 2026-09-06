@@ -81,6 +81,47 @@ export function renderMarkdown(source: string): string {
   });
 }
 
+const COMPONENT_TITLE = /^\((?:[A-Z](?:-?\d+)?|전제부)\)\s+\S/;
+const REPORT_LABEL = /^(?:→\s*)?(?:대응 정도|유사도 기준 문헌|근거|대응|차이점|도출 용이성|보완|결합 동기 및 가능성|결합 결과|결합 후 남는 차이점|결합 후 도출 용이성|대응 결론)\s*[:：]/;
+
+/** 보고서 예시를 통째로 백틱에 넣은 출력도 본문 서식으로 표시한다.
+ * 이미 정화한 DOM의 텍스트만 옮긴다. 코드 안의 HTML/수식은 재해석하지 않는다.
+ * 일반적인 인라인 코드와 코드 블록은 그대로 보존한다. */
+export function renderReportMarkdown(source: string): string {
+  const template = document.createElement("template");
+  template.innerHTML = renderMarkdown(source);
+  template.content.querySelectorAll("p").forEach((paragraph) => {
+    if (paragraph.closest("blockquote, li, td, th")) return;
+    const text = paragraph.textContent ?? "";
+    const component = COMPONENT_TITLE.test(text);
+    const label = REPORT_LABEL.exec(text)?.[0];
+    if (!component && !label) return;
+
+    // 문단 전체를 감싼 코드 서식만 벗긴다. 문장 안의 코드/수식은 건드리지 않는다.
+    if (paragraph.childNodes.length === 1 && paragraph.firstElementChild?.tagName === "CODE") {
+      paragraph.replaceChildren(document.createTextNode(text));
+    }
+    if (component) {
+      const heading = document.createElement("h4");
+      heading.className = "report-component-title";
+      heading.append(...paragraph.childNodes);
+      paragraph.replaceWith(heading);
+      return;
+    }
+    paragraph.classList.add("report-field");
+    if (text.startsWith("대응 정도")) paragraph.classList.add("report-degree");
+    // 이미 굵은 항목명이 있으면 기존 서식을 유지한다.
+    const first = paragraph.firstChild;
+    if (label && first?.nodeType === Node.TEXT_NODE && first.textContent?.startsWith(label)) {
+      const title = document.createElement("strong");
+      title.textContent = label;
+      first.textContent = first.textContent.slice(label.length);
+      paragraph.prepend(title);
+    }
+  });
+  return template.innerHTML;
+}
+
 /** 외부 링크가 새 탭에서 열리도록 후처리한다. */
 export function hardenLinks(container: HTMLElement | null): void {
   if (!container) return;
