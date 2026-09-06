@@ -28,7 +28,7 @@ from .artifacts import ArtifactIdInvalid, ArtifactStore
 def reference(session: Session, job_id: str, artifact_id: str) -> None:
     """이 작업이 이 아티팩트를 쓴다고 기록한다. 이미 있으면 아무것도 안 한다.
 
-    아직 flush 되지 않은 것까지 본다. ARIA 의 세션은 autoflush=False 라서,
+    아직 flush 되지 않은 것까지 본다. PRISM 의 세션은 autoflush=False 라서,
     DB 만 조회하면 같은 세션에서 방금 add 한 참조를 못 보고 중복을 넣는다.
     그러면 flush 시점에 UNIQUE 제약으로 터진다 — 한 응답의 여러 필드를
     검증하면서 같은 아티팩트를 여러 번 참조하는 것은 정상 흐름이므로,

@@ -311,7 +311,7 @@ def test_agy_context_tells_the_model_that_fetch_returns_a_path() -> None:
     """이걸 안 알려주면 모델은 포인터를 받고 "페이지를 봤다"고 착각한다.
 
     2026-08-25 06:34 실행이 그랬다 — 5건을 가져와 2건만 읽었고, 읽지 않은 3건에
-    쓴 대응표를 ARIA 가 통째로 버렸다.
+    쓴 대응표를 PRISM 이 통째로 버렸다.
     """
     from app.config import AGY_SEARCH_RUNTIME_CONTEXT as text
 

@@ -29,7 +29,7 @@ def main(base: str, live_provider: str | None = None) -> int:
         if not condition:
             failures.append(label)
 
-    headers = {"X-ARIA-Client": "1"}
+    headers = {"X-PRISM-Client": "1"}
     with httpx.Client(base_url=base, timeout=300.0, headers=headers) as client:
         health = client.get("/api/health").json()
         check("health", health.get("status") == "ok", json.dumps(health))

@@ -67,7 +67,7 @@ from .base import (
 SETTING_ENABLED = "epo_integration_enabled"
 SETTING_CONSUMER_KEY = "epo_consumer_key"
 SETTING_CONSUMER_SECRET = "epo_consumer_secret"
-# 사용량 상태. 사용자가 편집하는 값이 아니라 ARIA 가 관측해 적는 값이므로
+# 사용량 상태. 사용자가 편집하는 값이 아니라 PRISM 이 관측해 적는 값이므로
 # EDITABLE_KEYS 에 넣지 않는다. 화면에는 보여 준다.
 SETTING_QUOTA_STATE = "epo_quota_state"
 # 네트워크 시간 예산. 채널 전체 벽시계와 다른 축이다(모듈 주석 참조).
@@ -175,7 +175,7 @@ def check_credentials(
     함수를 부르지 않는다. 특허 데이터는 요청하지 않으며, 성공해도 토큰을
     저장하지 않는다.
 
-    전송은 epo_client 의 것을 쓴다. ARIA 에서 EPO 로 나가는 경로를 하나로
+    전송은 epo_client 의 것을 쓴다. PRISM 에서 EPO 로 나가는 경로를 하나로
     모으기 위해서다 — 경로가 둘이면 인증서 정책도 둘이 되고, 테스트에서
     네트워크를 막을 지점도 둘이 된다. 실제로 그 두 번째 경로를 막으려다
     urllib.request.urlopen 을 프로세스 전역에서 바꿔 버린 적이 있다.
@@ -417,7 +417,7 @@ class EpoOpsBackend(PatentSearchBackend):
         ``agent_budget`` 이 거짓이면 _max_detail_fetches 상한을 세지 않는다.
         그 상한은 **LLM 루프의 폭주**를 막으려고 있는 것이다 — 모델이 도구를
         몇 번 부를지 우리가 모르기 때문에 건 것이지, OPS 를 몇 번 부를 수
-        있는가의 계약이 아니다. 호출 횟수를 ARIA 가 직접 정하는 경로(후보 검증)
+        있는가의 계약이 아니다. 호출 횟수를 PRISM 이 직접 정하는 경로(후보 검증)
         는 자기 상한을 따로 들고 오므로 이 상한에 걸릴 이유가 없다. 실제로
         걸리면 EPO 레인이 상한을 다 쓴 실행에서만 검증이 조용히 0건이 된다.
 

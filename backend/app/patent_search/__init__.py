@@ -1,6 +1,6 @@
 """특허 검색 연동 모듈 (Provider·벤더 중립).
 
-ARIA 본체는 이 패키지의 인터페이스(base)와 팩토리(get_backend/describe)만
+PRISM 본체는 이 패키지의 인터페이스(base)와 팩토리(get_backend/describe)만
 의존한다. Kiwee 구현 세부는 kiwee_backend 에 격리한다. 나중에 Kiwee 를 새로
 만들거나 다른 특허 DB 를 붙일 때는 PatentSearchBackend 를 구현한 새 백엔드를
 _REGISTRY 에 등록하고 활성 backend_id 만 바꾸면 된다 — 본체는 그대로다.
@@ -14,7 +14,7 @@ _REGISTRY 에 등록하고 활성 backend_id 만 바꾸면 된다 — 본체는 
   (PatentSearchNotConfigured). 외부 접속은 공급자 승인·API 계약·NK 동등성
   검증 뒤에만 별도로 구현한다.
 - runner 실행 경로는 아직 건드리지 않는다. search_manifest 에는 채널 허용
-  목록 분리만 반영했다(모델 보고=web 고정, patent_db=ARIA 생산자 전용).
+  목록 분리만 반영했다(모델 보고=web 고정, patent_db=PRISM 생산자 전용).
   동작은 이전과 같고, 경계를 이름으로 못 박은 것뿐이다.
 - 증거 등급은 이 모듈이 계산한다. 발췌 단위이며, 보존 아티팩트에서 원본을
   다시 읽어 해시를 재계산하고 신뢰 파서로 필드를 재추출한 뒤 대조한다.

@@ -11,7 +11,7 @@ agy 1.1.15 를 실제로 실행해서 계약을 확인했다.
 Claude 와 다른 두 가지 제약이 있다.
 
 1. 시스템 프롬프트를 분리할 수단이 없다.
-   `--system-prompt` 같은 플래그가 없으므로 ARIA 런타임 컨텍스트를 사용자
+   `--system-prompt` 같은 플래그가 없으므로 PRISM 런타임 컨텍스트를 사용자
    메시지 맨 앞에 붙인다. 첨부 본문과 같은 층위에 놓이므로 프롬프트 인젝션
    방어가 Claude 쪽보다 약하다.
 
@@ -19,7 +19,7 @@ Claude 와 다른 두 가지 제약이 있다.
    `--tools` 에 해당하는 플래그가 없고, init 이벤트가 run_command,
    write_to_file 을 포함해 57개 도구를 광고한다.
 
-   여기서 분명히 해둘 것: ARIA 는 도구 호출을 **탐지**할 뿐 **차단**하지
+   여기서 분명히 해둘 것: PRISM 은 도구 호출을 **탐지**할 뿐 **차단**하지
    못한다. 실패로 표시되는 시점에는 이미 파일 쓰기나 명령 실행이 끝난
    뒤일 수 있다. 이건 fail-closed 가 아니라 사후 탐지다.
 
@@ -31,7 +31,7 @@ Claude 와 다른 두 가지 제약이 있다.
      warning: --mode plan has no effect while slash command expansion
               is disabled.
 
-   ARIA 는 항상 --disable-slash-commands 로 실행하므로 plan 모드는 무효다.
+   PRISM 은 항상 --disable-slash-commands 로 실행하므로 plan 모드는 무효다.
    슬래시 명령/프롬프트 수준 기능이지 권한 경계가 아니다. 같은 실행에서
    tools 는 여전히 57개, permission_mode 는 여전히 request-review 였다.
 """
@@ -64,13 +64,13 @@ from .resolver import ExecutableKind, ResolvedExecutable, resolve_simple
 RISKS = (
     "도구를 끄는 플래그가 없습니다. run_command, write_to_file 을 포함해 수십 개 "
     "도구가 활성 상태로 실행됩니다.",
-    "ARIA 는 도구 호출을 '탐지'해서 실패로 기록할 뿐, 호출 자체를 '차단'하지 "
+    "PRISM 은 도구 호출을 '탐지'해서 실패로 기록할 뿐, 호출 자체를 '차단'하지 "
     "못합니다. 실패로 표시되는 시점에는 이미 파일 쓰기나 명령 실행이 끝난 뒤일 수 "
     "있습니다. 이건 fail-closed 가 아니라 사후 탐지입니다.",
     "실측(agy 1.1.15): 파일 쓰기와 셸 명령을 요청했을 때 도구 호출이 시도됐고 "
-    "ARIA 가 탐지해 실패 처리했으며 디스크에는 변화가 없었습니다. 다만 이는 세 "
+    "PRISM 이 탐지해 실패 처리했으며 디스크에는 변화가 없었습니다. 다만 이는 세 "
     "가지 시나리오를 확인한 것일 뿐이고, 차단은 agy 자신의 승인 정책에 의존하며 "
-    "ARIA 가 보장하는 경계가 아닙니다.",
+    "PRISM 이 보장하는 경계가 아닙니다.",
     "도구 호출 탐지는 이벤트 이름에 기반합니다. 관찰하지 못한 이름이 있으면 "
     "놓칠 수 있습니다.",
     "read_url_content 는 가져온 페이지를 파일로만 돌려줍니다. 그 파일을 읽는 "
@@ -78,7 +78,7 @@ RISKS = (
     "read_url_content 와 일치할 때만 정상 열람으로 인정합니다. 다른 경로·다른 "
     "대화·일반 로컬 파일은 위반으로 남습니다. 이 판정 역시 호출이 끝난 뒤에 "
     "이뤄지는 사후 감사이며 읽기 자체를 막지는 못합니다.",
-    "시스템 프롬프트를 분리할 수 없어 ARIA 런타임 컨텍스트가 사용자 메시지에 "
+    "시스템 프롬프트를 분리할 수 없어 PRISM 런타임 컨텍스트가 사용자 메시지에 "
     "포함됩니다. 첨부 문서와 같은 층위라 프롬프트 인젝션 방어가 약합니다.",
     "신뢰할 수 없는 출처의 문서 분석에는 사용하지 마십시오.",
 )
@@ -246,7 +246,7 @@ class AgyCliProvider(Provider):
     max_input_bytes = 180_000
     install_hint = (
         "agy CLI 를 설치하고 로그인하십시오. 설치되어 있으면 `agy models` 가 "
-        "모델 목록을 반환합니다. ARIA 는 API Key 를 입력받지 않고 CLI 에 저장된 "
+        "모델 목록을 반환합니다. PRISM 은 API Key 를 입력받지 않고 CLI 에 저장된 "
         "로그인 세션만 사용합니다."
     )
 
@@ -381,7 +381,7 @@ class AgyCliProvider(Provider):
         두 문자열을 그냥 더하면 실제보다 작게 잡힌다. 자르는 주체는 이 CLI 이고
         그것이 보는 것은 **직렬화된 메시지**이기 때문이다. 더해지는 것:
 
-          - `compose_message` 가 앞에 붙이는 [ARIA RUNTIME CONTEXT] 머리말
+          - `compose_message` 가 앞에 붙이는 [PRISM RUNTIME CONTEXT] 머리말
             (agy 는 시스템 프롬프트를 분리할 수단이 없다)
           - JSON 이스케이프. 개행 하나가 `
 ` 2 bytes 가 되므로, 줄이 많은
@@ -404,7 +404,7 @@ class AgyCliProvider(Provider):
         if not request.system_prompt.strip():
             return request.user_message
         return (
-            "[ARIA RUNTIME CONTEXT]\n"
+            "[PRISM RUNTIME CONTEXT]\n"
             f"{request.system_prompt.strip()}\n\n"
             f"{request.user_message}"
         )
@@ -439,7 +439,7 @@ class AgyCliProvider(Provider):
         content_budget_exceeded = False
         # agy 1.1.26 은 최종 result 를 보낸 뒤에도 프로세스가 남는 경우가 있다.
         # 실측(job d39dc2cc): 15:58:47 에 response + status SUCCESS 가 왔는데
-        # stdout 이 닫히지 않아 ARIA 가 16:13:29 까지 기다리다 타임아웃으로
+        # stdout 이 닫히지 않아 PRISM 이 16:13:29 까지 기다리다 타임아웃으로
         # 실패 처리했다. result 를 본 순간을 신호로 넘겨서 프로세스 종료를
         # 기다리는 것과 결과 수신을 분리한다.
         finished = asyncio.Event()
@@ -568,7 +568,7 @@ class AgyCliProvider(Provider):
                     "status": state.status,
                     "message": (
                         "모델의 최종 응답을 모두 받았지만 CLI 프로세스가 스스로 "
-                        "종료하지 않아 ARIA 가 종료했습니다."
+                        "종료하지 않아 PRISM 이 종료했습니다."
                     ),
                 },
             )
@@ -608,12 +608,12 @@ class AgyCliProvider(Provider):
         async def noop(_type: str, _payload: dict) -> None:
             return None
 
-        with tempfile.TemporaryDirectory(prefix="aria-smoke-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="prism-smoke-") as tmp:
             request = ExecutionRequest(
                 job_id=f"smoke-agy-{id(self)}",
                 work_dir=Path(tmp),
                 system_prompt="You are a connectivity test. Answer with exactly one short line.",
-                user_message="Reply with exactly: ARIA_SMOKE_OK",
+                user_message="Reply with exactly: PRISM_SMOKE_OK",
                 timeout_seconds=180,
             )
             return await self.execute(request, emit or noop)

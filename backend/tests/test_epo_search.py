@@ -749,7 +749,7 @@ def test_quota_headers_are_observed(store) -> None:
     assert snapshot["ops_hourly_bytes"] == 1048576
     assert snapshot["throttle"]["system_state"] == "idle"
     assert snapshot["throttle"]["dangerous"] is False
-    # ARIA 로컬 카운터는 따로 센다. 두 숫자를 합치지 않는다.
+    # PRISM 로컬 카운터는 따로 센다. 두 숫자를 합치지 않는다.
     assert snapshot["local_bytes"] == len(fx.TOKEN_OK) + len(fx.SEARCH_BIBLIO)
 
 

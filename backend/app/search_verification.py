@@ -18,7 +18,12 @@ ISSUE_LABELS = {
     "support_unverified": "근거 문장 대조 미확인",
     "duplicate_group_conflict": "동일 문헌에 대한 LLM 그룹 충돌",
     "publication_date_conflict": "공개일 출처 충돌",
+    "publication_date_unverified": "공개일 대조 미확인",
     "source_conflict": "출처 간 필드 내용 차이",
+    "title_unverified": "명칭 대조 미확인",
+    "title_mismatch": "보고 명칭과 보존 원문 명칭 차이",
+    "applicant_unverified": "저자·출원인 대조 미확인",
+    "applicant_mismatch": "보고 저자·출원인과 보존 원문 차이",
 }
 LEVEL_LABELS = {
     "search_snippet_only": "검색 스니펫·모델 판단 / 원문 미검증",
@@ -134,7 +139,7 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
             issues.append("identifier_mismatch")
         if url and url in read_urls and not url_mismatch:
             level = "source_page_reviewed"
-        elif url:
+        elif url and not sources:
             issues.append("source_not_read")
         if sources:
             level = "official_bibliographic"
@@ -153,8 +158,26 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
         candidate["publication_date"] = next(iter(dates)) if len(dates) == 1 else ""
         if len(dates) > 1:
             issues.append("publication_date_conflict")
+        elif not dates:
+            issues.append("publication_date_unverified")
         if any(len(values) > 1 for field, values in values_by_field.items() if field != "publication_date"):
             issues.append("source_conflict")
+        titles = {text for name, values in values_by_field.items()
+                  if name.split(":")[0] == "title" for text in values}
+        candidate["verified_titles"] = sorted(titles)
+        normalize_title = lambda text: re.sub(r"[\W_]+", "", text.casefold())
+        if not titles:
+            issues.append("title_unverified")
+        elif normalize_title(candidate.get("title", "")) not in {normalize_title(text) for text in titles}:
+            # A translated or shortened title can differ without implying a different document.
+            issues.append("title_mismatch")
+        applicants = {text for name, values in values_by_field.items()
+                      if name.split(":")[0] in ("applicants", "authors") for text in values}
+        candidate["verified_applicants"] = sorted(applicants)
+        if not applicants:
+            issues.append("applicant_unverified")
+        elif normalize_title(candidate.get("applicant", "")) not in {normalize_title(text) for text in applicants}:
+            issues.append("applicant_mismatch")
         # Candidate-level excerpts without a field reference cannot be verified.
         if candidate.get("verbatim_excerpt"):
             issues.append("quote_unverified")

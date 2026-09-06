@@ -8,7 +8,7 @@ from app.providers.claude_cli import ClaudeCliProvider
 from app.providers.codex_cli import CodexCliProvider
 
 @pytest.mark.parametrize("provider", [AgyCliProvider, ClaudeCliProvider, CodexCliProvider])
-@pytest.mark.parametrize("tool", ["Bash", "mcp__aria-search__epo_search", "web_search"])
+@pytest.mark.parametrize("tool", ["Bash", "mcp__prism-search__epo_search", "web_search"])
 def test_no_tools_policy_rejects_actual_calls_even_without_name_summary(provider, tool):
     outcome = ExecutionOutcome(result_text="not a valid isolated result", exit_code=0,
         terminal_reason="completed", tool_policy=NO_TOOLS,

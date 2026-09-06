@@ -57,7 +57,7 @@ RESERVED_PROMPT_IDS = frozenset(
     {DEFAULT_ANALYSIS_PROMPT_ID, DEFAULT_SEARCH_PROMPT_ID}
 )
 
-_METADATA_START = "<!-- ARIA_PROMPT_METADATA\n"
+_METADATA_START = "<!-- PRISM_PROMPT_METADATA\n"
 _METADATA_END = "\n-->\n"
 _MAX_PROMPT_BYTES = 2 * 1024 * 1024
 _INVALID_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -93,7 +93,7 @@ class PromptFile:
     enabled: bool
     created_at: datetime
     updated_at: datetime
-    # 이 프롬프트가 지원한다고 선언한 ARIA 확장. 파일 메타데이터에서만 설정한다.
+    # 이 프롬프트가 지원한다고 선언한 PRISM 확장. 파일 메타데이터에서만 설정한다.
     # API 로는 바꿀 수 없다. 프롬프트 본문과 출력 계약이 함께 움직여야 하는데,
     # 화면에서 선언만 켜면 본문은 그대로라 계약이 어긋난다.
     capabilities: list[str] = field(default_factory=list)
@@ -186,16 +186,16 @@ class PromptStore:
             return {}, raw
         end = raw.find(_METADATA_END, len(_METADATA_START))
         if end < 0:
-            raise InvalidPromptFile(f"{path.name}: ARIA 메타데이터 종료 표식이 없습니다.")
+            raise InvalidPromptFile(f"{path.name}: PRISM 메타데이터 종료 표식이 없습니다.")
         payload = raw[len(_METADATA_START) : end]
         try:
             metadata = json.loads(payload)
         except json.JSONDecodeError as exc:
             raise InvalidPromptFile(
-                f"{path.name}: ARIA 메타데이터 JSON이 올바르지 않습니다."
+                f"{path.name}: PRISM 메타데이터 JSON이 올바르지 않습니다."
             ) from exc
         if not isinstance(metadata, dict):
-            raise InvalidPromptFile(f"{path.name}: ARIA 메타데이터는 객체여야 합니다.")
+            raise InvalidPromptFile(f"{path.name}: PRISM 메타데이터는 객체여야 합니다.")
         return metadata, raw[end + len(_METADATA_END) :]
 
     def _read_path(self, path: Path) -> PromptFile:
@@ -271,7 +271,7 @@ class PromptStore:
                 mode="w",
                 encoding="utf-8",
                 newline="\n",
-                prefix=".aria-prompt-",
+                prefix=".prism-prompt-",
                 suffix=".tmp",
                 dir=path.parent,
                 delete=False,

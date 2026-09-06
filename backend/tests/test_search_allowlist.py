@@ -74,7 +74,7 @@ def test_an_explicit_off_survives_the_new_default(client) -> None:
 @pytest.fixture()
 def settings_file(tmp_path, monkeypatch):
     path = tmp_path / "antigravity-cli" / "settings.json"
-    monkeypatch.setenv("ARIA_AGY_SETTINGS_PATH", str(path))
+    monkeypatch.setenv("PRISM_AGY_SETTINGS_PATH", str(path))
     return path
 
 
@@ -118,7 +118,7 @@ def test_the_agy_prompt_carries_the_failure_rules() -> None:
     assert "access_failures" in text
     # 접근 실패가 실행 중단 사유가 아니라는 것과, 블록은 반드시 나가야 한다는 것.
     assert "실행을 중단할 이유가 아닙니다" in text
-    assert "[ARIA_SEARCH_LOG_V1]" in text
+    assert "[PRISM_SEARCH_LOG_V1]" in text
     # 허용이 열람 성공 보장이 아니라는 것.
     assert "유료벽" in text and "봇 차단" in text
 

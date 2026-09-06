@@ -14,9 +14,9 @@ agy의 실행별 MCP 연결, 기존 Kiwee 미구현 부분은 아래 제약을 �
 
 현재 실행은 다음과 같다.
 
-사용자 입력 + 선택한 검색 전략 + ARIA 실행 계약 → 선택한 Provider 1회 실행
+사용자 입력 + 선택한 검색 전략 + PRISM 실행 계약 → 선택한 Provider 1회 실행
 → LLM이 도구·질의·확장·후보·순서·A/B/C/null을 결정
-→ ARIA가 JSON/식별자/보존 근거/공개일을 검사 → 감사 기록 및 보고서 저장.
+→ PRISM이 JSON/식별자/보존 근거/공개일을 검사 → 감사 기록 및 보고서 저장.
 
 명세서는 동일 실행의 참고자료이며 별도 검색 레인이 아니다. 분석·문헌 로컬 검색의
 별도 기능은 이번 유사문헌 검색 단순화의 삭제 대상이 아니다.
@@ -43,7 +43,7 @@ agy의 실행별 MCP 연결, 기존 Kiwee 미구현 부분은 아래 제약을 �
 
 ### LLM 호출 도구로 전환
 
-`search_mcp_server.py`는 실행별 stdio 서버다. ARIA가 선택한 작업 폴더와 설정만 전달한다.
+`search_mcp_server.py`는 실행별 stdio 서버다. PRISM이 선택한 작업 폴더와 설정만 전달한다.
 호스트의 전역 MCP 설정을 추가·변경하지 않는다.
 
 - `epo_search`: 구조화 CQL 입력을 검증하고 실제 CQL 및 응답 아티팩트 참조를 반환한다.
@@ -92,10 +92,10 @@ Git HEAD 대비 `backend/app/**/*.py`의 비어 있지 않은 줄 수는 32,959 
   공개일이 기준일 뒤일 때만 최종 목록에서 제외하고 감사 기록·보고서에는 사유와 함께 남긴다.
   공개일 불명·경계에 걸친 부분 날짜는 남긴다.
 - 기준일은 프롬프트와 MCP 실행 설정에 전달한다. EPO 도구는 LLM이 선택한 `pd` 날짜 범위
-  CQL을 지원한다. 다만 **ARIA가 모든 DB 요청에 날짜 조건을 자동 삽입하지는 않는다.**
+  CQL을 지원한다. 다만 **PRISM이 모든 DB 요청에 날짜 조건을 자동 삽입하지는 않는다.**
   날짜 미상 자료가 DB에서 조용히 제외되는 것을 피하기 위한 것으로, 원안의 자동 조건 전달과는
   차이가 있다. 범위 제한 질의와 제한 없는 확장 질의의 선택은 LLM에 맡긴다.
-- 검색은 현재 검색 전략 프롬프트와 ARIA 실행 계약을 조립한다. 분석용 Master Prompt는
+- 검색은 현재 검색 전략 프롬프트와 PRISM 실행 계약을 조립한다. 분석용 Master Prompt는
   출력 계약이 다르므로 확인 없이 추가하지 않았다. 원안의 두 프롬프트 동시 적용은 미완료다.
 - 새 manifest는 v14다. `group`, `evidence_level`, `verification_scope`,
   `verification_issues`를 분리하고 실제 호출, 모델 원출력, 정규화 결과를 별도로 보존한다.
@@ -105,23 +105,23 @@ Git HEAD 대비 `backend/app/**/*.py`의 비어 있지 않은 줄 수는 32,959 
 
 ## Provider별 실제 확인 범위
 
-| Provider | 새 ARIA 도구 연결 | 실제 CLI 확인 |
+| Provider | 새 PRISM 도구 연결 | 실제 CLI 확인 |
 |---|---|---|
 | Codex | 실행별 MCP, 도구별 명시 허용 목록 | 설치된 0.149.0에서 capabilities 호출·원장 기록 성공 |
 | Claude | strict MCP 설정과 허용 목록 구현 | 로그인되지 않아 실제 호출 검증 미완료 (`loggedIn: false`) |
-| agy | 네이티브 웹 검색 유지, ARIA MCP는 `unsupported_transport` | 설치된 1.1.25에서 실행별 MCP 설정 경로 미확인 |
+| agy | 네이티브 웹 검색 유지, PRISM MCP는 `unsupported_transport` | 설치된 1.1.25에서 실행별 MCP 설정 경로 미확인 |
 
 Codex의 실제 확인은 외부 특허/논문 API를 호출하지 않는 연결 점검이다.
 EPO·논문의 실서버 검색 품질과 계정별 권한까지 검증했다는 뜻은 아니다.
 agy의 전역 MCP 등록은 사용자 설정에 영향을 주므로 이번 작업에서 수행하지 않았다.
 
-Codex의 `-c` 경로는 따옴표를 포함해 분리되므로, ARIA가 소유한 서버/환경 키는
-따옴표 없는 경로를 쓰고 값만 인코딩한다. 읽기 전용으로 선언된 ARIA 도구에만
+Codex의 `-c` 경로는 따옴표를 포함해 분리되므로, PRISM이 소유한 서버/환경 키는
+따옴표 없는 경로를 쓰고 값만 인코딩한다. 읽기 전용으로 선언된 PRISM 도구에만
 `default_tools_approval_mode="writes"`를 적용하며 전역 승인 우회는 사용하지 않는다.
 근거: [설정 경로 처리](https://raw.githubusercontent.com/openai/codex/main/codex-rs/config/src/overrides.rs),
 [MCP 설정 타입](https://raw.githubusercontent.com/openai/codex/main/codex-rs/config/src/mcp_types.rs).
 
-중요한 제한: Codex/agy의 네이티브 도구는 ARIA가 모든 호출을 사전에 차단하는 구조가 아니다.
+중요한 제한: Codex/agy의 네이티브 도구는 PRISM이 모든 호출을 사전에 차단하는 구조가 아니다.
 기존 샌드박스와 호출 관측·정책 위반 실패 처리를 유지한다. 네이티브 호출의 전체 한도는
 이벤트 관측 후 중단이고, MCP 서버 내부 한도는 외부 요청 전 거절이다.
 두 경계를 같은 의미의 완전한 사전 하드캡이라고 주장하지 않는다.
@@ -155,7 +155,7 @@ API의 취소·실패·사전 점검·입력 경계 테스트 역시 유지했�
 - `git diff --check`: 통과. pytest-asyncio의 기본 fixture scope 관련 기존 경고는 남아 있다.
 
 삭제 전 코드·테스트 18개는 임시 백업에 복사했다:
-`C:\Users\ADMINI~1\AppData\Local\Temp\aria-retired-search-b2f65aeb0a40432689dfc897dd74baff`.
+`C:\Users\ADMINI~1\AppData\Local\Temp\prism-retired-search-b2f65aeb0a40432689dfc897dd74baff`.
 추적 파일은 Git에서도 복원 가능하다. 실행 이력·사용자 문헌·자격증명은 삭제하지 않았다.
 
 ## 후속 확인이 필요한 항목

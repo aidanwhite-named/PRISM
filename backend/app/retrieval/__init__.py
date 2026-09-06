@@ -1,6 +1,6 @@
 """로컬 Agentic Retrieval.
 
-대용량 인용발명 PDF 를 프롬프트에 통째로 넣지 않고, ARIA 가 페이지·문단 단위로
+대용량 인용발명 PDF 를 프롬프트에 통째로 넣지 않고, PRISM 이 페이지·문단 단위로
 로컬 색인한 뒤 AI 가 구조화된 action 으로 검색하게 한다. 설계 근거와 라이브러리
 선택 이유는 docs/adr-0001-local-retrieval.md 에 있다.
 

@@ -25,10 +25,10 @@ def availability(values: dict, provider: str = "claude") -> dict:
     return result
 
 def available_mcp_names(statuses: dict) -> tuple[str, ...]:
-    names = ["mcp__aria-search__search_capabilities"]
+    names = ["mcp__prism-search__search_capabilities"]
     for name in ("epo", "kiwee", "literature"):
         if statuses.get(name, {}).get("status") == "available":
-            names += [f"mcp__aria-search__{name}_search", f"mcp__aria-search__{name}_fetch"]
+            names += [f"mcp__prism-search__{name}_search", f"mcp__prism-search__{name}_fetch"]
     return tuple(names)
 
 def cell(value) -> str:

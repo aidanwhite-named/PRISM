@@ -319,10 +319,10 @@ describe("대용량 인용발명 전달 방식", () => {
     const { container } = await renderPage();
     const text =
       container.querySelector(".settings-agy-permissions")?.textContent ?? "";
-    // ARIA 는 agy 가 프롬프트를 따르도록 강제하지 못한다. 화면 문구가 그
+    // PRISM 은 agy 가 프롬프트를 따르도록 강제하지 못한다. 화면 문구가 그
     // 한계와 어긋나면 사용자는 보장되지 않는 동작을 보장으로 읽는다.
     expect(text).toContain("모델에게 지시합니다.");
-    expect(text).toContain("ARIA 가 강제할 수 있는 동작은 아닙니다");
+    expect(text).toContain("PRISM 이 강제할 수 있는 동작은 아닙니다");
   });
 
   it("특허 연동 카드를 전체 폭 대상으로 표시하고 설명을 간결하게 유지한다", async () => {

@@ -26,7 +26,7 @@ function citation(overrides: Partial<Extraction> = {}): RetrievalDocument {
     index_rebuilt: true,
     index: {
       index_version: 1,
-      extractor_version: "pypdf-5.1.0+aria-1",
+      extractor_version: "pypdf-5.1.0+prism-1",
       chunk_count: 49,
       page_count: 13,
       source_page_count: 13,
@@ -111,7 +111,7 @@ describe("추출 경고", () => {
     ).toBeTruthy();
     expect(screen.queryByText(/원본 PDF 를 직접 확인해야/)).toBeNull();
     // OCR 안내는 내용을 얻지 못한 문헌에만 붙는다.
-    expect(screen.queryByText(/ARIA 는 OCR 을 수행하지 않습니다/)).toBeNull();
+    expect(screen.queryByText(/PRISM 은 OCR 을 수행하지 않습니다/)).toBeNull();
   });
 
   it("텍스트를 얻지 못한 문헌은 원본 확인 상자에 남는다", () => {

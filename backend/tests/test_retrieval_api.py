@@ -168,7 +168,7 @@ def test_oversized_citation_runs_through_retrieval(
     assert payload_bytes <= preflight["bytes"]
 
     # 인용발명 본문 전체가 프롬프트에 들어가지 않았다.
-    assert "ARIA 로컬 검색 근거 패키지" in analysis.user_message
+    assert "PRISM 로컬 검색 근거 패키지" in analysis.user_message
     # 60쪽 문헌의 반복 문구가 최대 몇 번 나올 수 있는지로 잰다. 전체 인라인
     # 이었다면 쪽마다 수십 번씩 나온다.
     filler = "본 발명의 실시예에 따른 장치의 동작"

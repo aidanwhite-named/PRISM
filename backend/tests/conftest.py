@@ -1,7 +1,7 @@
 """테스트 공통 설정.
 
 app 을 import 하기 전에 데이터 디렉터리를 임시 경로로 돌려서, 테스트가
-사용자의 실제 %LOCALAPPDATA%\\ARIA 를 건드리지 않게 한다.
+사용자의 실제 %LOCALAPPDATA%\\PRISM 을 건드리지 않게 한다.
 """
 
 from __future__ import annotations
@@ -9,20 +9,20 @@ from __future__ import annotations
 import os
 import tempfile
 
-_TEST_DATA_DIR = tempfile.mkdtemp(prefix="aria-test-")
-_TEST_PROMPT_DIR = tempfile.mkdtemp(prefix="aria-prompts-test-")
-os.environ["ARIA_DATA_DIR"] = _TEST_DATA_DIR
-os.environ["ARIA_PROMPT_DIR"] = _TEST_PROMPT_DIR
+_TEST_DATA_DIR = tempfile.mkdtemp(prefix="prism-test-")
+_TEST_PROMPT_DIR = tempfile.mkdtemp(prefix="prism-prompts-test-")
+os.environ["PRISM_DATA_DIR"] = _TEST_DATA_DIR
+os.environ["PRISM_PROMPT_DIR"] = _TEST_PROMPT_DIR
 
-# agy 의 열람 허용 목록도 임시 경로로 돌린다. **ARIA 데이터 디렉터리와 같은
-# 이유이고, 이쪽이 더 위험하다** — 여기는 ARIA 가 아니라 다른 프로그램의 설정
+# agy 의 열람 허용 목록도 임시 경로로 돌린다. **PRISM 데이터 디렉터리와 같은
+# 이유이고, 이쪽이 더 위험하다** — 여기는 PRISM 이 아니라 다른 프로그램의 설정
 # 파일이고, 앱 시작 시의 일회성 마이그레이션이 실제로 그 파일을 고친다.
 # TestClient 가 lifespan 을 돌리므로, 이 값을 세우지 않으면 테스트를 한 번
 # 돌리는 것만으로 개발자의 진짜 ~/.gemini 가 바뀐다.
 _TEST_AGY_SETTINGS = os.path.join(
-    tempfile.mkdtemp(prefix="aria-agy-test-"), "settings.json"
+    tempfile.mkdtemp(prefix="prism-agy-test-"), "settings.json"
 )
-os.environ["ARIA_AGY_SETTINGS_PATH"] = _TEST_AGY_SETTINGS
+os.environ["PRISM_AGY_SETTINGS_PATH"] = _TEST_AGY_SETTINGS
 
 import shutil  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -88,7 +88,7 @@ def client():
     init_engine()
     with TestClient(app) as test_client:
         # CSRF 가드가 변경 요청에 요구하는 헤더.
-        test_client.headers.update({"X-ARIA-Client": "1"})
+        test_client.headers.update({"X-PRISM-Client": "1"})
         yield test_client
     patcher.undo()
 

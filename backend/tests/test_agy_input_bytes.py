@@ -45,13 +45,13 @@ def test_payload_bytes_equals_the_actual_stream_json_line() -> None:
     실행이 '성공'으로 남는 형태로만 드러난다.
     """
     provider = AgyCliProvider()
-    system_prompt = "ARIA 런타임 컨텍스트"
+    system_prompt = "PRISM 런타임 컨텍스트"
     user_message = '문헌 본문\n둘째 줄 "인용부호" 와 역슬래시 \\ 포함'
 
     measured = provider.payload_bytes(system_prompt, user_message)
 
     composed = (
-        "[ARIA RUNTIME CONTEXT]\n"
+        "[PRISM RUNTIME CONTEXT]\n"
         f"{system_prompt}\n\n"
         f"{user_message}"
     )

@@ -5,6 +5,7 @@ from .search_channels import cell, STATUS_LABELS
 from .search_legacy import view
 from .search_manifest import GROUP_DEFINITIONS, is_linkable_url
 from .search_verification import ISSUE_LABELS, LEVEL_LABELS
+from .search_quality import REASON_LABELS
 
 def _link(raw) -> str:
     if not is_linkable_url(raw):
@@ -16,8 +17,20 @@ def render(manifest: dict) -> str:
     lines = ["# 유사문헌 검색 결과", ""]
     if data.get("legacy"):
         lines += [f"이전 형식(v{data['legacy_version']})의 저장 기록입니다. 재분류·재검증하지 않았습니다.", ""]
-    if data.get("status") != "complete":
+    if data.get("status") == "verification_incomplete":
+        lines += ["검색 실행 종료 · 검증 미완료. 아래 후보와 LLM 분류는 확인이 더 필요합니다.", ""]
+    elif data.get("status") != "complete":
         lines += ["검색이 완료되지 않았습니다. 최종 후보 보고서가 아닙니다.", cell(data.get("error")), ""]
+    quality = data.get("quality")
+    if quality:
+        lines += [f"근거 검증 후보: {quality['verified_candidate_count']}/{quality['candidate_count']}건. 검색의 충분성·누락 없음은 보증하지 않습니다.", ""]
+        for item in quality.get("outstanding", []):
+            reason = REASON_LABELS.get(item["reason"], "원문 조회 미시도" if item["reason"] == "not_attempted" else "조회 후 검증 미해결")
+            lines.append(f"- {cell(item['identity'])}: {reason}, 대응 근거 미검증 {item['unverified_mapping_count']}개")
+        for item in quality.get("constraints", []):
+            lines.append(f"- 제약 {cell(item['source'])}: {cell(REASON_LABELS.get(item['reason'], item['reason']))} {cell(item.get('detail', ''))}")
+        followup = data.get("verification_followup") or {}
+        lines += ["", "추가 확인: " + cell(followup.get("reason", "기록 없음")), ""]
     lines += ["A/B/C는 LLM의 기술적 판단이며, 증거 확보 수준과 독립적입니다.", ""]
     definitions = data.get("group_definitions") or GROUP_DEFINITIONS
     for group, meaning in definitions.items():
@@ -45,13 +58,25 @@ def render(manifest: dict) -> str:
     candidates = (data.get("reported") or {}).get("candidates", [])
     if not candidates:
         lines += ["", "최종 후보가 없습니다. 미검색·접속 실패는 관련 문헌의 부재를 뜻하지 않습니다."]
-    for rank, item in enumerate(candidates, 1):
-        lines += ["", f"## {rank}. {cell(item.get('doc_number') or item.get('doi') or item.get('title'))}", "",
-                  f"LLM 그룹: {cell(item.get('group') or '미분류')} · LLM 제목: {cell(item.get('title') or item.get('reported_title'))}",
+    ordered = [(rank, item) for group in ("A", "B", "C", None)
+               for rank, item in enumerate(candidates, 1) if item.get("group") == group]
+    previous_group = object()
+    for rank, item in ordered:
+        group = item.get("group")
+        if group != previous_group:
+            count = sum(candidate.get("group") == group for candidate in candidates)
+            lines += ["", f"## LLM 그룹 {cell(group or '미분류')} · {count}건", "",
+                      cell(definitions.get(group, "분류되지 않은 참고 후보"))]
+            previous_group = group
+        lines += ["", f"### {rank}. {cell(item.get('doc_number') or item.get('doi') or item.get('title'))}", "",
+                  f"LLM 제목: {cell(item.get('title') or item.get('reported_title'))}",
                   "", _link(item.get("url")), "",
                   "증거: " + cell(LEVEL_LABELS.get(item.get("evidence_level"), "이전 형식 / 재검증 안 함")),
                   "", "LLM 설명: " + cell(item.get("note"))]
         scopes = item.get("verification_scope") or {}
+        for field, label in (("verified_titles", "보존 원문 명칭"), ("verified_applicants", "보존 원문 저자·출원인")):
+            if item.get(field):
+                lines += ["", label + ": " + cell(" / ".join(item[field]))]
         if scopes:
             lines += ["", "확보 범위: " + cell(", ".join(f"{k}={v}" for k, v in scopes.items()))]
         issues = item.get("verification_issues") or []

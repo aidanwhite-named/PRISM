@@ -13,7 +13,7 @@ from .codex_cli import CodexCliProvider
 
 PROVIDER_ORDER = ["agy", "claude", "codex"]
 
-# 도구를 끄는 수단이 없는 Provider. ARIA 는 도구 호출을 탐지해서 실패로
+# 도구를 끄는 수단이 없는 Provider. PRISM 은 도구 호출을 탐지해서 실패로
 # 기록할 뿐 호출 자체를 막지 못한다.
 #
 # 이 목록은 실행을 막지 않는다. Settings 의 위험 고지와 경고 문구를 어디에
@@ -25,7 +25,7 @@ PROVIDER_ORDER = ["agy", "claude", "codex"]
 TOOL_UNCONTROLLABLE_PROVIDERS = frozenset({"agy", "codex"})
 
 # 캐시 수명. probe 는 Provider 하나당 CLI 를 두 번(버전·인증) 띄우므로 화면을
-# 열 때마다 돌릴 수는 없다. 그렇다고 무기한 들고 있으면 사용자가 ARIA 밖에서
+# 열 때마다 돌릴 수는 없다. 그렇다고 무기한 들고 있으면 사용자가 PRISM 밖에서
 # 로그아웃하거나 토큰이 만료됐을 때 화면이 계속 "로그인됨" 으로 거짓말한다.
 # 실측으로 그 사고가 났다: 터미널에서 agy /logout 을 마쳤는데도 `agy models` 가
 # 실패하는 동안 Settings 표는 "로그인됨. 사용 가능한 모델 14개" 를 계속 보여줬다.

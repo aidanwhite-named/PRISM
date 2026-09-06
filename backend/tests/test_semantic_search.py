@@ -1,6 +1,6 @@
 """의미 검색 채널과 임베딩 캐시.
 
-여기서 확인하는 것은 "import 가 된다"가 아니다. 실제 ARIA 검색 경로에서
+여기서 확인하는 것은 "import 가 된다"가 아니다. 실제 PRISM 검색 경로에서
 
   - 키워드가 거의 겹치지 않는 한국어 문장을 후보로 올리는가
   - 그 후보가 semantic 채널로 기록되고 RRF 로 합쳐지는가
@@ -357,7 +357,7 @@ class Row:
 META = {
     "pdf_sha256": "abc",
     "index_version": 1,
-    "extractor_version": "pypdf-x+aria-1",
+    "extractor_version": "pypdf-x+prism-1",
 }
 
 
@@ -412,7 +412,7 @@ def test_cache_key_separates_documents_and_model_revisions(tmp_path) -> None:
     assert base != embedding_cache.fingerprint({**META, "pdf_sha256": "zzz"}, "model-a", "rev-1")
     assert base != embedding_cache.fingerprint({**META, "index_version": 2}, "model-a", "rev-1")
     assert base != embedding_cache.fingerprint(
-        {**META, "extractor_version": "pypdf-y+aria-1"}, "model-a", "rev-1"
+        {**META, "extractor_version": "pypdf-y+prism-1"}, "model-a", "rev-1"
     )
     # 파일명이나 attachment_id 는 청크를 바꾸지 않으므로 키가 아니다.
     assert base == embedding_cache.fingerprint(

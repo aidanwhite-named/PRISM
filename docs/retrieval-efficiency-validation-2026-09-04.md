@@ -13,7 +13,7 @@
 
 - 원본 첫 라운드와 동일한 시스템 프롬프트·사용자 메시지 5,938자를 사용했다.
 - 기존 `ClaudeCliProvider`를 사용해 `--tools ""`, 시스템 프롬프트 교체,
-  빈 MCP 설정, 사용자/프로젝트 설정 차단을 적용했다. ARIA 데이터 폴더 아래
+  빈 MCP 설정, 사용자/프로젝트 설정 차단을 적용했다. PRISM 데이터 폴더 아래
   별도 작업 디렉터리에서 호출해 프로젝트 지시문이 섞이지 않도록 했다.
 - Claude CLI 2.1.156의 init에서 `tools: []`, `mcp_servers: []`를 확인했다.
 - 결과는 exit code 1, `Not logged in · Please run /login`이다. 실패 응답의
@@ -168,5 +168,5 @@
 - `probe.py`, `claude-probe.json`, `claude-probe.stdout.jsonl`, `claude-probe.stderr.log`
 - `validate.py`, `request.json`, `preflight.json`, `run.json`, `result.json`, `comparison.json`
 
-실행별 원본 근거와 라운드 입출력은 `%LOCALAPPDATA%/ARIA/runs/<실행 ID>/retrieval/`에
+실행별 원본 근거와 라운드 입출력은 `%LOCALAPPDATA%/PRISM/runs/<실행 ID>/retrieval/`에
 보관된다. 검증 자료는 로컬 데이터 폴더에 두며 Git에 포함하지 않는다.

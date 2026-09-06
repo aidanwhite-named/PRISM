@@ -1,4 +1,4 @@
-"""발췌 하나의 증거 등급을 ARIA 가 직접 계산한다.
+"""발췌 하나의 증거 등급을 PRISM 이 직접 계산한다.
 
 판정 단위는 '발췌'다
 --------------------
@@ -67,7 +67,7 @@ MATCH_KINDS = (MATCH_NONE, MATCH_NORMALIZED, MATCH_EXACT)
 
 @dataclass(frozen=True)
 class ExcerptVerification:
-    """발췌 하나에 대한 ARIA 의 판정. 모델 보고도, 어댑터 주장도 아니다."""
+    """발췌 하나에 대한 PRISM 의 판정. 모델 보고도, 어댑터 주장도 아니다."""
 
     match_kind: str = MATCH_NONE
     source_kind: str = ""

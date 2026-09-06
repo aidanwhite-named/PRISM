@@ -4,7 +4,7 @@ AI 실행 도구(Provider)의 API Key 입력란은 만들지 않는다. 각 CLI 
 로그인 세션만 사용한다.
 
 예외는 **외부 데이터 소스**의 자격증명이다(EPO OPS). 그쪽은 CLI 도 로그인
-세션도 없고 OAuth client_credentials 뿐이라 ARIA 가 보관하는 것 외에 방법이
+세션도 없고 OAuth client_credentials 뿐이라 PRISM 이 보관하는 것 외에 방법이
 없다. 대신 두 가지를 지킨다.
 
   - 저장은 하되 응답으로 돌려주지 않는다(settings_service.redact_for_api).
@@ -71,7 +71,7 @@ def update_settings(
 def check_epo_credentials(session: Session = Depends(get_db)) -> CredentialCheckOut:
     """저장된 EPO OPS 자격증명으로 토큰 발급을 한 번 시도한다.
 
-    ARIA 가 외부로 나가는 유일한 설정 화면 동작이다. 사용자가 버튼을 눌렀을
+    PRISM 이 외부로 나가는 유일한 설정 화면 동작이다. 사용자가 버튼을 눌렀을
     때만 실행되고, 특허 데이터는 요청하지 않으며, 받은 토큰은 저장하지 않는다.
     자격증명은 요청 본문이 아니라 저장된 값에서 읽는다 — 본문으로 받으면 비밀이
     프록시 로그와 브라우저 기록에 한 번 더 남는다.
@@ -95,7 +95,7 @@ def check_epo_credentials(session: Session = Depends(get_db)) -> CredentialCheck
 def apply_agy_permissions(session: Session = Depends(get_db)) -> SettingsOut:
     """권장 논문 출처를 agy 의 허용 목록에 다시 병합한다.
 
-    ARIA 가 이 파일을 자동으로 고치는 것은 설치당 한 번뿐이다(앱 시작 시의
+    PRISM 이 이 파일을 자동으로 고치는 것은 설치당 한 번뿐이다(앱 시작 시의
     일회성 마이그레이션). 그 뒤에 다시 넣는 유일한 방법이 이 버튼이다 —
     사용자가 지운 호스트를 프로그램이 되살리지 않기 위해서다.
 

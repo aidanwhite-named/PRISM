@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 
 
 def _clear_directory_contents(root: Path) -> None:
-    """ARIA가 소유한 저장 폴더는 남기고 그 안의 기록만 모두 지운다."""
+    """PRISM이 소유한 저장 폴더는 남기고 그 안의 기록만 모두 지운다."""
     root.mkdir(parents=True, exist_ok=True)
     for child in root.iterdir():
         if child.is_symlink() or child.is_file():
@@ -111,7 +111,7 @@ def list_history(
 
 @router.delete("")
 def delete_all_history(session: Session = Depends(get_db)) -> dict:
-    """모든 실행 이력과 ARIA 실행 저장소의 파일을 함께 지운다.
+    """모든 실행 이력과 PRISM 실행 저장소의 파일을 함께 지운다.
 
     DB 행과 연결되지 않은 미사용 업로드 폴더나 이전 버전의 산출물도 남기지
     않는다. 데이터 폴더 자체와 설정·프롬프트·애플리케이션 로그는 보존한다.

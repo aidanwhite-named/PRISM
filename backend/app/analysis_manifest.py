@@ -1,7 +1,7 @@
 """구성대비 결과의 기계 판독용 기록.
 
 사람이 읽는 Markdown 보고서에서 유사도 문구를 정규식으로 다시 해석하지 않는다.
-분석 프롬프트가 별도의 JSON 블록을 출력하면 ARIA 가 형식과 점수 범위를 검증하고,
+분석 프롬프트가 별도의 JSON 블록을 출력하면 PRISM 이 형식과 점수 범위를 검증하고,
 검색 가능한 구성만 명시적으로 표시해 저장한다.
 
 문헌 판독 제한은 "문헌에 구성이 없다"는 뜻이 아니므로 검색 대상으로 올리지
@@ -30,8 +30,8 @@ STATUSES = frozenset(
     }
 )
 
-_OPEN = "[ARIA_COMPONENT_ANALYSIS_V1]"
-_CLOSE = "[/ARIA_COMPONENT_ANALYSIS_V1]"
+_OPEN = "[PRISM_COMPONENT_ANALYSIS_V1]"
+_CLOSE = "[/PRISM_COMPONENT_ANALYSIS_V1]"
 _BLOCK = re.compile(
     r"(?:```[\w-]*\s*\n)?"
     + re.escape(_OPEN)

@@ -490,7 +490,7 @@ def build_index(
         raise IndexUnavailable(
             caps.error
             or "이 실행 환경의 SQLite 에 FTS5 가 없어 로컬 검색 인덱스를 만들 수 "
-            "없습니다. ARIA 는 검색 없이 근거를 지어내지 않으므로 실행을 "
+            "없습니다. PRISM 은 검색 없이 근거를 지어내지 않으므로 실행을 "
             "중단합니다."
         )
 

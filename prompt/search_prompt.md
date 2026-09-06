@@ -1,7 +1,7 @@
-<!-- ARIA_PROMPT_METADATA
+<!-- PRISM_PROMPT_METADATA
 {
   "name": "기본 검색 전략",
-  "description": "청구항과 기술적으로 유사한 특허·논문을 폭넓게 탐색하기 위한 기본 검색 전략입니다. 무엇을 중시하고 어디까지 넓힐지만 정하며, 검색 실행·보안·감사 계약은 ARIA가 갖고 있습니다.",
+  "description": "청구항과 기술적으로 유사한 특허·논문을 폭넓게 탐색하기 위한 기본 검색 전략입니다. 무엇을 중시하고 어디까지 넓힐지만 정하며, 검색 실행·보안·감사 계약은 PRISM이 갖고 있습니다.",
   "version": 3,
   "kind": "search",
   "capabilities": ["similarity_search_v1"],

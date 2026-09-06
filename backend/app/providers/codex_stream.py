@@ -23,7 +23,7 @@ codex-cli 0.149.0 에서 실측한 이벤트:
   항목 : agent_message reasoning command_execution file_change
          mcp_tool_call collab_tool_call web_search todo_list
 
-이 중 뒤의 다섯이 도구다. Codex 는 도구를 끄는 플래그가 없으므로 ARIA 는
+이 중 뒤의 다섯이 도구다. Codex 는 도구를 끄는 플래그가 없으므로 PRISM 은
 이것들을 사후에 탐지할 뿐 차단하지 못한다. 그래서 이름을 추측하지 않고
 실행 파일에서 확인한 목록을 그대로 쓰고, 목록에 없는 처음 보는 항목 종류도
 버리지 않고 기록한다 — 다음 버전에서 도구가 하나 늘었을 때 조용히 통과하는

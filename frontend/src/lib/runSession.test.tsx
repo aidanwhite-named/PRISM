@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { RunSessionProvider, useRunSession, type RunSession } from "./runSession";
 
-const STORAGE_KEY = "aria.run-session.v1";
+const STORAGE_KEY = "prism.run-session.v1";
 
 let session: RunSession | null = null;
 

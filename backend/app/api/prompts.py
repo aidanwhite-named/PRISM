@@ -86,7 +86,7 @@ def list_prompt_catalog(
 def create_prompt(payload: PromptCreate) -> PromptFile:
     values = payload.model_dump()
     if values.get("kind") == KIND_SEARCH:
-        # 검색 전략 프롬프트에는 요구하는 표시가 없다(데이터 구간은 ARIA 가
+        # 검색 전략 프롬프트에는 요구하는 표시가 없다(데이터 구간은 PRISM 이
         # 붙인다). 다만 옛 방식으로 placeholder 를 직접 든 본문을 붙여 넣었다면
         # 그 계약은 만족해야 한다 — 반쯤 옮겨 적은 본문으로 실행하면 청구항이
         # 경계 밖에 놓인다.

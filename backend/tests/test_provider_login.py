@@ -72,7 +72,7 @@ def test_login_endpoint_requires_csrf_header(client) -> None:
     response = client.post(
         "/api/providers/claude/login",
         json={"method": "subscription"},
-        headers={"X-ARIA-Client": ""},
+        headers={"X-PRISM-Client": ""},
     )
     assert response.status_code == 403
 
@@ -275,7 +275,7 @@ def test_logout_endpoint_requires_csrf_and_returns_sanitized_result(
     assert response.json()["auth_state"] == "NOT_LOGGED_IN"
 
     blocked = client.post(
-        "/api/providers/claude/logout", headers={"X-ARIA-Client": ""}
+        "/api/providers/claude/logout", headers={"X-PRISM-Client": ""}
     )
     assert blocked.status_code == 403
 

@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    ARIA 를 시작하고 브라우저를 엽니다.
+    PRISM 을 시작하고 브라우저를 엽니다.
 
 .DESCRIPTION
     localhost 전용 로컬 웹 프로그램입니다. 외부 네트워크에 공개되지 않습니다.
@@ -18,9 +18,9 @@
     프론트엔드만 다시 빌드합니다.
 
 .EXAMPLE
-    .\start-aria.ps1 -Setup
-    .\start-aria.ps1
-    .\start-aria.ps1 -Port 9000 -NoBrowser
+    .\start-prism.ps1 -Setup
+    .\start-prism.ps1
+    .\start-prism.ps1 -Port 9000 -NoBrowser
 #>
 [CmdletBinding()]
 param(
@@ -82,13 +82,13 @@ elseif ($Rebuild) {
 }
 
 if (-not (Test-Path $venvPython)) {
-    Write-Err "가상환경이 없습니다. 먼저 다음을 실행하십시오:  .\start-aria.ps1 -Setup"
+    Write-Err "가상환경이 없습니다. 먼저 다음을 실행하십시오:  .\start-prism.ps1 -Setup"
     exit 1
 }
 
 if (-not (Test-Path (Join-Path $frontend 'dist\index.html'))) {
     Write-Warn '프론트엔드가 빌드되지 않았습니다. API 만 동작합니다.'
-    Write-Warn "빌드하려면:  .\start-aria.ps1 -Rebuild"
+    Write-Warn "빌드하려면:  .\start-prism.ps1 -Rebuild"
 }
 
 # --------------------------------------------------------------- 포트 확인
@@ -120,10 +120,10 @@ if (Test-PortInUse $Port) {
 $url = "http://127.0.0.1:$Port"
 
 Write-Host ''
-Write-Host '  ARIA' -ForegroundColor White
+Write-Host '  PRISM' -ForegroundColor White
 Write-Host "  $url" -ForegroundColor Green
 Write-Host '  데이터 폴더: ' -NoNewline
-Write-Host (Join-Path $env:LOCALAPPDATA 'ARIA') -ForegroundColor Gray
+Write-Host (Join-Path $env:LOCALAPPDATA 'PRISM') -ForegroundColor Gray
 Write-Host '  중지하려면 Ctrl+C' -ForegroundColor Gray
 Write-Host ''
 
@@ -143,7 +143,7 @@ if (-not $NoBrowser) {
     } -ArgumentList $url
 }
 
-$env:ARIA_PORT = "$Port"
+$env:PRISM_PORT = "$Port"
 # 백틱 줄바꿈 대신 인수 배열을 쓴다. 인수가 셸을 거치지 않는다.
 $uvicornArgs = @(
     '-m', 'uvicorn', 'app.main:app',
@@ -158,5 +158,5 @@ try {
 } finally {
     Get-Job | Where-Object { $_.State -ne 'Running' } | Remove-Job -Force -ErrorAction SilentlyContinue
     Write-Host ''
-    Write-Step 'ARIA 를 종료했습니다.'
+    Write-Step 'PRISM 을 종료했습니다.'
 }

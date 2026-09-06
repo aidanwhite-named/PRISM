@@ -275,7 +275,7 @@ async def run_retrieval(
         result.error = (
             f"인용발명 문헌 중 {len(skipped)}건을 색인하지 못해 실행을 "
             f"중단했습니다: {names}. 일부 문헌만 검색하면 그 문헌에 있는 구성도 "
-            "「검토 범위에서 미발견」으로 나오므로, ARIA 는 좁아진 검색으로 "
+            "「검토 범위에서 미발견」으로 나오므로, PRISM 은 좁아진 검색으로 "
             "계속 진행하지 않습니다. 해당 파일을 제외하거나 다시 업로드한 뒤 "
             "재실행하십시오."
         )
@@ -289,7 +289,7 @@ async def run_retrieval(
             "색인할 수 있는 인용발명 문헌이 없습니다. 출원발명 문서는 검색 "
             "대상이 아니므로, 「분석에 포함」한 인용발명 문헌이 최소 1건 "
             "있어야 합니다. 업로드한 PDF 에서 텍스트를 얻지 못한 경우에도 "
-            "같습니다 — ARIA 는 OCR 을 수행하지 않으므로 텍스트 레이어가 있는 "
+            "같습니다 — PRISM 은 OCR 을 수행하지 않으므로 텍스트 레이어가 있는 "
             "PDF 가 필요합니다."
         )
         result.error_code = ErrorCode.RETRIEVAL_UNAVAILABLE
@@ -459,7 +459,7 @@ async def run_retrieval(
             f"최소 {needed:,}자 / {needed_bytes:,} bytes가 필요합니다. "
             "환경설정의 「근거 패키지 최대 문자 수」와 Provider 입력 한도를 "
             "확인하거나, 청구항 구성 수 또는 "
-            "인용문헌 수를 줄여 실행하십시오. ARIA 는 원문을 잘라서 맞추지 "
+            "인용문헌 수를 줄여 실행하십시오. PRISM 은 원문을 잘라서 맞추지 "
             "않습니다."
         )
         result.error_code = ErrorCode.RETRIEVAL_FAILED

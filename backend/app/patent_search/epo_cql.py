@@ -257,7 +257,7 @@ def _render(node, depth: int, counter: list[int], normalized: list | None = None
 
 
 def build(node, *, normalized: list | None = None) -> str:
-    """구조화된 질의를 CQL 문자열로 만든다. ARIA 에서 CQL 을 만드는 유일한 곳.
+    """구조화된 질의를 CQL 문자열로 만든다. PRISM 에서 CQL 을 만드는 유일한 곳.
 
     ``normalized`` 리스트를 주면 분류코드 형식 변환을 거기에 적는다
     (``{"field", "original", "sent"}``). 호출부는 이것을 감사 기록에 남겨야

@@ -2,7 +2,7 @@
 
 이건 이론적인 하드닝이 아니라 실측으로 확인된 버그 방지책이다.
 
-ARIA 를 Claude Code 세션 안에서 실행하면(개발 중에는 거의 항상 그렇다)
+PRISM 을 Claude Code 세션 안에서 실행하면(개발 중에는 거의 항상 그렇다)
 부모 프로세스가 ANTHROPIC_BASE_URL, CLAUDECODE, CLAUDE_CODE_ENTRYPOINT,
 CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH 같은 변수를 환경에 심어둔다. 이걸
 그대로 상속하면 자식 claude.exe 가 호스트 전용 엔드포인트를 바라보면서
@@ -93,7 +93,7 @@ def is_blocked(name: str) -> bool:
 def build_child_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """CLI 자식 프로세스용 환경변수를 새로 만든다.
 
-    extra 는 allowlist 적용 후에 얹으므로, ARIA 가 의도적으로 지정하는
+    extra 는 allowlist 적용 후에 얹으므로, PRISM 이 의도적으로 지정하는
     CLAUDE_CODE_DISABLE_AUTO_MEMORY 같은 값은 살아남는다.
     """
     allowed = _allowlist()

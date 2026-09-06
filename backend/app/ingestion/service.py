@@ -6,7 +6,7 @@
   → manifest 기록 → 최종 프롬프트에 인라인 삽입
 
 여기서는 추출/정규화만 한다. 요약, 청킹, 판단, 분석은 하지 않는다.
-그건 Master Prompt 의 몫이고, ARIA 가 손대면 "분석 방법을 갖지 않는다"는
+그건 Master Prompt 의 몫이고, PRISM 이 손대면 "분석 방법을 갖지 않는다"는
 원칙을 어기게 된다.
 
 너무 큰 문서는 조용히 자르지 않는다. INPUT_TOO_LARGE 로 정직하게 거절한다.
@@ -155,7 +155,7 @@ def extract_pdf(path: Path) -> tuple[str, int, str | None]:
         try:
             raw = reader.pages[index].extract_text() or ""
         except Exception as exc:
-            raw = f"[ARIA: {index + 1}페이지 추출 실패: {type(exc).__name__}]"
+            raw = f"[PRISM: {index + 1}페이지 추출 실패: {type(exc).__name__}]"
         pages.append(f"{PAGE_MARKER.format(page=index + 1)}\n{_normalize_newlines(raw).strip()}")
 
     text = "\n\n".join(pages).strip()
@@ -166,7 +166,7 @@ def extract_pdf(path: Path) -> tuple[str, int, str | None]:
         return (
             text,
             page_count,
-            "텍스트 레이어가 거의 없습니다. 스캔 PDF 로 보이며 ARIA v0.1 은 OCR 을 "
+            "텍스트 레이어가 거의 없습니다. 스캔 PDF 로 보이며 PRISM v0.1 은 OCR 을 "
             "지원하지 않습니다. 텍스트 PDF 로 변환한 뒤 업로드하십시오.",
         )
 

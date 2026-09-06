@@ -38,7 +38,7 @@ class ErrorCode(StrEnum):
     # 검색 도구를 한 번도 부르지 않고 기억만으로 답한 실행. 결과가 그럴듯해도
     # 그것은 검색 결과가 아니므로 성공으로 두지 않는다.
     SEARCH_NOT_PERFORMED = "SEARCH_NOT_PERFORMED"
-    # 허용된 도구 호출 횟수를 넘겨서 ARIA 가 프로세스를 끊었다.
+    # 허용된 도구 호출 횟수를 넘겨서 PRISM 이 프로세스를 끊었다.
     SEARCH_BUDGET_EXCEEDED = "SEARCH_BUDGET_EXCEEDED"
     # 검색 프롬프트 파일을 읽지 못했거나 placeholder 가 없다.
     SEARCH_PROMPT_ERROR = "SEARCH_PROMPT_ERROR"
@@ -94,7 +94,7 @@ class DeliveryPlan(StrEnum):
     delivery_mode 는 "본문을 읽었는가"를 그대로 뜻한다.
 
       FULL_INLINE      정규화 텍스트 전체를 프롬프트에 넣는다.
-      LOCAL_RETRIEVAL  ARIA 가 로컬 색인하고, AI 가 구조화된 검색 action 으로
+      LOCAL_RETRIEVAL  PRISM 이 로컬 색인하고, AI 가 구조화된 검색 action 으로
                        찾은 구간을 근거 패키지로 넣는다. 근거 패키지에는 찾은
                        구간뿐 아니라 **그 구간이 있는 페이지 전문과 앞뒤
                        페이지**가 예산이 허락하는 만큼 함께 들어간다

@@ -259,7 +259,7 @@ async def upload_files(
         ],
         rejected=result.rejected,
         total_chars=result.total_chars,
-        # None = ARIA 자체 글자 수 한도 없음(기본값). 실행을 실제로 막는 한도는
+        # None = PRISM 자체 글자 수 한도 없음(기본값). 실행을 실제로 막는 한도는
         # 선택한 Provider 의 전송 한도이며, 그 값은 preflight 가 돌려준다.
         max_inline_chars=settings_service.inline_char_budget(
             settings_service.get(session, "max_inline_chars")
@@ -446,7 +446,7 @@ async def _resolve_provider(
     """실행할 Provider 와 모델을 정하고 현재 실행 가능 여부를 확인한다.
 
     Settings 의 probe 캐시는 화면 응답 시간을 위한 것이므로 작업 실행의 인증
-    근거로 쓰지 않는다. 사용자가 ARIA 밖에서 로그아웃했거나 토큰이 만료됐을 수
+    근거로 쓰지 않는다. 사용자가 PRISM 밖에서 로그아웃했거나 토큰이 만료됐을 수
     있다. 모델 호출보다 먼저 fresh probe 를 수행해서, 인증되지 않은 작업을
     QUEUED/RUNNING 으로 보이게 하거나 Provider 프로세스를 시작하지 않는다.
     """
@@ -535,7 +535,7 @@ def _validated_search_spec(
             f"{row.error or '알 수 없음'}. 명세서를 반영하지 못한 채로 검색하지 "
             "않습니다.",
         )
-    # 새 방식 프롬프트에는 자리를 확인할 것이 없다. 명세서 구간은 ARIA 가
+    # 새 방식 프롬프트에는 자리를 확인할 것이 없다. 명세서 구간은 PRISM 이
     # 전략 본문 뒤에 붙이므로 사용자 전략의 내용과 무관하게 항상 자리가 있다.
     # 옛 방식 본문만 예전처럼 확인한다.
     if is_legacy_template(prompt_body) and not has_spec_section(prompt_body):
@@ -627,7 +627,7 @@ async def _create_search_job(
                 400, "미대응 구성 검색의 청구항은 원본 분석 청구항과 같아야 합니다."
             )
         claim_text = source_claim
-        # 새 방식 프롬프트에는 이 검사가 없다. 미대응 구성 구간은 ARIA 가
+        # 새 방식 프롬프트에는 이 검사가 없다. 미대응 구성 구간은 PRISM 이
         # 전략 본문 뒤에 붙이므로, 사용자가 자리를 만들어 둘 필요가 없다.
         # 옛 방식(placeholder 를 직접 든 본문)에서만 자리를 확인한다 — 그쪽은
         # 자리가 없으면 선택 구성이 조용히 사라진다.
@@ -1145,7 +1145,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
     elif retrieval_plan and not over_bytes and not over_chars:
         message = (
             f"인용발명 문헌 전체를 넣으면 {assembly.full_inline_bytes:,} bytes 라, "
-            "ARIA 가 문헌을 페이지·문단 단위로 로컬 색인한 뒤 AI 가 청구항 "
+            "PRISM 이 문헌을 페이지·문단 단위로 로컬 색인한 뒤 AI 가 청구항 "
             "구성별로 검색한 구간만 근거 패키지로 전달합니다. 위 크기는 근거 "
             f"패키지 예산(최대 {retrieval_budget.max_evidence_chars:,}자, "
             f"{retrieval_budget.evidence_byte_limit:,} bytes)으로 계산한 상한입니다. "
@@ -1157,7 +1157,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
         message = (
             f"지금 실행하면 시작하지 못합니다. 최종 프롬프트가 {largest:,} bytes 로 "
             f"{provider_id} 가 자료 전체를 손실 없이 전달할 수 있는 한도 "
-            f"{byte_budget:,} bytes 를 넘습니다. ARIA 는 문서를 임의로 자르거나 "
+            f"{byte_budget:,} bytes 를 넘습니다. PRISM 은 문서를 임의로 자르거나 "
             "요약하지 않으므로 Provider 를 호출하기 전에 막습니다(토큰 소모 없음). "
         ) + (
             # 로컬 검색에서는 크기를 정하는 것이 근거 패키지 예산이다. 문헌을
@@ -1316,7 +1316,7 @@ def get_raw(
 ) -> PlainTextResponse:
     """실행 원문. which=model 은 검색 작업에서 모델이 쓴 산문이다.
 
-    검색 작업의 사용자 보고서는 ARIA 가 구조화 기록에서 생성하므로, 모델의
+    검색 작업의 사용자 보고서는 PRISM 이 구조화 기록에서 생성하므로, 모델의
     원문 출력은 보고서가 아니라 감사 자료로만 여기서 볼 수 있다.
     """
     job = session.get(ExecutionJob, job_id)

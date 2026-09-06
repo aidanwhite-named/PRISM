@@ -283,6 +283,6 @@ def test_build_args_and_policy() -> None:
 
     # 시스템 프롬프트를 분리할 수 없으므로 사용자 메시지 앞에 붙는다.
     composed = provider.compose_message(request)
-    assert composed.startswith("[ARIA RUNTIME CONTEXT]")
+    assert composed.startswith("[PRISM RUNTIME CONTEXT]")
     assert "규칙" in composed
     assert composed.endswith("본문")

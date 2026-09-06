@@ -17,7 +17,7 @@ export type JobKind = "patent_analysis" | "similarity_search";
 /** 인용발명 문헌을 최종 분석 모델에게 어떻게 전달했는가.
  *
  *  full_inline      정규화 텍스트 전체를 프롬프트에 넣었다.
- *  local_retrieval  ARIA 가 로컬 색인하고, AI 가 구조화된 검색으로 찾은 구간을
+ *  local_retrieval  PRISM 이 로컬 색인하고, AI 가 구조화된 검색으로 찾은 구간을
  *                   근거 패키지로 넣었다. 근거 패키지에는 찾은 구간뿐 아니라
  *                   **그 구간이 있는 페이지 전문과 앞뒤 페이지**가 예산이
  *                   허락하는 만큼 함께 들어간다.
@@ -86,7 +86,7 @@ export type DeliveryManifest = {
   scale_downgraded: boolean;
 };
 
-/** 근거 패키지에서 구성 하나에 ARIA 가 확정한 상태.
+/** 근거 패키지에서 구성 하나에 PRISM 이 확정한 상태.
  *
  *  matched 가 아닌 것을 "문헌에 없음"으로 읽으면 안 된다. 그 구분이 이 타입의
  *  존재 이유다.
@@ -98,7 +98,7 @@ export type EvidenceStatus =
   | "extraction_unreadable"
   | "visual_review_required";
 
-/** 문헌 하나의 색인·추출 상태. ARIA 가 관측한 사실이며 모델이 정하지 않는다. */
+/** 문헌 하나의 색인·추출 상태. PRISM 이 관측한 사실이며 모델이 정하지 않는다. */
 export interface RetrievalDocument {
   alias: string;
   attachment_id: string;
@@ -184,7 +184,7 @@ export interface RetrievalManifest {
   repeat_page_reads: number;
   /** 실제로 최종 프롬프트에 들어간 근거 패키지의 문자 수.
    *
-   *  예산(budget.max_evidence_chars)은 이 값의 상한이다. 넘으면 ARIA 가 서지
+   *  예산(budget.max_evidence_chars)은 이 값의 상한이다. 넘으면 PRISM 이 서지
    *  발췌 → 구성 메타데이터 → 근거 구간 순으로 줄이고, 그래도 안 되면 실행을
    *  실패시킨다. 페이지 확장의 부분 수록은 page_truncations에 별도로 기록한다. */
   evidence_chars: number;
@@ -276,7 +276,7 @@ export interface GapSearchFocus {
 export type SearchGroup = "A" | "B" | "C" | null;
 export type SearchEvidenceLevel = "search_snippet_only" | "source_page_reviewed" |
   "official_bibliographic" | "official_abstract" | "official_claims" | "official_full_text";
-export type SearchVerificationIssue = "identifier_unverified" | "identifier_invalid" |
+export type SearchVerificationIssue = "publication_date_unverified" | "title_unverified" | "title_mismatch" | "applicant_unverified" | "applicant_mismatch" | "identifier_unverified" | "identifier_invalid" |
   "identifier_mismatch" | "source_not_read" | "quote_unverified" | "support_unverified" |
   "duplicate_group_conflict" | "publication_date_conflict" | "source_conflict";
 export interface SearchMappingRow {
@@ -286,6 +286,7 @@ export interface SearchMappingRow {
   evidence_ref: { artifact_id: string; field_path: string; profile_id: string } | null;
 }
 export interface SearchCandidate {
+  verified_titles?: string[]; verified_applicants?: string[];
   index: number; rank: number; group: SearchGroup; doc_type: string;
   doc_number: string; doi: string; title: string; url: string; note: string;
   applicant: string; family: string; publication_date: string; reported_publication_date: string;
@@ -294,7 +295,12 @@ export interface SearchCandidate {
   evidence_sources: unknown[]; mapping: SearchMappingRow[];
 }
 export interface SearchManifestV14 {
-  version: 14; status: "complete" | "incomplete"; provider: string; model: string;
+  version: 14; status: "complete" | "incomplete" | "verification_incomplete"; provider: string; model: string;
+  quality?: { execution_status: string; verification_status: string; search_coverage: string;
+    candidate_count: number; verified_candidate_count: number;
+    outstanding: { identity: string; reason: string; unverified_mapping_count: number }[];
+    constraints: { source: string; reason: string; detail?: string }[] } | null;
+  verification_followup?: { attempted: boolean; reason: string } | null;
   group_definitions: Record<string, string>;
   input: { claim_text: string; spec_document: unknown; search_focus: GapSearchFocus | null };
   prompt: { id: string; name: string; sha256: string; runtime_context_sha256: string };
@@ -345,7 +351,7 @@ export interface Prompt {
   body: string;
   enabled: boolean;
   accepted_file_types: string[];
-  /** 프롬프트 파일 메타데이터에서만 정하는 ARIA 확장 선언. */
+  /** 프롬프트 파일 메타데이터에서만 정하는 PRISM 확장 선언. */
   capabilities: string[];
   /**
    * 어느 작업의 프롬프트인가. 분석 프롬프트와 검색 전략 프롬프트는 계약이
@@ -381,13 +387,13 @@ export interface ProviderInfo {
   >;
   notes: string[];
   install_hint: string;
-  /** ARIA에 실제 분석 실행 Adapter가 구현되어 있는가. */
+  /** PRISM에 실제 분석 실행 Adapter가 구현되어 있는가. */
   execution_supported: boolean;
   /** 실행 허용 여부. 설치·인증에 더해 안전 정책까지 반영. */
   usable: boolean;
   /** 설치/실행/인증만 본 상태. 안전 정책은 반영하지 않음. */
   runnable: boolean;
-  /** ARIA 의 안전 원칙(도구 없는 실행)을 충족하지 못하는 Provider. */
+  /** PRISM 의 안전 원칙(도구 없는 실행)을 충족하지 못하는 Provider. */
   experimental: boolean;
   risks: string[];
 }
@@ -461,7 +467,7 @@ export interface UploadResponse {
   files: AttachmentAnalysis[];
   rejected: { filename: string; reason: string }[];
   total_chars: number;
-  /** ARIA 자체 글자 수 한도. null 이면 제한 없음(기본값). */
+  /** PRISM 자체 글자 수 한도. null 이면 제한 없음(기본값). */
   max_inline_chars: number | null;
 }
 
@@ -617,7 +623,7 @@ export interface AppSettings {
     retrieval_neighbor_pages: number;
     /**
      * 모델 컨텍스트 한도 재정의. `provider:model` 또는 `model` 이 키다.
-     * 비어 있으면 아래 대체값을 쓴다 — ARIA 는 모델 한도를 추측하지 않는다.
+     * 비어 있으면 아래 대체값을 쓴다 — PRISM 은 모델 한도를 추측하지 않는다.
      */
     model_context_tokens: Record<string, number>;
     model_output_reserve_tokens: number;
@@ -647,7 +653,7 @@ export interface AppSettings {
     /** 0 = 시간당 사용량을 관측·표시만 하고 차단하지 않음. 주간 한도는 계약값이라 별도. */
     epo_hourly_quota_bytes: number;
     epo_max_detail_fetches: number;
-    /** ARIA 가 관측해 적는 값. 사용자가 PUT 으로 못 고친다(사용량 되돌리기 방지). */
+    /** PRISM 이 관측해 적는 값. 사용자가 PUT 으로 못 고친다(사용량 되돌리기 방지). */
     epo_quota_state: Record<string, unknown>;
     /**
      * 비특허문헌(Crossref·Europe PMC) 연동. 자격증명이 필요 없어 켜기만 하면
@@ -674,7 +680,7 @@ export interface AppSettings {
   secrets_set: Record<string, boolean>;
   /** EPO OPS 사용량. 백엔드가 한도·남은 양까지 계산해서 준다. */
   epo_quota: EpoQuotaSnapshot;
-  /** agy 의 페이지 열람 허용 목록. ARIA 설정값이 아니라 다른 도구의 설정
+  /** agy 의 페이지 열람 허용 목록. PRISM 설정값이 아니라 다른 도구의 설정
    *  파일에서 읽은 사실이라 values 가 아니라 이 칸으로 온다. 옛 백엔드는
    *  보내지 않으므로 선택 값이다. */
   agy_permissions?: AgyPermissionState;
@@ -686,13 +692,13 @@ export interface AgyPermissionState {
   exists: boolean;
   /** 지금 열 수 있는 호스트 전부. 사용자가 직접 넣은 것을 포함한다. */
   allowed_hosts: string[];
-  /** ARIA 가 권장하는 논문 출처. */
+  /** PRISM 이 권장하는 논문 출처. */
   recommended: string[];
   /** 권장 목록 중 실제로 적용된 것. */
   applied: string[];
   /** 권장 목록 중 아직 없는 것. */
   missing: string[];
-  /** read_url(*) 가 이미 들어 있는가. ARIA 는 이 값을 만들지 않는다. */
+  /** read_url(*) 가 이미 들어 있는가. PRISM 은 이 값을 만들지 않는다. */
   wildcard: boolean;
   /** 읽지 못한 이유. 비어 있지 않으면 다른 칸은 신뢰할 수 없다. */
   error: string;
@@ -700,7 +706,7 @@ export interface AgyPermissionState {
 
 /** EPO OPS 사용량 스냅샷.
  *
- *  `ops_*` 는 OPS 가 헤더로 알려준 권위 있는 값이고, `local_bytes` 는 ARIA 가
+ *  `ops_*` 는 OPS 가 헤더로 알려준 권위 있는 값이고, `local_bytes` 는 PRISM 이
  *  센 값이다. 둘을 합치지 않는 것은 의도다 — 어긋나면 그 사실이 신호다.
  */
 export interface EpoQuotaSnapshot {

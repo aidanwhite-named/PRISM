@@ -53,7 +53,7 @@ EDITABLE_KEYS = frozenset(
         "literature_contact_email",
         "literature_max_results_per_query",
         "literature_http_budget_seconds",
-        # epo_quota_state 는 일부러 없다. ARIA 가 관측해 적는 값이라
+        # epo_quota_state 는 일부러 없다. PRISM 이 관측해 적는 값이라
         # 사용자가 PUT 으로 고칠 수 있으면 사용량을 0 으로 되돌릴 수 있다.
             # 근거 패키지의 페이지 확장.
         "retrieval_neighbor_pages",
@@ -183,7 +183,7 @@ _UNLIMITED_KEYS = frozenset(
 
 
 # 외부 데이터 소스의 자격증명. Provider(AI 실행 도구)의 API Key 와는 다른
-# 축이다 — 그쪽은 각 CLI 의 로그인 세션을 쓰므로 ARIA 가 받지 않는다. EPO OPS
+# 축이다 — 그쪽은 각 CLI 의 로그인 세션을 쓰므로 PRISM 이 받지 않는다. EPO OPS
 # 는 CLI 가 없고 OAuth client_credentials 뿐이라 저장 외에 방법이 없다.
 _CREDENTIAL_KEYS = frozenset({"epo_consumer_key", "epo_consumer_secret"})
 
@@ -237,7 +237,7 @@ def redact_for_api(values: dict[str, Any]) -> dict[str, Any]:
 # 사용량 누적을 직렬화한다. 두 실행이 같은 값을 읽고 각자 쓰면 한쪽 사용량이
 # 사라지는데, 사용량이 사라지는 방향의 결함은 한도를 무력화한다.
 #
-# 프로세스 안에서만 보장한다. ARIA 는 로컬 단일 프로세스로 도는 앱이라 이것으로
+# 프로세스 안에서만 보장한다. PRISM 은 로컬 단일 프로세스로 도는 앱이라 이것으로
 # 충분하고, 여러 프로세스가 같은 DB 를 쓰는 배치는 지원 대상이 아니다. 그
 # 전제가 깨지면 SQLite 수준의 즉시 잠금이 필요하다.
 _EPO_QUOTA_LOCK = threading.Lock()
@@ -263,7 +263,7 @@ def merge_epo_quota(delta: dict) -> dict:
 
     EDITABLE_KEYS 를 거치지 않는 유일한 쓰기다. 사용자가 PUT 으로 고칠 수
     있으면 사용량을 0 으로 되돌려 한도를 무력화할 수 있으므로, 이 키는 편집
-    목록 밖에 두고 ARIA 의 관측 경로만 여기로 쓴다.
+    목록 밖에 두고 PRISM 의 관측 경로만 여기로 쓴다.
     """
     if not isinstance(delta, dict):
         return {}
@@ -322,7 +322,7 @@ def _max_or_none(left, right):
 #
 # DB 에 예약을 적는 방식(2단계 예약 프로토콜)은 쓰지 않는다. 프로세스가 예약과
 # 정산 사이에 죽으면 쓰지도 않은 8MB 가 저장소에 굳고, 그것을 걷어내려면 만료·
-# 회수 장치가 또 필요하다. ARIA 는 로컬 단일 프로세스 앱이므로, 예약은 메모리에
+# 회수 장치가 또 필요하다. PRISM 은 로컬 단일 프로세스 앱이므로, 예약은 메모리에
 # 두고 **실제로 쓴 바이트만** 저장한다. 죽으면 예약은 프로세스와 함께 사라지고
 # 저장소에는 진짜 사용량만 남는다 — 스스로 복구되는 쪽이다.
 _EPO_LEDGER = None
@@ -450,7 +450,7 @@ def apply_agy_allowlist(session: Session, *, forced: bool) -> tuple[object, list
 def run_agy_allowlist_migration() -> None:
     """앱 시작 시 한 번 부른다. 실패해도 시작을 막지 않는다.
 
-    이건 검색 품질을 돕는 편의이지 ARIA 가 뜨기 위한 조건이 아니다. 여기서
+    이건 검색 품질을 돕는 편의이지 PRISM 이 뜨기 위한 조건이 아니다. 여기서
     터뜨리면 agy 를 쓰지도 않는 사용자의 앱이 시작하지 못한다. 실패 사유는
     설정 화면이 허용 목록 상태를 읽을 때 그대로 드러난다.
     """
@@ -562,7 +562,7 @@ def epo_backend_for(session: Session):
 
 
 def inline_char_budget(source: Any) -> int | None:
-    """ARIA 자체 글자 수 한도. None 이면 제한 없음.
+    """PRISM 자체 글자 수 한도. None 이면 제한 없음.
 
     설정 전체(dict)를 넘겨도 되고 그 키의 값만 넘겨도 된다. 0·null·정수 아닌
     값의 해석을 한 군데로 모은다 — 호출부마다 `or 800_000` 같은 기본값을 적어
@@ -790,7 +790,7 @@ def warnings_for(values: dict[str, Any]) -> list[str]:
     if selected in TOOL_UNCONTROLLABLE_PROVIDERS:
         notes.append(
             f"기본 실행 도구({selected})는 셸·파일 도구를 끄는 수단이 없습니다. "
-            "ARIA 는 도구 호출을 탐지해 실패로 기록할 뿐 호출 자체를 막지 못하므로, "
+            "PRISM 은 도구 호출을 탐지해 실패로 기록할 뿐 호출 자체를 막지 못하므로, "
             "신뢰할 수 없는 출처의 문서 분석에는 권장하지 않습니다."
         )
     if not values.get("runtime_context_enabled", True):

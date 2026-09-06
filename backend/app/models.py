@@ -77,7 +77,7 @@ class ExecutionJob(Base):
     citation_mapping_error = Column(Text, nullable=True)
     # 원본에서 물려받아 이 실행의 첨부에 다시 묶은 고정 매핑.
     prior_citation_mapping = Column(JSON, nullable=True)
-    # 실행 시점 프롬프트가 선언한 ARIA 확장. 프롬프트 파일이 나중에 바뀌어도
+    # 실행 시점 프롬프트가 선언한 PRISM 확장. 프롬프트 파일이 나중에 바뀌어도
     # 이 실행이 어떤 계약으로 돌았는지 남는다.
     prompt_capabilities = Column(JSON, nullable=False, default=list)
 

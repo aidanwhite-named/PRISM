@@ -69,7 +69,7 @@ _FIELD_PATH = re.compile(
 
 # 여러 언어로 올 수 있는 텍스트 필드.
 MULTILINGUAL_FIELDS = ("title", "abstract", "claims", "description")
-# 하나로 조립되는 필드. 원본 문자열이 아니라 ARIA 가 이어 붙인 값이라는 뜻이며,
+# 하나로 조립되는 필드. 원본 문자열이 아니라 PRISM 이 이어 붙인 값이라는 뜻이며,
 # 그래서 더더욱 원문 등급을 받을 수 없다.
 COMPOSED_FIELDS = (
     "publication_number",

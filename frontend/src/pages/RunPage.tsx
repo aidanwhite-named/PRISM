@@ -13,7 +13,7 @@ import AnalysisDegreeOverview from "../components/AnalysisDegreeOverview";
 import ResultView from "../components/ResultView";
 import DeliverySummary from "../components/DeliverySummary";
 import RetrievalManifestView from "../components/RetrievalManifestView";
-import SearchManifestView from "../components/SearchManifestView";
+import SearchManifestView, { SearchResults } from "../components/SearchManifestView";
 import StatusPill, { ERROR_LABEL } from "../components/StatusPill";
 import { api } from "../lib/api";
 import {
@@ -193,14 +193,14 @@ function SizeNotice({
       {preflight.message && <div style={{ marginTop: 6 }}>{preflight.message}</div>}
       {!preflight.blocked && !narrowed && (
         <div className="faint">
-          ARIA 는 내용을 임의로 자르거나 요약하지 않습니다. 한도를 넘으면 Provider
+          PRISM 은 내용을 임의로 자르거나 요약하지 않습니다. 한도를 넘으면 Provider
           를 호출하기 전에 막으므로 토큰이 소모되지 않고, 그때는 문헌을 나눠 여러
           번 실행하거나 전송 한도가 더 큰 Provider 를 선택하면 됩니다.
         </div>
       )}
       {!preflight.blocked && retrieval && (
         <div className="faint">
-          ARIA 는 문서를 자르거나 요약하지 않습니다. 대신 문헌을 페이지·문단
+          PRISM 은 문서를 자르거나 요약하지 않습니다. 대신 문헌을 페이지·문단
           단위로 로컬 색인하고, AI 가 청구항 구성별로 검색한 구간만 전달합니다.
           검색되지 않은 구간은 「확인하지 못한 범위」로 보고서에 남습니다.
         </div>
@@ -1014,7 +1014,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               <div className="notice danger">
                 <strong>이 실행 도구로는 검색할 수 없습니다</strong>
                 <div style={{ marginTop: 4 }}>
-                  이 Provider는 ARIA가 확인한 웹 검색 도구를 제공하지 않습니다.{" "}
+                  이 Provider는 PRISM이 확인한 웹 검색 도구를 제공하지 않습니다.{" "}
                   <a href="#/settings">환경 설정</a>에서 Claude 또는 agy를
                   선택하십시오.
                 </div>
@@ -1029,7 +1029,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
                     <strong>검색 전략</strong>
                     <div className="hint">
                       무엇을 중시하고 어디까지 넓힐지를 정하는 프롬프트입니다.
-                      검색 실행·보안·감사 규칙은 ARIA가 갖고 있으므로 전략을
+                      검색 실행·보안·감사 규칙은 PRISM이 갖고 있으므로 전략을
                       바꿔도 감사 기록과 보고서 형식은 그대로입니다.
                     </div>
                   </div>
@@ -1270,7 +1270,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               <div>
                 <strong>후속 지시 (선택)</strong>
                 <div className="hint">
-                  이번 실행에서 무엇을 해야 하는지 직접 쓰십시오. ARIA 는 이 문장을
+                  이번 실행에서 무엇을 해야 하는지 직접 쓰십시오. PRISM 은 이 문장을
                   만들거나 보태지 않고 그대로 전달합니다. 비워 두면 분석 프롬프트의
                   「후속 처리 규칙」만 적용됩니다.
                 </div>
@@ -1721,7 +1721,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               <AnalysisDegreeOverview components={job.analysis_manifest.items} />
             )}
 
-          {(displayText || running) && (
+          {job.job_kind === "similarity_search" && !running && job.search_manifest?.version === 14 && job.output_mode === "markdown" ? (
+            <SearchResults data={job.search_manifest} />
+          ) : (displayText || running) && (
             <ResultView
               text={displayText}
               outputMode={job.output_mode}
@@ -1730,7 +1732,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           )}
 
           {job.job_kind === "similarity_search" && !running && (
-            <SearchManifestView job={job} />
+            <SearchManifestView job={job} auditOnly={job.output_mode === "markdown"} />
           )}
 
           {job.job_kind === "patent_analysis" &&

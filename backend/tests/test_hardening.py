@@ -18,16 +18,16 @@ def test_mutating_request_without_client_header_is_rejected(client) -> None:
     response = client.post(
         "/api/prompts",
         json={"name": "csrf", "body": "x"},
-        headers={"X-ARIA-Client": ""},
+        headers={"X-PRISM-Client": ""},
     )
     assert response.status_code == 403
-    assert "X-ARIA-Client" in response.json()["detail"]
+    assert "X-PRISM-Client" in response.json()["detail"]
 
 
 def test_smoke_test_endpoint_requires_client_header(client) -> None:
     """본문 없는 POST 는 preflight 없이 전송되는 단순 요청이라 표적이 된다."""
     response = client.post(
-        "/api/providers/claude/smoke-test", headers={"X-ARIA-Client": ""}
+        "/api/providers/claude/smoke-test", headers={"X-PRISM-Client": ""}
     )
     assert response.status_code == 403
 
@@ -52,14 +52,14 @@ def test_loopback_origin_with_header_is_allowed(client) -> None:
 
 
 def test_get_requests_are_not_blocked(client) -> None:
-    response = client.get("/api/prompts", headers={"X-ARIA-Client": ""})
+    response = client.get("/api/prompts", headers={"X-PRISM-Client": ""})
     assert response.status_code == 200
 
 
 def test_delete_requires_header(client) -> None:
     created = client.post("/api/prompts", json={"name": "삭제대상", "body": "x"}).json()
     blocked = client.delete(
-        f"/api/prompts/{created['id']}", headers={"X-ARIA-Client": ""}
+        f"/api/prompts/{created['id']}", headers={"X-PRISM-Client": ""}
     )
     assert blocked.status_code == 403
     assert client.delete(f"/api/prompts/{created['id']}").status_code == 204

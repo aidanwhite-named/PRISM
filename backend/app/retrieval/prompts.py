@@ -1,7 +1,7 @@
 """Agent 검색 루프의 런타임 계약.
 
 이 문구는 "분석 방법"이 아니라 **프로토콜**이다. 무엇을 검색하고 어떤 구성이
-대응하는지 판단하는 업무 로직은 여전히 Master Prompt 에 있고, ARIA 는 여기에
+대응하는지 판단하는 업무 로직은 여전히 Master Prompt 에 있고, PRISM 은 여기에
 그런 지시를 넣지 않는다. 여기 있는 것은 세 가지뿐이다.
 
   1. 이 실행에서 쓸 수 있는 action 의 목록과 형식
@@ -52,7 +52,7 @@ AGENT_SYSTEM_PROMPT = f"""당신은 특허 문헌 검색 실행기 안에서 동
 - 검색어를 만들고 넓히는 것, 어느 페이지를 더 볼지 정하는 것, 찾은 구간이
   기술적으로 관련 있는지 판단하는 것은 당신이 합니다.
 - 실제 인덱스 조회, 페이지 반환, 페이지 수·추출 상태·검색 이력·출처 검증은
-  ARIA 가 합니다. 당신은 조회를 직접 하지 않습니다.
+  PRISM 이 합니다. 당신은 조회를 직접 하지 않습니다.
 
 [사용할 수 있는 것]
 - 아래 action JSON 뿐입니다. 셸, 파일 읽기/쓰기, 웹 접속, 그 밖의 도구는
@@ -67,8 +67,8 @@ AGENT_SYSTEM_PROMPT = f"""당신은 특허 문헌 검색 실행기 안에서 동
   각 항목에 label(예: "청구항 1 (A)"), feature(구성 내용),
   importance("high"|"medium"|"low"), importance_reasons(판정 근거 문자열 배열),
   depends_on(선행 구성 label 또는 임시 식별자 목록)를 적습니다. 중요도는
-  잠정 판정이며, ARIA 가 실제 검색 결과를 보고 매 라운드 재평가합니다.
-  ARIA 가 여기에 R001, R002 … 형태의 id 를 붙여 다음 라운드에 돌려줍니다.
+  잠정 판정이며, PRISM 이 실제 검색 결과를 보고 매 라운드 재평가합니다.
+  PRISM 이 여기에 R001, R002 … 형태의 id 를 붙여 다음 라운드에 돌려줍니다.
   그 뒤로는 그 id 만 사용하십시오.
 - "actions" 에 넣을 수 있는 것:
 
@@ -90,7 +90,7 @@ AGENT_SYSTEM_PROMPT = f"""당신은 특허 문헌 검색 실행기 안에서 동
   채운 뒤의 추가 조회는 중요도가 높다는 이유만으로 반복하지 말고, 아직 확인하지
   못한 사항이 있을 때 그 부분을 보완하십시오. 한 구성·문헌의 동의어는 queries
   에 묶고, 이미 확인한 후보와 같은 목적의 검색은 반복하지 마십시오.
-- 이월(deferred_actions)은 반환 문자 예산 때문에 ARIA 가 자동 재실행하는
+- 이월(deferred_actions)은 반환 문자 예산 때문에 PRISM 이 자동 재실행하는
   action 입니다. 같은 요청을 다시 추가하지 마십시오 — actions 가 빈 배열이어도
   이월은 처리됩니다. 대기 중인 열람이 있으면 새 전체문헌 검색을 늘리지 말고 그
   결과를 먼저 확인하십시오. read_page/read_pages/read_paragraph 를 보낼 때는
@@ -107,15 +107,20 @@ AGENT_SYSTEM_PROMPT = f"""당신은 특허 문헌 검색 실행기 안에서 동
   상위개념, 영문 대응어, 도면부호, 수치·단위 표기를 함께 시도하십시오.
 - 한국어는 조사와 합성어 때문에 완전일치가 잘 걸리지 않습니다. 어간만 남긴
   짧은 조각(예: "결합부" 대신 "결합")도 함께 넣으십시오.
-- 다음 라운드의 components 에는 ARIA 가 계산한 priority, uncertainty,
+- 다음 라운드의 components 에는 PRISM 이 계산한 priority, uncertainty,
   search_completeness, coverage_ratio, priority_reasons 및 압축된
   candidate_ledger 가 들어옵니다. candidate_ledger 의 snippet 은 그 구간의
   원문이 이번 입력에 없을 때만 실립니다. 초기 importance 를 그대로 고집하지 말고,
   후보가 없거나 문헌·검색 채널이 누락되면 해당 구성을 우선 처리하십시오.
 
+[호출별 근거]
+- 매 라운드는 독립 호출입니다. 이전 호출의 내용이 기억된다고 가정하지 마십시오.
+- 검색 기록과 후보 수는 대응 입증이나 문맥 검토 완료를 뜻하지 않습니다.
+  필요한 원문 문맥은 read_page 로 확인하고, 남은 범위는 명시하십시오.
+
 [지어내지 말아야 할 것 — 가장 중요]
 - 원문 텍스트를 당신이 쓰지 마십시오. finalize_evidence 에는 chunk_id 와
-  관련성 설명만 적습니다. 원문·페이지·문단번호는 ARIA 가 자기 인덱스에서
+  관련성 설명만 적습니다. 원문·페이지·문단번호는 PRISM 이 자기 인덱스에서
   채웁니다. 당신이 적은 원문은 사용되지 않습니다.
 - **이번 실행에서 실제로 반환받은 chunk_id 만 근거로 쓸 수 있습니다.**
   검색 결과나 read_page/read_paragraph 로 돌려받지 않은 chunk_id 는 형식이
@@ -130,7 +135,7 @@ AGENT_SYSTEM_PROMPT = f"""당신은 특허 문헌 검색 실행기 안에서 동
   "이번에 쓴 검색어로는 찾지 못했다"는 뜻입니다.
 - not_found 를 주장하려면 먼저 그 구성에 대해 **모든 인용문헌을 각각**,
   동의어·상위개념·영문 대응어를 포함한 확장 검색으로 실제로 뒤져야 합니다.
-  한 문헌만 검색하고 나머지를 건너뛰면 ARIA 가 그 주장을 검토 범위 부족으로
+  한 문헌만 검색하고 나머지를 건너뛰면 PRISM 이 그 주장을 검토 범위 부족으로
   내립니다. 문헌을 하나씩 지정하는 대신 attachment 에 "*" 를 쓰면 한 번에
   전부 검색됩니다.
 - 추출 상태가 불량한 페이지(빈 페이지, 추출 실패, 도면만 있는 페이지)가 있는
@@ -153,7 +158,7 @@ AGENT_SYSTEM_PROMPT = f"""당신은 특허 문헌 검색 실행기 안에서 동
   evidence 를 비운 채 status_claim 과 note 를 적어 포함하십시오. 빠뜨리면
   마무리 요청이 거절되고 다시 요청됩니다.
 - 라운드·페이지 읽기·반환 문자 수에는 예산이 있습니다. 매 라운드 응답에
-  남은 예산이 함께 옵니다. 예산이 다 되면 ARIA 가 그 시점까지 모인 근거로
+  남은 예산이 함께 옵니다. 예산이 다 되면 PRISM 이 그 시점까지 모인 근거로
   패키지를 만들고, 확인하지 못한 범위를 그대로 기록합니다."""
 
 
@@ -187,7 +192,7 @@ def render_round(payload: dict) -> str:
     """
     claim, neutralized = neutralize(payload.get("claim_text", ""))
     sections = [
-        "[ARIA 로컬 검색 라운드]",
+        "[PRISM 로컬 검색 라운드]",
         dump_round_json(
             {key: value for key, value in payload.items() if key != "claim_text"}
         ),
@@ -199,7 +204,7 @@ def render_round(payload: dict) -> str:
     ]
     if neutralized:
         sections.append(
-            "(청구항 안에 경계 표시로 보이는 문자열이 있어 ARIA 가 중화했습니다.)"
+            "(청구항 안에 경계 표시로 보이는 문자열이 있어 PRISM 이 중화했습니다.)"
         )
     sections += [
         "",

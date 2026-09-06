@@ -1,6 +1,6 @@
 """검색 전략 프롬프트의 로딩과 두 가지 조립 방식.
 
-새 방식(appended_sections)에서는 사용자가 전략만 쓰고 ARIA 가 데이터 구간을
+새 방식(appended_sections)에서는 사용자가 전략만 쓰고 PRISM 이 데이터 구간을
 붙인다. 옛 방식(legacy_placeholders)은 본문이 placeholder 와 경계를 직접 들고
 있으며, 이미 만들어 둔 프롬프트와 이미 큐에 들어간 작업의 스냅샷을 위해 계속
 지원한다.
@@ -33,7 +33,7 @@ LEGACY_BODY = """유사한 특허와 논문을 폭넓게 검색해줘.
 {{CLAIM_TEXT}}
 </CLAIM_TEXT>
 
-<!--ARIA_GAP_BLOCK-->
+<!--PRISM_GAP_BLOCK-->
 # 미대응 구성 보완 검색
 
 반드시 다음 순서로 최대 2라운드를 수행해줘.
@@ -44,9 +44,9 @@ LEGACY_BODY = """유사한 특허와 논문을 폭넓게 검색해줘.
 <SEARCH_FOCUS>
 {{SEARCH_FOCUS}}
 </SEARCH_FOCUS>
-<!--/ARIA_GAP_BLOCK-->
+<!--/PRISM_GAP_BLOCK-->
 
-<!--ARIA_SPEC_BLOCK-->
+<!--PRISM_SPEC_BLOCK-->
 참고 자료: 출원발명 문서
 
 명세서는 검색어를 넓히는 데만 쓰고 후보를 빼는 데는 쓰지 마.
@@ -54,7 +54,7 @@ LEGACY_BODY = """유사한 특허와 논문을 폭넓게 검색해줘.
 <SPEC_TEXT>
 {{SPEC_TEXT}}
 </SPEC_TEXT>
-<!--/ARIA_SPEC_BLOCK-->
+<!--/PRISM_SPEC_BLOCK-->
 """
 
 
@@ -80,7 +80,7 @@ def test_shipped_search_prompt_is_a_strategy_not_a_contract() -> None:
         search_prompt.OPEN_TAG,
         search_prompt.SPEC_OPEN_TAG,
         search_prompt.FOCUS_OPEN_TAG,
-        "[ARIA_SEARCH_LOG_V1]",
+        "[PRISM_SEARCH_LOG_V1]",
     ):
         assert mark not in body, mark
 
@@ -98,7 +98,7 @@ def test_the_order_contract_moved_into_the_program() -> None:
     """후보 순서는 공식 검증 대상 선택에 쓰이므로 계약이다.
 
     예전에는 이 문장이 사용자 프롬프트에 있었다. 그러면 전략을 고치는 것만으로
-    뒤따르는 검증의 우선순위 규칙이 사라진다. 이제 ARIA 가 매 실행에 붙인다.
+    뒤따르는 검증의 우선순위 규칙이 사라진다. 이제 PRISM 이 매 실행에 붙인다.
     """
     contract = search_contract.preamble()
     assert "재정렬하지 않는다" in contract
@@ -298,7 +298,7 @@ def test_spec_without_a_place_in_the_prompt_is_rejected() -> None:
 def test_half_edited_spec_section_is_rejected() -> None:
     body = (
         "<CLAIM_TEXT>\n{{CLAIM_TEXT}}\n</CLAIM_TEXT>\n"
-        "<!--ARIA_SPEC_BLOCK-->\n<SPEC_TEXT>\n{{SPEC_TEXT}}\n</SPEC_TEXT>"
+        "<!--PRISM_SPEC_BLOCK-->\n<SPEC_TEXT>\n{{SPEC_TEXT}}\n</SPEC_TEXT>"
     )
     with pytest.raises(search_prompt.SearchPromptError, match="온전하지 않"):
         search_prompt.validate_body(body)
@@ -307,8 +307,8 @@ def test_half_edited_spec_section_is_rejected() -> None:
 def test_spec_placeholder_outside_its_boundary_is_rejected() -> None:
     body = (
         "<CLAIM_TEXT>\n{{CLAIM_TEXT}}\n</CLAIM_TEXT>\n"
-        "<!--ARIA_SPEC_BLOCK-->\n{{SPEC_TEXT}}\n<SPEC_TEXT>\n</SPEC_TEXT>\n"
-        "<!--/ARIA_SPEC_BLOCK-->"
+        "<!--PRISM_SPEC_BLOCK-->\n{{SPEC_TEXT}}\n<SPEC_TEXT>\n</SPEC_TEXT>\n"
+        "<!--/PRISM_SPEC_BLOCK-->"
     )
     with pytest.raises(search_prompt.SearchPromptError, match="명세서 경계"):
         search_prompt.validate_body(body)
@@ -317,10 +317,10 @@ def test_spec_placeholder_outside_its_boundary_is_rejected() -> None:
 def test_spec_section_swallowing_the_claim_is_rejected() -> None:
     """청구항이 명세서 절 안에 있으면, 명세서 없는 실행에서 함께 사라진다."""
     body = (
-        "<!--ARIA_SPEC_BLOCK-->\n"
+        "<!--PRISM_SPEC_BLOCK-->\n"
         "<CLAIM_TEXT>\n{{CLAIM_TEXT}}\n</CLAIM_TEXT>\n"
         "<SPEC_TEXT>\n{{SPEC_TEXT}}\n</SPEC_TEXT>\n"
-        "<!--/ARIA_SPEC_BLOCK-->"
+        "<!--/PRISM_SPEC_BLOCK-->"
     )
     with pytest.raises(search_prompt.SearchPromptError, match="겹칩니다"):
         search_prompt.validate_body(body)

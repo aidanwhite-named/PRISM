@@ -14,7 +14,7 @@ Claude 와 다른 두 가지 제약이 있다. agy 와 같은 종류의 제약�
 1. 시스템 프롬프트를 분리할 수단이 없다.
    `--system-prompt` 같은 플래그가 없다. 실행 파일 안에 base_instructions
    라는 세션 필드가 있지만 그것을 지정하는 검증된 플래그가 없으므로 쓰지
-   않는다. 그래서 ARIA 런타임 컨텍스트를 사용자 메시지 맨 앞에 붙인다.
+   않는다. 그래서 PRISM 런타임 컨텍스트를 사용자 메시지 맨 앞에 붙인다.
    첨부 본문과 같은 층위에 놓이므로 인젝션 방어가 Claude 쪽보다 약하다.
 
 2. 셸·파일 도구를 끌 수 없다.
@@ -22,13 +22,13 @@ Claude 와 다른 두 가지 제약이 있다. agy 와 같은 종류의 제약�
    update_plan 세 개뿐이다(실행 파일에서 확인). 셸 실행과 파일 수정은 Codex
    의 핵심 도구라 끄는 수단이 없다.
 
-   여기서 분명히 해둘 것: ARIA 는 도구 호출을 **탐지**할 뿐 **차단**하지
+   여기서 분명히 해둘 것: PRISM 은 도구 호출을 **탐지**할 뿐 **차단**하지
    못한다. 실패로 표시되는 시점에는 이미 명령 실행이 끝난 뒤일 수 있다.
    이건 fail-closed 가 아니라 사후 탐지다.
 
-   `--sandbox read-only` 를 붙이지만 그것을 ARIA 의 안전 경계로 취급하지
+   `--sandbox read-only` 를 붙이지만 그것을 PRISM 의 안전 경계로 취급하지
    않는다. 읽기는 여전히 되고, 무엇보다 그 경계는 Codex 자신의 것이지
-   ARIA 가 보증하는 것이 아니다.
+   PRISM 이 보증하는 것이 아니다.
    `--dangerously-bypass-approvals-and-sandbox` 는 절대 쓰지 않는다.
 
 agy 보다 나은 점이 하나 있다. `--ephemeral` 로 세션 파일을 디스크에 남기지
@@ -68,14 +68,14 @@ _LAST_MESSAGE_FILE = "codex_last_message.txt"
 RISKS = (
     "셸 실행과 파일 수정 도구를 끄는 수단이 없습니다. 설정의 [tools] 표에는 "
     "web_search 등 세 항목뿐이고 셸·파일 도구는 그 목록에 없습니다.",
-    "ARIA 는 도구 호출을 '탐지'해서 실패로 기록할 뿐, 호출 자체를 '차단'하지 "
+    "PRISM 은 도구 호출을 '탐지'해서 실패로 기록할 뿐, 호출 자체를 '차단'하지 "
     "못합니다. 실패로 표시되는 시점에는 이미 명령 실행이 끝난 뒤일 수 있습니다. "
     "이건 fail-closed 가 아니라 사후 탐지입니다.",
-    "`--sandbox read-only` 로 실행하지만 이는 Codex 자신의 경계이며 ARIA 가 "
+    "`--sandbox read-only` 로 실행하지만 이는 Codex 자신의 경계이며 PRISM 이 "
     "보증하는 경계가 아닙니다. 읽기 접근은 여전히 열려 있습니다.",
     "도구 호출 탐지는 CLI 가 내보내는 항목 종류 이름에 기반합니다. 다음 버전에서 "
     "이름이 바뀌거나 도구가 늘면 놓칠 수 있습니다.",
-    "시스템 프롬프트를 분리할 수 없어 ARIA 런타임 컨텍스트가 사용자 메시지에 "
+    "시스템 프롬프트를 분리할 수 없어 PRISM 런타임 컨텍스트가 사용자 메시지에 "
     "포함됩니다. 첨부 문서와 같은 층위라 프롬프트 인젝션 방어가 약합니다.",
     "신뢰할 수 없는 출처의 문서 분석에는 사용하지 마십시오.",
 )
@@ -124,7 +124,7 @@ class CodexCliProvider(Provider):
         "npm install -g @openai/codex 로 설치한 뒤 `codex login` 으로 "
         "로그인하십시오. Codex 데스크톱 앱에 번들된 실행 파일은 WindowsApps 권한 "
         "때문에 외부 프로세스에서 호출하지 못할 수 있습니다. 그런 경우 Settings "
-        "에서 절대 경로를 지정하고 다시 검사하십시오. ARIA 는 API Key 를 "
+        "에서 절대 경로를 지정하고 다시 검사하십시오. PRISM 은 API Key 를 "
         "입력받지 않고 CLI 에 저장된 로그인 세션만 사용합니다."
     )
 
@@ -158,7 +158,7 @@ class CodexCliProvider(Provider):
                 "search_tool_control": "detect_only",
                 "model_select": True,
                 # 고를 수 있는 레벨. 비워 두면 모델 기본값이며, 그 값이 무엇인지
-                # ARIA 는 알 수 없다 — CLI 가 명령으로 알려주지 않는다.
+                # PRISM 은 알 수 없다 — CLI 가 명령으로 알려주지 않는다.
                 "reasoning_effort_select": True,
                 "reasoning_efforts": list(REASONING_EFFORTS),
                 "reasoning_efforts_by_model": {
@@ -281,7 +281,7 @@ class CodexCliProvider(Provider):
             args += ["-m", request.model]
         # 사용자가 고르지 않았으면 **아무 것도 넘기지 않는다.** 그래야 모델
         # 카탈로그의 기본값이 그대로 적용된다. 빈 값을 어떤 레벨로 채우는 순간
-        # ARIA 가 고르지도 않은 강도를 대신 정해 주는 셈이 된다.
+        # PRISM 이 고르지도 않은 강도를 대신 정해 주는 셈이 된다.
         #
         # --ignore-user-config 때문에 ~/.codex/config.toml 의 값은 무시되지만,
         # -c 로 준 값은 그대로 적용된다. 모델 카탈로그(models_cache.json)는
@@ -289,12 +289,12 @@ class CodexCliProvider(Provider):
         if request.reasoning_effort:
             args += ["-c", f"model_reasoning_effort={request.reasoning_effort}"]
         # Per-run MCP configuration is injected after --ignore-user-config so
-        # host MCP servers never leak into ARIA jobs.  Values are encoded as
+        # host MCP servers never leak into PRISM jobs.  Values are encoded as
         # TOML literals rather than shell fragments.
         for server_name, server in request.mcp_servers.items():
             # -c splits paths literally on dots; quotes become part of the key.
-            # ARIA owns this one fixed server name, never a model-provided path.
-            if server_name != "aria-search":
+            # PRISM owns this one fixed server name, never a model-provided path.
+            if server_name != "prism-search":
                 raise ValueError("Unsupported MCP server")
             prefix = f"mcp_servers.{server_name}"
             args += ["-c", f"{prefix}.command={json.dumps(str(server['command']))}"]
@@ -309,9 +309,9 @@ class CodexCliProvider(Provider):
                     "-c",
                     f"{prefix}.env.{key}={json.dumps(str(value))}",
                 ]
-            enabled = [name.removeprefix("mcp__aria-search__") for name in policy.mcp_tools]
+            enabled = [name.removeprefix("mcp__prism-search__") for name in policy.mcp_tools]
             args += ["-c", f"{prefix}.enabled_tools={json.dumps(enabled)}"]
-            # Only ARIA's explicitly listed, read-only tools are unattended.
+            # Only PRISM's explicitly listed, read-only tools are unattended.
             # Keep approval requirements for any write-capable tool.
             args += ["-c", f'{prefix}.default_tools_approval_mode="writes"']
             args += ["-c", f"{prefix}.required=true"]
@@ -325,7 +325,7 @@ class CodexCliProvider(Provider):
         if not request.system_prompt.strip():
             return request.user_message
         return (
-            "[ARIA RUNTIME CONTEXT]\n"
+            "[PRISM RUNTIME CONTEXT]\n"
             f"{request.system_prompt.strip()}\n\n"
             f"{request.user_message}"
         )
@@ -489,12 +489,12 @@ class CodexCliProvider(Provider):
         async def noop(_type: str, _payload: dict) -> None:
             return None
 
-        with tempfile.TemporaryDirectory(prefix="aria-smoke-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="prism-smoke-") as tmp:
             request = ExecutionRequest(
                 job_id=f"smoke-codex-{id(self)}",
                 work_dir=Path(tmp),
                 system_prompt="You are a connectivity test. Answer with exactly one short line.",
-                user_message="Reply with exactly: ARIA_SMOKE_OK",
+                user_message="Reply with exactly: PRISM_SMOKE_OK",
                 timeout_seconds=180,
             )
             return await self.execute(request, emit or noop)

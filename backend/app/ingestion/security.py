@@ -11,7 +11,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-# v0.1 지원 형식. 모두 ARIA 가 직접 텍스트로 정규화할 수 있는 것만 넣었다.
+# v0.1 지원 형식. 모두 PRISM 이 직접 텍스트로 정규화할 수 있는 것만 넣었다.
 ALLOWED_EXTENSIONS = frozenset({".txt", ".md", ".markdown", ".json", ".csv", ".pdf"})
 
 # 실행 환경 설정 파일. 작업 폴더에 들어가면 CLI 가 지시문으로 읽을 수 있다.

@@ -6,23 +6,23 @@
 발췌문까지 모델 앞에 놓이고, 그러면 재검토가 1차 결론에 끌린다.
 
 그래서 매핑만 따로 받는다. Master Prompt 가 보고서 끝에 아래 블록을 출력하고,
-ARIA 는 그것만 읽어서 검증한 뒤 저장한다.
+PRISM 은 그것만 읽어서 검증한 뒤 저장한다.
 
-    [ARIA_CITATION_MAPPING_V1]
+    [PRISM_CITATION_MAPPING_V1]
     {"items": [{"citation_number": 1, "attachment": "ATT-02",
                 "document_number": "KR10-1234567"}]}
-    [/ARIA_CITATION_MAPPING_V1]
+    [/PRISM_CITATION_MAPPING_V1]
 
 여기에는 두 가지 원칙이 걸려 있다.
 
-1. ARIA 는 보고서를 해석하지 않는다.
+1. PRISM 은 보고서를 해석하지 않는다.
    Markdown 표를 파싱하면 사용자가 출력 형식을 조금만 바꿔도 조용히 깨진다.
    대신 버전이 붙은 전용 블록을 쓴다. 이건 분석이 아니라 프로토콜이다.
 
 2. 모델에게 UUID 나 sha256 을 옮겨 적게 하지 않는다.
-   32자 UUID 와 64자 해시는 모델이 틀리는 종류의 값이다. ARIA 가 첨부마다
+   32자 UUID 와 64자 해시는 모델이 틀리는 종류의 값이다. PRISM 이 첨부마다
    ATT-01 같은 짧은 별칭을 붙여서 보여주고, 모델은 그 별칭만 쓴다. 실제
-   attachment_id 와 sha256 은 ARIA 가 자기 기록에서 채운다.
+   attachment_id 와 sha256 은 PRISM 이 자기 기록에서 채운다.
 
 블록을 읽지 못해도 실행은 성공으로 둔다. 매핑은 후속 기능이지 분석 요건이
 아니다. 대신 매핑을 쓰는 후속 실행만 막고, 보고서 전체 전달로 조용히
@@ -39,8 +39,8 @@ from dataclasses import dataclass
 CAPABILITY = "citation_mapping_v1"
 
 MAPPING_VERSION = 1
-_OPEN = "[ARIA_CITATION_MAPPING_V1]"
-_CLOSE = "[/ARIA_CITATION_MAPPING_V1]"
+_OPEN = "[PRISM_CITATION_MAPPING_V1]"
+_CLOSE = "[/PRISM_CITATION_MAPPING_V1]"
 
 # 블록은 보고서 어디에 있어도 찾는다. 코드펜스로 감싸 나오는 경우가 흔해서
 # 앞뒤 펜스도 같이 걷어낸다.
@@ -101,7 +101,7 @@ def assign_aliases(attachments) -> dict[str, AliasedAttachment]:
     """첨부에 별칭을 붙인다. 키는 별칭이다.
 
     순서는 최종 프롬프트에 나타나는 순서와 같아야 한다. 그래야 모델이 본 화면과
-    ARIA 가 되돌리는 표가 일치한다. 호출하는 쪽이 정렬된 목록을 넘긴다.
+    PRISM 이 되돌리는 표가 일치한다. 호출하는 쪽이 정렬된 목록을 넘긴다.
     """
     table: dict[str, AliasedAttachment] = {}
     for index, item in enumerate(attachments, start=1):
@@ -181,7 +181,7 @@ def parse(text: str, aliases: dict[str, AliasedAttachment]) -> dict:
         items.append(
             {
                 "citation_number": number,
-                # 실제 식별자는 모델이 아니라 ARIA 가 채운다.
+                # 실제 식별자는 모델이 아니라 PRISM 이 채운다.
                 "attachment_id": source.attachment_id,
                 "attachment_sha256": source.sha256,
                 "filename": source.original_filename,
@@ -226,7 +226,7 @@ def rebind(mapping: dict | None, attachments) -> dict:
 def render(mapping: dict | None, aliases: dict[str, AliasedAttachment]) -> str:
     """고정 매핑을 프롬프트에 넣을 형태로 쓴다.
 
-    ARIA 는 여기서 업무 지시를 붙이지 않는다. 무엇이 어느 번호인지만 적는다.
+    PRISM 은 여기서 업무 지시를 붙이지 않는다. 무엇이 어느 번호인지만 적는다.
     그 번호를 어떻게 쓸지는 Master Prompt 의 「후속 처리 규칙」에 있다.
     """
     if not mapping or not mapping.get("items"):

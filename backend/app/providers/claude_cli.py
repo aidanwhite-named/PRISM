@@ -6,7 +6,7 @@
 보장할 수 없어 실행마다 입력이 달라지고, (2) 파일시스템 접근이라는 보안
 표면이 생기며, (3) 권한 거부/도구 오류라는 실패 유형이 추가된다.
 
-ARIA 는 대신 첨부 자료를 미리 텍스트로 정규화해서 메시지 안에 직접 넣는다.
+PRISM 은 대신 첨부 자료를 미리 텍스트로 정규화해서 메시지 안에 직접 넣는다.
 넣은 것은 반드시 들어간 것이므로 "필수 첨부를 못 읽었다"는 실패가 아예
 발생하지 않는다.
 
@@ -16,7 +16,7 @@ ARIA 는 대신 첨부 자료를 미리 텍스트로 정규화해서 메시지 �
 
 도메인 제한에 대해: `--allowedTools "WebFetch(domain:...)"` 로 어떤 페이지를
 열 수 있는지는 제한할 수 있지만, WebSearch 권한 규칙은 지정자를 받지 않는다.
-즉 ARIA 는 "무엇을 검색할지"를 기술적으로 제한하지 못한다. 그래서 여기서
+즉 PRISM 은 "무엇을 검색할지"를 기술적으로 제한하지 못한다. 그래서 여기서
 도메인 allowlist 를 구성하지 않는다. 강제하지 못하는 것을 강제하는 것처럼
 보이는 인수를 남기면 그게 더 위험하다.
 
@@ -70,7 +70,7 @@ class ClaudeCliProvider(Provider):
     install_hint = (
         "npm install -g @anthropic-ai/claude-code 로 설치한 뒤, 별도 터미널에서 "
         "claude setup-token 또는 claude auth login 으로 로그인하십시오. "
-        "ARIA 는 API Key 를 입력받지 않고 CLI 에 저장된 로그인 세션만 사용합니다."
+        "PRISM 은 API Key 를 입력받지 않고 CLI 에 저장된 로그인 세션만 사용합니다."
     )
 
     def __init__(self, executable_override: str | None = None) -> None:
@@ -199,7 +199,7 @@ class ClaudeCliProvider(Provider):
             args += ["--allowedTools", *permitted_tools]
             args += ["--permission-mode", "dontAsk"]
         args += [
-            # 코딩 에이전트 기본 시스템 프롬프트를 ARIA 규칙으로 교체한다.
+            # 코딩 에이전트 기본 시스템 프롬프트를 PRISM 규칙으로 교체한다.
             # append 가 아니라 replace 인 이유: 도구가 없는데 코딩 에이전트
             # 지침을 남겨둘 이유가 없다.
             "--system-prompt",
@@ -349,12 +349,12 @@ class ClaudeCliProvider(Provider):
         async def noop(_type: str, _payload: dict) -> None:
             return None
 
-        with tempfile.TemporaryDirectory(prefix="aria-smoke-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="prism-smoke-") as tmp:
             request = ExecutionRequest(
                 job_id=f"smoke-{id(self)}",
                 work_dir=Path(tmp),
                 system_prompt="You are a connectivity test. Answer with exactly one short line.",
-                user_message="Reply with exactly: ARIA_SMOKE_OK",
+                user_message="Reply with exactly: PRISM_SMOKE_OK",
                 timeout_seconds=120,
             )
             return await self.execute(request, emit or noop)

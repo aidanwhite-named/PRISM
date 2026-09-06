@@ -16,7 +16,7 @@ type Draft = typeof BLANK & {
   reserved?: boolean;
 };
 
-//: 새 검색 전략 프롬프트의 시작 본문. 실행·보안·감사 계약은 ARIA 가 갖고
+//: 새 검색 전략 프롬프트의 시작 본문. 실행·보안·감사 계약은 PRISM 이 갖고
 //: 있으므로 여기에는 전략만 적는다 — placeholder 도 경계 표시도 필요 없다.
 const SEARCH_STRATEGY_TEMPLATE = `기술적 식별력이 높은 핵심 특징을 중심으로 검색하되 전체 시스템의 유사성도 함께 고려해줘.
 
@@ -110,7 +110,7 @@ export default function PromptsPage() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "aria-prompts.json";
+    anchor.download = "prism-prompts.json";
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -323,7 +323,7 @@ export default function PromptsPage() {
               <label>본문 (업무 로직은 전부 여기에 씁니다)</label>
               {draft.kind !== "search" && (
                 <div className="notice info">
-                  ARIA 연동용 출력 규칙은 자동으로 추가됩니다. 전용 JSON 블록을
+                  PRISM 연동용 출력 규칙은 자동으로 추가됩니다. 전용 JSON 블록을
                   직접 넣을 필요는 없습니다. 구성별 점수는 본문과 일치해야 하며,
                   판독 불가를 0점으로 단정하거나 확인되지 않은 문헌번호를 만들지
                   마세요. 점수·문헌 매핑을 금지하는 지시는 연계 기능과 충돌할 수
@@ -338,8 +338,8 @@ export default function PromptsPage() {
               />
               <span className="hint">
                 {draft.kind === "search"
-                  ? "검색 전략만 적으십시오. 청구항·명세서·미대응 구성은 ARIA가 이 본문 뒤에 경계와 함께 붙이며, 도구 허용·호출 예산·채널 정책·감사 기록·보고서 형식은 이 본문이 바꿀 수 없습니다."
-                  : "저장하면 prompt 폴더의 파일이 즉시 갱신됩니다. ARIA는 이 본문 앞뒤에 업무 지시를 추가하지 않습니다."}
+                  ? "검색 전략만 적으십시오. 청구항·명세서·미대응 구성은 PRISM이 이 본문 뒤에 경계와 함께 붙이며, 도구 허용·호출 예산·채널 정책·감사 기록·보고서 형식은 이 본문이 바꿀 수 없습니다."
+                  : "저장하면 prompt 폴더의 파일이 즉시 갱신됩니다. PRISM은 이 본문 앞뒤에 업무 지시를 추가하지 않습니다."}
               </span>
             </div>
             <div className="btn-row">

@@ -92,7 +92,7 @@ def build_korean_pdf(pages: list[str]) -> bytes:
     bfchar = "\n".join(f"<{code_of[c]:04X}> <{ord(c):04X}>" for c in charset)
     tounicode = (
         "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n"
-        "/CMapName /ARIA def\n/CMapType 2 def\n"
+        "/CMapName /PRISM def\n/CMapType 2 def\n"
         "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
         f"{len(charset)} beginbfchar\n{bfchar}\nendbfchar\n"
         "endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend"

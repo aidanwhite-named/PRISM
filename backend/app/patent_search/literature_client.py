@@ -9,11 +9,11 @@
 요약문이 우연히 제목을 써 준 문헌뿐이고, 같은 실행에서 84개 중 2건만 후보가
 됐다. 나머지 82건은 "못 찾은 것"이 아니라 **주소가 없어서 적을 수 없었던 것**이다.
 
-그 각주를 ARIA 가 풀어서 대신 적어 줄 수도 없다. 이 PC 의 네트워크가
+그 각주를 PRISM 이 풀어서 대신 적어 줄 수도 없다. 이 PC 의 네트워크가
 ``vertexaisearch.cloud.google.com`` 을 차단한다(2026-09-01 실측: 사내 정책 차단
 페이지가 돌아온다). 리다이렉트를 따라갈 수 없으면 각주는 영원히 익명이다.
 
-그래서 방향을 바꾼다. 검색 결과를 해석하려 애쓰는 대신 **ARIA 가 직접 서지
+그래서 방향을 바꾼다. 검색 결과를 해석하려 애쓰는 대신 **PRISM 이 직접 서지
 데이터베이스에 묻는다.** 두 곳 다 자격증명이 필요 없고 이 PC 에서 도달한다.
 
     Crossref     발행사가 직접 등록한 서지. 제목 검색이 강하다.
@@ -159,7 +159,7 @@ def plain_query(value: str, *, max_terms: int = 24) -> str:
     보내면 따옴표가 토큰이 되고, ``site:`` 는 검색어 단어가 된다.
 
     연산자를 **해석하지 않고 제거한다.** OR 를 진짜 OR 로 옮기려면 질의 언어를
-    번역해야 하는데, 그러면 모델이 쓴 질의와 ARIA 가 보낸 질의가 달라진 채로
+    번역해야 하는데, 그러면 모델이 쓴 질의와 PRISM 이 보낸 질의가 달라진 채로
     기록에는 하나만 남는다. 여기서는 단어만 남기고, 무엇을 보냈는지는 호출부가
     그대로 기록한다.
     """
@@ -270,8 +270,8 @@ class LiteratureClient:
     def _user_agent(self) -> str:
         # Crossref 는 연락처가 담긴 User-Agent 를 권한다. 없으면 익명으로 간다.
         if self.mailto:
-            return f"ARIA/1.0 (https://github.com/; mailto:{self.mailto})"
-        return "ARIA/1.0"
+            return f"PRISM/1.0 (https://github.com/; mailto:{self.mailto})"
+        return "PRISM/1.0"
 
     def _send(self, url: str, *, source: str, kind: str) -> LiteratureCall:
         self._require_budget()

@@ -461,7 +461,7 @@ def test_process_error_wins_over_search_not_performed() -> None:
 
 
 def test_budget_exceeded_is_reported_as_its_own_failure() -> None:
-    """ARIA 가 끊은 것이므로 cancelled 도 참이다. 사용자 취소와 구별한다."""
+    """PRISM 이 끊은 것이므로 cancelled 도 참이다. 사용자 취소와 구별한다."""
     outcome = _ok(
         tool_policy=WEB_SEARCH,
         tool_uses=["WebSearch"] * 41,

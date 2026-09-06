@@ -49,7 +49,7 @@ function blockedReason(p: ProviderInfo): string {
 /** 같은 이유를 한 문장으로. 무엇을 해야 하는지까지 적는다. */
 function blockedDetail(p: ProviderInfo): string {
   if (!p.execution_supported)
-    return "ARIA 가 이 도구의 실행 경로를 아직 지원하지 않습니다. 설치나 로그인으로 해결되지 않습니다.";
+    return "PRISM 이 이 도구의 실행 경로를 아직 지원하지 않습니다. 설치나 로그인으로 해결되지 않습니다.";
   if (!p.installed)
     return "CLI 를 찾지 못했습니다. 아래 상세의 설치 안내를 따르거나 실행 파일 경로를 지정하십시오.";
   if (!p.executable_ok)
@@ -77,7 +77,7 @@ export default function SettingsPage() {
   const [defaultSearchPromptId, setDefaultSearchPromptId] = useState("");
   const [defaultProvider, setDefaultProvider] = useState("agy");
   const [defaultModels, setDefaultModels] = useState<Record<string, string>>({});
-  // 빈 값 = 모델 기본값. 그때 ARIA 는 CLI 에 추론강도를 넘기지 않는다.
+  // 빈 값 = 모델 기본값. 그때 PRISM 은 CLI 에 추론강도를 넘기지 않는다.
   const [reasoningEffort, setReasoningEffort] = useState<Record<string, string>>(
     {},
   );
@@ -226,7 +226,7 @@ export default function SettingsPage() {
     }
   };
 
-  // 권장 열람 허용 목록 재적용. ARIA 가 이 파일을 자동으로 고치는 것은 설치당
+  // 권장 열람 허용 목록 재적용. PRISM 이 이 파일을 자동으로 고치는 것은 설치당
   // 한 번뿐이므로, 그 뒤에 다시 넣는 유일한 경로가 이 버튼이다.
   const applyAgyPermissions = async () => {
     setApplyingAgy(true);
@@ -366,7 +366,7 @@ export default function SettingsPage() {
 
   const logout = async (provider: ProviderInfo) => {
     const question = usesLogoutHelper(provider)
-      ? `${provider.display_name} 로그아웃 도우미 창을 엽니다. 창에 /logout 을 입력한 뒤 창을 닫으면 ARIA가 상태를 다시 검사합니다. 계속할까요?`
+      ? `${provider.display_name} 로그아웃 도우미 창을 엽니다. 창에 /logout 을 입력한 뒤 창을 닫으면 PRISM이 상태를 다시 검사합니다. 계속할까요?`
       : `${provider.display_name} CLI에 저장된 현재 계정 로그인을 해제합니다. 계속할까요?`;
     if (!window.confirm(question)) return;
 
@@ -432,7 +432,7 @@ export default function SettingsPage() {
   }
 
   const v = settings.values;
-  // agy 의 허용 목록은 ARIA 설정값이 아니라 다른 도구의 파일에서 읽은 사실이라
+  // agy 의 허용 목록은 PRISM 설정값이 아니라 다른 도구의 파일에서 읽은 사실이라
   // values 가 아니라 별도 칸으로 온다. 옛 백엔드는 보내지 않는다.
   const agyPermissions = settings.agy_permissions;
   // Secret 은 values 로 내려오지 않는다. 저장 여부의 근거는 이쪽뿐이다.
@@ -484,7 +484,7 @@ export default function SettingsPage() {
         <span className="eyebrow">환경 설정</span>
         <h1>분석 환경을 설정합니다</h1>
         <p>
-          분석에 사용할 기준과 AI 실행 도구, 로컬 실행의 안전 범위를 관리합니다. ARIA는 API Key를 수집하거나 저장하지 않습니다.
+          분석에 사용할 기준과 AI 실행 도구, 로컬 실행의 안전 범위를 관리합니다. PRISM은 API Key를 수집하거나 저장하지 않습니다.
         </p>
       </div>
 
@@ -619,7 +619,7 @@ export default function SettingsPage() {
                 ))}
               </select>
               <span className="hint">
-                비워 두면 ARIA 가 아무 것도 넘기지 않고 모델 기본값
+                비워 두면 PRISM 이 아무 것도 넘기지 않고 모델 기본값
                 {modelDefaultEffort ? `(${modelDefaultEffort})` : ""}을 씁니다.
                 선택값은 Codex CLI의 model_reasoning_effort로 전달됩니다. 모델을
                 바꾸면 지원하지 않는 기존 단계는 자동으로 해제됩니다.
@@ -764,7 +764,7 @@ export default function SettingsPage() {
               이번 주 사용량
             </h3>
             <div className="hint" style={{ marginBottom: 8 }}>
-              OPS는 데이터량 기준이며 주간 4GB 한도가 적용됩니다. OPS와 ARIA
+              OPS는 데이터량 기준이며 주간 4GB 한도가 적용됩니다. OPS와 PRISM
               측정값 중 큰 값을 사용합니다.
             </div>
             <div className="table-scroll">
@@ -779,7 +779,7 @@ export default function SettingsPage() {
                   </td>
                 </tr>
                 <tr>
-                  <th>ARIA 가 센 주간 사용량</th>
+                  <th>PRISM 이 센 주간 사용량</th>
                   <td>
                     {formatBytes(epoQuota.local_bytes)}
                     {epoQuota.requests ? ` (${epoQuota.requests}회 호출)` : ""}
@@ -862,7 +862,7 @@ export default function SettingsPage() {
         <h2>비특허문헌 검색 연동 (Crossref · Europe PMC)</h2>
         <p className="muted settings-integration-copy">
           선택한 LLM이 필요할 때 Crossref·Europe PMC 도구를 호출합니다.
-          ARIA가 논문 후보를 독립 검색하거나 최종 목록에 추가하지 않습니다. 웹 검색은
+          PRISM이 논문 후보를 독립 검색하거나 최종 목록에 추가하지 않습니다. 웹 검색은
           결과를 요약문과 익명 링크로만 돌려주어 논문을 식별하지 못하는 경우가
           있습니다. 등록 서지에 초록이 있으면 발행사 사이트를 열지 않고 받을 수
           있습니다. 초록 제공 여부는 문헌마다 다르며, 자격증명은 필요하지 않습니다.
@@ -920,13 +920,13 @@ export default function SettingsPage() {
         <p className="muted settings-integration-copy">
           agy 는 승인 창을 띄울 수 없는 실행에서 허용 목록에 없는 주소를 자동으로
           거부하고, <b>그 자리에서 실행 전체를 빈 응답으로 종료합니다.</b> 이미
-          끝난 검색 결과와 감사 블록까지 함께 사라집니다. 그래서 ARIA 는 논문
+          끝난 검색 결과와 감사 블록까지 함께 사라집니다. 그래서 PRISM 은 논문
           출처로 자주 필요한 호스트를 <code>permissions.allow</code> 에 넣어
           둡니다. 매 검색 실행은 이 목록을 그대로 읽어 모델에게 "지금 열 수 있는
           주소"로 알려줍니다.
         </p>
         <p className="muted settings-integration-copy">
-          <b>자동 적용은 설치당 한 번뿐입니다.</b> 그 뒤로 ARIA 는 이 파일을 읽기만
+          <b>자동 적용은 설치당 한 번뿐입니다.</b> 그 뒤로 PRISM 은 이 파일을 읽기만
           하며, Provider 를 다시 검사해도 목록을 고치지 않습니다 — 여기서 호스트를
           지운 것은 그러기로 한 선택이고, 프로그램이 되살릴 일이 아니기 때문입니다.
           나중에 권장 목록이 늘어나도 <b>그때 새로 추가된 호스트만</b> 넣습니다.
@@ -947,7 +947,7 @@ export default function SettingsPage() {
             ) : !agyPermissions.exists ? (
               <div className="notice info">
                 설정 파일이 아직 없습니다. agy 를 한 번 실행하면 만들어지고, 그때
-                ARIA 가 권장 호스트를 한 번 넣습니다. 지금 바로 만들려면 위의
+                PRISM 이 권장 호스트를 한 번 넣습니다. 지금 바로 만들려면 위의
                 「권장 목록 다시 적용」을 누르십시오.
               </div>
             ) : (
@@ -973,7 +973,7 @@ export default function SettingsPage() {
                 {agyPermissions.missing.length > 0 && (
                   <div className="notice info">
                     적용되지 않은 권장 호스트가 {agyPermissions.missing.length}곳
-                    있습니다. 직접 지우신 것이라면 그대로 두십시오 — ARIA 는 다시
+                    있습니다. 직접 지우신 것이라면 그대로 두십시오 — PRISM 은 다시
                     넣지 않습니다. 넣으려면 위의 <b>권장 목록 다시 적용</b>을
                     누르십시오.
                   </div>
@@ -982,7 +982,7 @@ export default function SettingsPage() {
                   <div className="notice danger">
                     <strong>read_url(*) 가 들어 있습니다</strong>
                     <div>
-                      모든 주소의 열람이 허용된 상태입니다. ARIA 가 넣은 값이
+                      모든 주소의 열람이 허용된 상태입니다. PRISM 이 넣은 값이
                       아니며 지우지도 않았습니다. 어떤 페이지를 열었는지 사후에
                       가려낼 수 없으므로 직접 확인하십시오.
                     </div>
@@ -991,7 +991,7 @@ export default function SettingsPage() {
                 <div className="faint" style={{ marginTop: 8 }}>
                   허용은 접근 권한일 뿐 열람 성공을 보장하지 않습니다. 로그인·
                   유료벽·봇 차단이 걸리면 그 문헌을 미검증 후보로 남기고 나머지
-                  검색을 계속하도록 <b>모델에게 지시합니다.</b> ARIA 가 강제할
+                  검색을 계속하도록 <b>모델에게 지시합니다.</b> PRISM 이 강제할
                   수 있는 동작은 아닙니다 — 모델이 이 지시를 무시하면 그 실행은
                   실패로 기록됩니다.
                 </div>
@@ -1172,7 +1172,7 @@ export default function SettingsPage() {
                 {p.experimental && (
                   <div className="notice warn">
                     <strong>
-                      이 실행 도구는 ARIA 의 안전 원칙(도구 없는 실행)을 충족하지
+                      이 실행 도구는 PRISM 의 안전 원칙(도구 없는 실행)을 충족하지
                       못합니다
                     </strong>
                     <ul>
@@ -1290,7 +1290,7 @@ export default function SettingsPage() {
                     차단 접두사: {settings.env_filtering.blocked_prefixes.join(", ")}
                   </div>
                   <div className="faint">
-                    ARIA 를 Claude Code 세션 안에서 실행할 때 부모의 ANTHROPIC_* /
+                    PRISM 을 Claude Code 세션 안에서 실행할 때 부모의 ANTHROPIC_* /
                     CLAUDE_* 변수가 자식 CLI 로 새어 들어가 인증이 깨지는 것을 막습니다.
                   </div>
                 </td>
@@ -1397,7 +1397,7 @@ export default function SettingsPage() {
         <h3 style={{ marginTop: 18 }}>모델 컨텍스트 입력 예산</h3>
         <p className="muted">
           전송 하드 한도를 선언하지 않은 Provider(codex, claude)에만 적용됩니다.{" "}
-          <strong>ARIA 는 모델 한도를 추측하지 않습니다.</strong> 아래 표에 값이
+          <strong>PRISM 은 모델 한도를 추측하지 않습니다.</strong> 아래 표에 값이
           없으면 보수적 대체값을 쓰고, 그 사실이 실행 기록의 판정 사유에 남습니다.
           입력 예산 = 컨텍스트 − 출력·추론 예약이며, 토큰 수는 UTF-8 바이트에서
           보수적으로(실제보다 많게) 추정합니다.
@@ -1515,7 +1515,7 @@ export default function SettingsPage() {
             </div>
 
             <div className="notice info">
-              ARIA는 비밀번호, API Key 또는 OAuth 토큰을 입력받거나 저장하지
+              PRISM은 비밀번호, API Key 또는 OAuth 토큰을 입력받거나 저장하지
               않습니다. 인증은 {loginProvider.display_name} CLI와 공식 로그인
               페이지가 처리합니다.
             </div>
@@ -1674,7 +1674,7 @@ export default function SettingsPage() {
             <div className="notice warn">
               {logoutProvider.display_name}는 비대화식 로그아웃 명령을 제공하지
               않습니다. 열린 창에 <strong>/logout</strong> 을 직접 입력하세요.
-              자격증명은 CLI가 지우고, ARIA는 창이 닫힌 뒤 인증 상태를 다시
+              자격증명은 CLI가 지우고, PRISM은 창이 닫힌 뒤 인증 상태를 다시
               검사할 뿐입니다.
             </div>
 

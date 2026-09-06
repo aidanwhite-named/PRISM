@@ -50,7 +50,7 @@ export type Lineage = {
   priorReportChars: number;
 };
 
-const STORAGE_KEY = "aria.run-session.v1";
+const STORAGE_KEY = "prism.run-session.v1";
 const STORAGE_DEBOUNCE_MS = 250;
 const TERMINAL: JobStatus[] = ["SUCCEEDED", "FAILED", "CANCELLED"];
 

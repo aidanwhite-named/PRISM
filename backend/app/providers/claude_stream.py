@@ -16,13 +16,13 @@ from datetime import datetime, timezone
 _TOOL_INPUT_KEYS = {
     "WebSearch": ("query", "allowed_domains", "blocked_domains"),
     "WebFetch": ("url",),
-    "mcp__aria-search__search_capabilities": (),
-    "mcp__aria-search__epo_search": ("query", "max_results"),
-    "mcp__aria-search__epo_fetch": ("publication_number", "constituent"),
-    "mcp__aria-search__kiwee_search": ("query", "max_results"),
-    "mcp__aria-search__kiwee_fetch": ("publication_number", "constituent"),
-    "mcp__aria-search__literature_search": ("query", "max_results"),
-    "mcp__aria-search__literature_fetch": ("doi", "constituent"),
+    "mcp__prism-search__search_capabilities": (),
+    "mcp__prism-search__epo_search": ("query", "max_results"),
+    "mcp__prism-search__epo_fetch": ("publication_number", "constituent"),
+    "mcp__prism-search__kiwee_search": ("query", "max_results"),
+    "mcp__prism-search__kiwee_fetch": ("publication_number", "constituent"),
+    "mcp__prism-search__literature_search": ("query", "max_results"),
+    "mcp__prism-search__literature_fetch": ("doi", "constituent"),
 }
 _MAX_INPUT_VALUE = 500
 # 한 실행에서 남기는 도구 호출 기록 상한. 감사 기록이 DB 를 밀어내지 않게 한다.
@@ -233,7 +233,7 @@ class ClaudeStreamParser:
         (유료 논문, 403, 리다이렉트)를 남기는 것이 이 경로의 목적이다.
 
         결과 본문은 저장하지 않는다. 검색 결과 페이지 내용은 비신뢰 외부
-        데이터이고, ARIA 의 이벤트 DB 에 옮겨 담을 이유가 없다.
+        데이터이고, PRISM 의 이벤트 DB 에 옮겨 담을 이유가 없다.
         """
         message = payload.get("message")
         if not isinstance(message, dict):

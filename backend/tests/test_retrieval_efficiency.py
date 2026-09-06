@@ -160,25 +160,20 @@ def test_zero_hit_search_keeps_first_candidate_priority_and_audit(agent):
     assert state.search_attempts[document.attachment_id].queries == ["a", "b", "c", "d"]
 
 
-def test_unseeded_components_share_reserved_budget_before_busy_reads(agent, monkeypatch):
-    for ident in ["R001", "R002", "R003"]:
-        agent._components[ident] = ComponentState(ident, ident, "sensor")
-    agent._components["R003"].hit_chunks["known"] = {"chunk_id": "known"}
-    read = ReadPage(action="read_page", component_id="R003", attachment="ATT-01", page=1)
-    agent._deferred_actions = [DeferredAction(read, 1, "old read", attempts=30)]
-    searches = [SearchDocument(action="search_document", component_id=c, queries=["sensor"]) for c in ["R001", "R002"]]
-    grants = []
-    async def consume(item, run, round_no, budget_left):
-        grants.append((item.component_id, budget_left))
-        entry = {"action": item.action, "text": ""}
-        entry["text"] = "x" * (budget_left - agent_module.json_size(entry))
-        return entry, agent_module.json_size(entry)
-    monkeypatch.setattr(agent, "_execute_one", consume)
-    result = asyncio.run(agent._execute_actions(searches, RetrievalRun(), 2))
-    assert [c for c, _ in grants] == ["R001", "R002", "R003"]
-    assert grants[0][1] == grants[1][1] == 8400
-    assert grants[2][1] == 39200
-    assert sum(agent_module.json_size(row) for row in result) == 56000
+def test_requested_page_is_read_before_many_search_actions(agent):
+    # 과거 action 수로 나눈 몫으로는 페이지 전문을 하나도 싣지 못했다.
+    state = ComponentState("R001", "센서", "센서")
+    agent._components[state.id] = state
+    read = ReadPage(action="read_page", component_id=state.id, attachment="ATT-01", page=1)
+    searches = [SearchDocument(action="search_document", component_id=state.id,
+                               queries=[f"sensor {n}"]) for n in range(20)]
+    run = RetrievalRun()
+    results = asyncio.run(agent._execute_actions([*searches, read], run, 1))
+    assert results[0]["action"] == "read_page"
+    assert results[0]["pages"][0]["text"]
+    assert run.pages_read == 1
+    assert not any(row["action"].startswith("read") for row in run.deferred_pending)
+    assert sum(agent_module.json_size(row) for row in results) <= 56000
 
 
 def test_overlarge_page_is_explicit_prefix_not_a_full_page():
@@ -438,8 +433,9 @@ def test_same_chunk_id_in_two_documents_is_not_treated_as_one_span(tmp_path):
         assert {"ATT-01", "ATT-02"} <= set(by_alias)
         # 같은 chunk_id 를 쓰지만 각자의 본문을 받는다.
         assert by_alias["ATT-01"]["chunk_id"] == by_alias["ATT-02"]["chunk_id"]
-        assert "AAA" in by_alias["ATT-01"]["text"] and "BBB" not in by_alias["ATT-01"]["text"]
-        assert "BBB" in by_alias["ATT-02"]["text"] and "AAA" not in by_alias["ATT-02"]["text"]
+        # 선행 페이지 열람의 원문을 재사용하되 다른 문헌을 참조하면 안 된다.
+        for alias in ("ATT-01", "ATT-02"):
+            assert by_alias[alias]["text_shown_in_this_round"]["attachment"] == alias
 
         # 페이지 읽기도 문헌별로 각자의 본문을 싣는다.
         pages = {
@@ -487,7 +483,7 @@ def test_pending_read_precedes_search_and_supplies_shared_text(agent):
     assert sum(agent_module.json_size(row) for row in results) <= agent.budget.max_round_result_chars
 
 
-def test_large_search_cannot_consume_other_pending_search_shares(agent, monkeypatch):
+def test_large_request_completes_and_keeps_other_requests_pending(agent, monkeypatch):
     state = ComponentState("R001", "sensor", "sensor")
     state.hit_chunks["known"] = {"chunk_id": "known"}
     agent._components[state.id] = state
@@ -500,7 +496,119 @@ def test_large_search_cannot_consume_other_pending_search_shares(agent, monkeypa
         entry["text"] = "x" * (budget_left - agent_module.json_size(entry))
         return entry, agent_module.json_size(entry)
     monkeypatch.setattr(agent, "_execute_one", consume)
-    results = asyncio.run(agent._execute_actions(requests[1:], RetrievalRun(), 2))
-    assert len(results) == 3
-    assert max(grants) - min(grants) <= 1
+    run = RetrievalRun()
+    results = asyncio.run(agent._execute_actions(requests[1:], run, 2))
+    assert len(results) == 1
+    assert grants == [56000]
+    assert len(run.deferred_pending) == 2
     assert sum(agent_module.json_size(row) for row in results) == 56000
+
+
+@pytest.mark.parametrize("busy_first", [True, False])
+def test_many_actions_do_not_delay_another_components_turn(agent, monkeypatch, busy_first):
+    requests = [SearchDocument(action="search_document", component_id="R001", queries=[str(i)])
+                for i in range(20)]
+    other = SearchDocument(action="search_document", component_id="R002", queries=["other"])
+    requests.insert(len(requests) if busy_first else 0, other)
+    order = []
+    async def consume(item, run, round_no, budget_left):
+        entry = {"action": item.action, "text": ""}
+        entry["text"] = "x" * (min(budget_left, 1400) - agent_module.json_size(entry))
+        order.append(item.component_id)
+        return entry, agent_module.json_size(entry)
+    monkeypatch.setattr(agent, "_execute_one", consume)
+    results = asyncio.run(agent._execute_actions(requests, RetrievalRun(), 1))
+    assert len(results) == 21
+    assert set(order[:2]) == {"R001", "R002"}
+    assert sum(agent_module.json_size(row) for row in results) <= 56000
+
+
+def test_unused_component_share_is_available_to_remaining_work(agent, monkeypatch):
+    requests = [SearchDocument(action="search_document", component_id=key, queries=[key])
+                for key in ("R001", "R002")]
+    async def consume(item, run, round_no, budget_left):
+        entry = {"action": item.action, "text": ""}
+        if item.component_id == "R002":
+            entry["text"] = "x" * (budget_left - agent_module.json_size(entry))
+        return entry, agent_module.json_size(entry)
+    monkeypatch.setattr(agent, "_execute_one", consume)
+    results = asyncio.run(agent._execute_actions(requests, RetrievalRun(), 1))
+    assert len(results) == 2
+    assert sum(agent_module.json_size(row) for row in results) == 56000
+
+
+def test_later_calls_retain_document_state_feature_and_candidate_text(agent):
+    state = ComponentState("R001", "센서", "서로 독립적으로 처리하는 센서")
+    agent._components[state.id] = state
+    agent._order.append(state.id)
+    request = SearchDocument(action="search_document", component_id=state.id, queries=["센서"])
+    asyncio.run(agent._execute_actions([request], RetrievalRun(), 1))
+    first = agent._round_payload(1, [], "")
+    assert first["components"][0]["candidate_ledger"]
+    for round_no in range(2, 6):
+        payload = agent._round_payload(round_no, [], "")
+        assert payload["documents"] == first["documents"]
+        assert payload["components"][0]["feature"] == state.feature
+        assert payload["components"][0]["candidate_ledger"] == first["components"][0]["candidate_ledger"]
+        assert all(row.get("snippet") for row in payload["components"][0]["candidate_ledger"])
+
+
+def test_later_search_keeps_context_that_can_reverse_a_match(agent, monkeypatch):
+    before = "This method does not support independent generation."
+    after = "Both channels reference each other."
+    monkeypatch.setattr(agent.corpus[0].index, "neighbours", lambda *args, **kwargs: (before, after))
+    state = ComponentState("R001", "센서", "센서")
+    agent._components[state.id] = state
+    request = SearchDocument(action="search_document", component_id=state.id, queries=["센서"])
+    run = RetrievalRun()
+    for round_no in range(1, 6):
+        results = asyncio.run(agent._execute_actions([request], run, round_no))
+        hits = [hit for entry in results for doc in entry.get("documents", []) for hit in doc["hits"]]
+        assert hits
+        assert all(hit.get("text") and hit.get("context_before") == before
+                   and hit.get("context_after") == after for hit in hits)
+
+
+def test_final_package_shares_only_identical_source_and_context():
+    from copy import deepcopy
+    from app.retrieval import evidence
+    from .test_retrieval import _stress_bundle
+    bundle, _ = _stress_bundle(2, 1, 1, RetrievalBudget())
+    finding = dict(attachment="ATT-01", chunk_id="P0001-001", pdf_page=1,
+                   channels=[], extraction_status="ok", source_text="UNIQUE_SOURCE",
+                   context_before="NEGATIVE_CONTEXT", context_after="LIMITATION_CONTEXT",
+                   ai_relevance="FIRST_NOTE")
+    bundle["components"][0]["findings"] = [finding]
+    bundle["components"][1]["findings"] = [{**finding, "ai_relevance": "SECOND_NOTE"}]
+    saved = deepcopy(bundle)
+    rendered = evidence.render(bundle)
+    assert bundle == saved  # 원본 패키지와 구성별 출처는 그대로다.
+    for text in ("UNIQUE_SOURCE", "NEGATIVE_CONTEXT", "LIMITATION_CONTEXT", "FIRST_NOTE", "SECOND_NOTE"):
+        assert rendered.count(text) == 1
+    assert rendered.count("chunk_id: P0001-001") == 2
+    assert evidence.render(bundle) == rendered  # 별도 호출에서도 원문이 다시 들어간다.
+    bundle["components"][0]["findings"] = []
+    assert "UNIQUE_SOURCE" in evidence.render(bundle)  # 첫 참조가 없어져도 고아 참조 없음.
+    for changed in ({"attachment": "ATT-02"}, {"context_after": "DIFFERENT_CONTEXT"}):
+        bundle = deepcopy(saved)
+        bundle["components"][1]["findings"][0].update(changed)
+        assert evidence.render(bundle).count("UNIQUE_SOURCE") == 2
+
+
+def test_repeated_finding_keeps_provenance_without_charging_source_twice(agent):
+    from app.retrieval import evidence
+    from app.retrieval.actions import EvidenceRef
+    document = agent.corpus[0]
+    chunk = document.index.all_chunks()[0]
+    run = RetrievalRun()
+    run.exposed_chunks.add((document.attachment_id, chunk.chunk_id))
+    builder = evidence.EvidenceBuilder(corpus=agent.corpus, run=run,
+        budget=RetrievalBudget(), claim_text="센서", semantic={}, capabilities={}, library_versions={})
+    ref = EvidenceRef(attachment=document.alias, chunk_id=chunk.chunk_id, relevance="note")
+    first, error = builder._resolve(ref, None)
+    assert not error and first
+    first_cost = builder._used_chars
+    second, error = builder._resolve(ref, None)
+    assert not error and second == first
+    assert builder._used_chars - first_cost == evidence.FINDING_OVERHEAD_CHARS + len("note")
+    assert first_cost > builder._used_chars - first_cost

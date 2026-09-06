@@ -38,7 +38,7 @@ from .prompt_assembly import included_attachments as prompt_assembly_included
 
 # 검색 실행의 런타임 규칙은 Provider 가 실제로 가진 도구에 맞춰야 한다.
 # 도구 이름이 다를 뿐 아니라, Codex 는 web_search 하나로 검색과 URL 조회를
-# 겸하고(성공 여부는 ARIA 가 확인할 수 없다) agy 는
+# 겸하고(성공 여부는 PRISM 이 확인할 수 없다) agy 는
 # 가져온 페이지를 파일로만 돌려준다. 정책 이름으로 고르므로 Provider 가 늘어도
 # 이 표만 채우면 된다.
 SEARCH_CONTEXT_BY_POLICY = {
@@ -546,7 +546,7 @@ def assemble_job(
     attachments: list[IngestedFile],
     runtime_context: str,
     runtime_context_enabled: bool,
-    # None(또는 0) = ARIA 자체 글자 수 한도 없음. 그래도 Provider 전송 한도와
+    # None(또는 0) = PRISM 자체 글자 수 한도 없음. 그래도 Provider 전송 한도와
     # 모델 컨텍스트 한도는 남는다 — 그 검사는 조립 뒤에 바이트로 이뤄진다.
     max_chars: int | None,
     claim_text: str = "",

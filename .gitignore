@@ -8,7 +8,7 @@ __pycache__/
 frontend/node_modules/
 frontend/dist/
 
-# 로컬 데이터 (기본 위치는 %LOCALAPPDATA%\ARIA 이지만 ARIA_DATA_DIR 로 옮길 수 있음)
+# 로컬 데이터 (기본 위치는 %LOCALAPPDATA%\PRISM 이지만 PRISM_DATA_DIR 로 옮길 수 있음)
 data/
 *.db
 *.db-shm

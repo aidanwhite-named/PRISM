@@ -43,7 +43,7 @@ def test_provider_env_vars_are_blocked(name: str) -> None:
 def test_parent_agent_env_does_not_leak_to_child(monkeypatch) -> None:
     """실측으로 확인된 실패를 막는 테스트.
 
-    ARIA 를 Claude Code 세션 안에서 실행하면 부모가 ANTHROPIC_BASE_URL 등을
+    PRISM 을 Claude Code 세션 안에서 실행하면 부모가 ANTHROPIC_BASE_URL 등을
     환경에 심는다. 그대로 상속하면 자식 claude.exe 가 "Not logged in" 으로
     실패한다.
     """
@@ -210,7 +210,7 @@ async def test_probe_all_covers_every_provider() -> None:
 
 
 async def test_probe_cache_expires_so_external_logout_is_noticed(monkeypatch) -> None:
-    """캐시가 무기한이면 ARIA 밖에서 로그아웃했을 때 화면이 계속 거짓말한다.
+    """캐시가 무기한이면 PRISM 밖에서 로그아웃했을 때 화면이 계속 거짓말한다.
 
     실측 사고: 터미널에서 agy /logout 을 마쳐 `agy models` 가 실패하는데도
     Settings 표는 "로그인됨. 사용 가능한 모델 14개" 를 계속 보여줬다.
@@ -359,7 +359,7 @@ def test_data_dir_is_outside_project_tree() -> None:
     from app.config import PATHS
 
     project_root = Path(__file__).resolve().parents[2]
-    assert project_root not in Path(os.environ["ARIA_DATA_DIR"]).resolve().parents
+    assert project_root not in Path(os.environ["PRISM_DATA_DIR"]).resolve().parents
     assert PATHS.runs_dir.name == "runs"
 
 

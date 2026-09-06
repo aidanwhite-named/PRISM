@@ -15,7 +15,7 @@ from .patent_search import get_backend, epo_cql
 from .patent_search.base import PatentSearchError, PatentSearchQuery
 from .patent_search.epo_client import scrub, credential_tokens
 
-SERVER_NAME = "aria-search"
+SERVER_NAME = "prism-search"
 PROTOCOL_VERSION = "2025-06-18"
 LEDGER_NAME = "search_tool_calls.jsonl"
 
@@ -49,12 +49,12 @@ class ToolLimitExceeded(RuntimeError):
 
 class SearchTools:
     def __init__(self, *, values=None, work_dir=None, max_calls=None, cutoff=None):
-        self.work_dir = Path(work_dir or os.environ["ARIA_SEARCH_WORK_DIR"])
+        self.work_dir = Path(work_dir or os.environ["PRISM_SEARCH_WORK_DIR"])
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_path = self.work_dir / LEDGER_NAME
-        self.max_calls = max(1, int(max_calls or os.environ.get("ARIA_SEARCH_MAX_TOOL_CALLS", 40)))
+        self.max_calls = max(1, int(max_calls or os.environ.get("PRISM_SEARCH_MAX_TOOL_CALLS", 40)))
         self.calls = sum(row.get("state") == "started" for row in search_manifest.read_tool_journal(self.work_dir))
-        self.cutoff = search_dates.normalize_cutoff(cutoff if cutoff is not None else os.environ.get("ARIA_SEARCH_CUTOFF", ""))
+        self.cutoff = search_dates.normalize_cutoff(cutoff if cutoff is not None else os.environ.get("PRISM_SEARCH_CUTOFF", ""))
         if values is None:
             with session_scope() as session:
                 values = settings_service.get_all(session)
@@ -290,7 +290,7 @@ _LITERATURE_FETCH = _tool(
 )
 _KIWEE_SEARCH = _tool("kiwee_search", "Search the configured Kiwee patent backend.", {"query": {"type": "string"}, "max_results": {"type": "integer"}}, ["query"])
 _KIWEE_FETCH = _tool("kiwee_fetch", "Fetch a document from the configured Kiwee backend.", {"publication_number": {"type": "string"}, "constituent": {"type": "string"}}, ["publication_number"])
-_CAPABILITIES = _tool("search_capabilities", "Report which ARIA search tools are enabled and configured without making a network request.", {}, [])
+_CAPABILITIES = _tool("search_capabilities", "Report which PRISM search tools are enabled and configured without making a network request.", {}, [])
 
 
 def _reply(request_id, result=None, error=None):

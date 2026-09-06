@@ -99,7 +99,7 @@ def test_runtime_context_is_prepended_because_system_prompt_cannot_be_split(
     tmp_path: Path,
 ) -> None:
     message = CodexCliProvider().compose_message(_request(tmp_path))
-    assert message.startswith("[ARIA RUNTIME CONTEXT]")
+    assert message.startswith("[PRISM RUNTIME CONTEXT]")
     assert "런타임 규칙" in message
     assert message.rstrip().endswith("청구항 본문")
 
@@ -521,7 +521,7 @@ def test_unknown_status_is_not_promoted_to_success() -> None:
 def test_no_reasoning_effort_argument_when_the_user_did_not_choose(tmp_path: Path) -> None:
     """고르지 않았으면 아무 것도 넘기지 않는다.
 
-    빈 값을 어떤 레벨로 채우는 순간 ARIA 가 고르지도 않은 강도를 대신 정해
+    빈 값을 어떤 레벨로 채우는 순간 PRISM 이 고르지도 않은 강도를 대신 정해
     주는 셈이 된다. 모델 카탈로그의 기본값에 맡겨야 한다.
     """
     args = CodexCliProvider().build_args(_request(tmp_path))

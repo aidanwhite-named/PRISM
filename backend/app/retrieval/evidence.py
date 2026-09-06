@@ -3,15 +3,15 @@
 최종 분석 모델에게 PDF 전체를 넣지 않고 이 패키지만 넣는다. 패키지에는 두
 종류의 값이 있고 **구조적으로 분리**되어 있다.
 
-  ARIA 가 채우는 것 : 원문 텍스트, 앞뒤 문맥, PDF 페이지, 문단번호, 검색 채널,
+  PRISM 이 채우는 것 : 원문 텍스트, 앞뒤 문맥, PDF 페이지, 문단번호, 검색 채널,
                       추출 상태, 검토 범위, 확인하지 못한 페이지
   AI 가 채우는 것   : 관련성 설명(relevance), 구성 분해, 사용한 검색어
 
-AI 는 chunk_id 만 가리킨다. 원문은 ARIA 가 자기 인덱스에서 꺼내 넣으므로,
+AI 는 chunk_id 만 가리킨다. 원문은 PRISM 이 자기 인덱스에서 꺼내 넣으므로,
 AI 가 반환된 원문을 고치거나 없는 문장을 만들어 넣을 경로가 없다.
 
 「없음」 판정도 AI 가 정하지 못한다. AI 의 주장은 status_claim 으로 받되,
-ARIA 가 자기 관측(페이지 수 일치, 추출 상태, 실행된 검색 채널, 실제 검색어 수)
+PRISM 이 자기 관측(페이지 수 일치, 추출 상태, 실행된 검색 채널, 실제 검색어 수)
 과 대조해서 확정한다.
 """
 
@@ -63,7 +63,7 @@ CONTEXT_CHUNKS = 1
 # 문헌 매핑 프로토콜(citation_mapping_v1)은 모델이 자료 번호와 문헌번호를 짝지어
 # 출력하도록 요구하므로, 번호를 볼 수 없으면 로컬 검색 실행에서만 그 계약이
 # 조용히 깨진다. 서지사항은 거의 언제나 첫 페이지에 있으므로 그 앞부분을
-# 그대로(요약하지 않고) 싣는다. 이것도 ARIA 가 인덱스에서 꺼낸 원문이다.
+# 그대로(요약하지 않고) 싣는다. 이것도 PRISM 이 인덱스에서 꺼낸 원문이다.
 IDENTITY_EXCERPT_CHARS = 1_200
 
 # 근거 하나·구성 하나가 렌더링될 때 붙는 구조 문자(위치 줄, 경계 표시, 상태
@@ -201,7 +201,7 @@ def _document_entry(document: IndexedDocument, excerpt: str = "") -> dict:
 
 
 class EvidenceBuilder:
-    """AI 의 finalize 요청을 ARIA 의 관측과 대조해 근거 패키지로 만든다."""
+    """AI 의 finalize 요청을 PRISM 의 관측과 대조해 근거 패키지로 만든다."""
 
     def __init__(
         self,
@@ -224,6 +224,7 @@ class EvidenceBuilder:
         self._by_alias = {document.alias: document for document in corpus}
         self._used_chars = 0
         self.truncated = False
+        self._included_sources: set[tuple] = set()
 
     # ------------------------------------------------------------ 근거 수집
 
@@ -280,7 +281,7 @@ class EvidenceBuilder:
             "section": row.section or None,
             "extraction_status": row.extraction_status,
             "extraction_method": row.extraction_method,
-            # ARIA 가 인덱스에서 그대로 꺼낸 원문. AI 는 이 값을 만들지도
+            # PRISM 이 인덱스에서 그대로 꺼낸 원문. AI 는 이 값을 만들지도
             # 고치지도 못한다.
             "source_text": row.text,
             "context_before": before,
@@ -299,13 +300,10 @@ class EvidenceBuilder:
         # 보고 청크를 통째로 얹으면, 마지막 하나가 상한을 훌쩍 넘겨 preflight 가
         # 안내한 최댓값이 상한이 아니게 된다. 여기서 넘기면 Provider 호출 직전
         # 바이트 검사에 걸려, 검색 비용을 다 쓰고 나서 실행이 실패한다.
-        addition = (
-            len(row.text)
-            + len(before)
-            + len(after)
-            + len(finding["ai_relevance"])
-            + FINDING_OVERHEAD_CHARS
-        )
+        source_key = _finding_source_key(finding)
+        addition = len(finding["ai_relevance"]) + FINDING_OVERHEAD_CHARS
+        if source_key not in self._included_sources:
+            addition += len(row.text) + len(before) + len(after)
         remaining = self.budget.max_evidence_chars - self._used_chars
         if addition > remaining:
             self.truncated = True
@@ -314,6 +312,7 @@ class EvidenceBuilder:
                 f"(필요 {addition:,}자, 남은 {max(0, remaining):,}자)."
             )
         self._used_chars += addition
+        self._included_sources.add(source_key)
         return finding, ""
 
     # ------------------------------------------------------------ 상태 확정
@@ -328,7 +327,7 @@ class EvidenceBuilder:
         reasons = list(blockers)
 
         if component is None:
-            reasons.append("ARIA 가 이 구성에 대한 검색 실행 기록을 찾지 못했습니다.")
+            reasons.append("PRISM 이 이 구성에 대한 검색 실행 기록을 찾지 못했습니다.")
         else:
             # 검사는 **문헌마다** 한다. 전체 검색어 수만 세면, AI 가 D1 만
             # 검색어 3개로 뒤지고 D2 는 건드리지도 않은 채 "검토 범위에서
@@ -595,7 +594,14 @@ class EvidenceBuilder:
 # ------------------------------------------------------------------- 렌더링
 
 
-def _finding_lines(finding: dict) -> list[str]:
+def _finding_source_key(finding: dict) -> tuple:
+    # 위치뿐 아니라 원문과 문맥까지 같은 경우에만 공유한다.
+    return tuple(finding.get(key) or "" for key in (
+        "attachment", "chunk_id", "source_text", "context_before", "context_after"
+    ))
+
+
+def _finding_lines(finding: dict, *, shared: bool = False) -> list[str]:
     location = [f"{finding['attachment']} · PDF {finding['pdf_page']}쪽"]
     if finding.get("printed_page"):
         location.append(f"인쇄 {finding['printed_page']}쪽")
@@ -609,19 +615,24 @@ def _finding_lines(finding: dict) -> list[str]:
         f"{', '.join(finding['channels']) or '직접 지정'} · 추출 상태: "
         f"{finding['extraction_status']}",
     ]
+    if shared:
+        lines.append("    원문·앞뒤 문맥: 위의 동일 자료 번호·chunk_id 근거 구간 참조.")
+        if finding.get("ai_relevance"):
+            lines.append(f"    [검색 단계 AI 의 관련성 메모 — 원문 아님] {finding['ai_relevance']}")
+        return lines
     if finding.get("context_before"):
         lines += [
-            "    --- 앞 문맥 (ARIA 가 PDF 에서 그대로 꺼낸 원문) ---",
+            "    --- 앞 문맥 (PRISM 이 PDF 에서 그대로 꺼낸 원문) ---",
             *[f"    {line}" for line in finding["context_before"].split("\n")],
         ]
     lines += [
-        "    --- 원문 시작 (ARIA 가 PDF 에서 그대로 꺼낸 원문) ---",
+        "    --- 원문 시작 (PRISM 이 PDF 에서 그대로 꺼낸 원문) ---",
         *[f"    {line}" for line in finding["source_text"].split("\n")],
         "    --- 원문 끝 ---",
     ]
     if finding.get("context_after"):
         lines += [
-            "    --- 뒤 문맥 (ARIA 가 PDF 에서 그대로 꺼낸 원문) ---",
+            "    --- 뒤 문맥 (PRISM 이 PDF 에서 그대로 꺼낸 원문) ---",
             *[f"    {line}" for line in finding["context_after"].split("\n")],
         ]
     if finding.get("ai_relevance"):
@@ -642,14 +653,14 @@ def render(bundle: dict) -> str:
         return str(placeholder)
 
     lines = [
-        "[ARIA 로컬 검색 근거 패키지]",
+        "[PRISM 로컬 검색 근거 패키지]",
         "",
-        "이 실행에서는 인용발명 문헌의 **전체 본문을 넣지 않았습니다.** ARIA 가",
+        "이 실행에서는 인용발명 문헌의 **전체 본문을 넣지 않았습니다.** PRISM 이",
         "각 문헌을 페이지·문단 단위로 로컬 색인한 뒤, 검색 단계의 AI 가 청구항",
         "구성별로 검색·열람한 구간만 아래에 담았습니다.",
         "",
         "규칙:",
-        "- 「원문」으로 표시된 구간은 ARIA 가 PDF 에서 그대로 꺼낸 텍스트입니다.",
+        "- 「원문」으로 표시된 구간은 PRISM 이 PDF 에서 그대로 꺼낸 텍스트입니다.",
         "  발췌로 인용할 수 있는 것은 이 구간뿐입니다.",
         "- 「관련성 메모」는 검색 단계 AI 의 판단이며 원문이 아닙니다. 인용하지",
         "  마십시오.",
@@ -688,7 +699,7 @@ def render(bundle: dict) -> str:
             lines.append(f"  · {' · '.join(detail)}")
         if document.get("identity_excerpt"):
             lines += [
-                "  --- 첫 페이지 원문 발췌 (서지사항 확인용, ARIA 가 그대로 꺼낸 원문) ---",
+                "  --- 첫 페이지 원문 발췌 (서지사항 확인용, PRISM 이 그대로 꺼낸 원문) ---",
                 *[
                     f"  {line}"
                     for line in str(document["identity_excerpt"]).split("\n")
@@ -722,6 +733,7 @@ def render(bundle: dict) -> str:
         )
 
     lines += ["", "[청구항 구성별 근거]"]
+    included_sources: set[tuple] = set()
     for component in bundle.get("components", []):
         lines += [
             "",
@@ -734,7 +746,7 @@ def render(bundle: dict) -> str:
             f"({component.get('coverage_ratio', 0):.0%})",
             f"- 사용한 검색어: {', '.join(component.get('queries_used') or []) or '(없음)'}",
             f"- 검색 채널: {', '.join(component.get('search_channels_used') or []) or '(없음)'}",
-            f"- ARIA 확정 상태: {component['status']} — {component['status_label']}",
+            f"- PRISM 확정 상태: {component['status']} — {component['status_label']}",
         ]
         if component.get("status_reasons"):
             lines.append("- 확정하지 못한 사유:")
@@ -765,7 +777,9 @@ def render(bundle: dict) -> str:
         if component.get("findings"):
             lines.append("- 근거 구간:")
             for finding in component["findings"]:
-                lines += _finding_lines(finding)
+                key = _finding_source_key(finding)
+                lines += _finding_lines(finding, shared=key in included_sources)
+                included_sources.add(key)
         else:
             lines.append("- 근거 구간: 없음")
         if component.get("ai_note"):

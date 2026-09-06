@@ -219,7 +219,7 @@ def test_audit_manifest_is_built_without_any_audit_instruction(client) -> None:
     """
     strategy = _create_strategy(client, "감사 지시 없는 전략", STRATEGY_PLAIN)
     try:
-        assert "ARIA_SEARCH_LOG" not in STRATEGY_PLAIN
+        assert "PRISM_SEARCH_LOG" not in STRATEGY_PLAIN
         assert "manifest" not in STRATEGY_PLAIN
 
         fake_provider.RECEIVED.clear()
@@ -229,14 +229,14 @@ def test_audit_manifest_is_built_without_any_audit_instruction(client) -> None:
         # 계약은 시스템 프롬프트에서 왔다. 사용자 본문에는 없다.
         assert any('"candidates"' in text for text in _sent_systems())
         assert not any(
-            "[ARIA_SEARCH_LOG_V1]" in message.split("# ARIA 조립 데이터 구간")[0]
+            "[PRISM_SEARCH_LOG_V1]" in message.split("# PRISM 조립 데이터 구간")[0]
             for message in _sent_messages()
         )
 
         manifest = job["search_manifest"]
         assert manifest is not None
         assert job["search_manifest_error"] is None
-        # ARIA 가 스트림에서 직접 본 것도 그대로 남는다.
+        # PRISM 이 스트림에서 직접 본 것도 그대로 남는다.
         assert manifest["observed"]["search_queries"]
         assert manifest["policy"]["allowed_tools"] == ["WebSearch", "WebFetch"]
     finally:
@@ -471,7 +471,7 @@ def test_a_legacy_placeholder_prompt_still_runs(client) -> None:
         assert CLAIM in message
         # 새 방식의 머리말은 옛 본문에 끼어들지 않는다. 두 계약이 겹치면
         # 같은 규칙이 두 번 나가고, 어느 쪽이 유효한지 알 수 없게 된다.
-        assert "# ARIA 조립 데이터 구간" not in message
+        assert "# PRISM 조립 데이터 구간" not in message
 
         # 옛 본문이어도 감사 기록과 표준 보고서는 그대로 나온다.
         assert job["search_manifest_error"] is None
@@ -489,5 +489,5 @@ def test_the_shipped_default_is_a_strategy_and_still_runs(client) -> None:
     assert job["search_manifest_error"] is None
 
     message = next(text for text in _sent_messages() if "<CLAIM_TEXT>" in text)
-    assert "# ARIA 조립 데이터 구간" in message
+    assert "# PRISM 조립 데이터 구간" in message
     assert "## 분류 그룹의 뜻" in message

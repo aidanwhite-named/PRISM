@@ -1,6 +1,6 @@
 """실행 환경 경로와 기본 설정값.
 
-ARIA의 데이터는 프로젝트 트리 바깥에 저장한다. Claude Code 계열 CLI는
+PRISM의 데이터는 프로젝트 트리 바깥에 저장한다. Claude Code 계열 CLI는
 작업 폴더에서 상위로 거슬러 올라가며 CLAUDE.md / AGENTS.md 를 탐색하기
 때문에, 실행 폴더가 프로젝트 안에 있으면 나중에 프로젝트 루트에 생긴
 설정 파일이 모든 실행에 주입된다.
@@ -17,20 +17,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def default_prompt_dir() -> Path:
-    override = os.environ.get("ARIA_PROMPT_DIR")
+    override = os.environ.get("PRISM_PROMPT_DIR")
     if override:
         return Path(override)
     return PROJECT_ROOT / "prompt"
 
 
 def default_data_dir() -> Path:
-    override = os.environ.get("ARIA_DATA_DIR")
+    override = os.environ.get("PRISM_DATA_DIR")
     if override:
         return Path(override)
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-        return Path(base) / "ARIA"
-    return Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")) / "aria"
+        return Path(base) / "PRISM"
+    return Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")) / "prism"
 
 
 class Paths:
@@ -39,7 +39,7 @@ class Paths:
 
     @property
     def db_path(self) -> Path:
-        return self.data_dir / "aria.db"
+        return self.data_dir / "prism.db"
 
     @property
     def runs_dir(self) -> Path:
@@ -80,11 +80,11 @@ class Paths:
 PATHS = Paths()
 PROMPT_DIR = default_prompt_dir()
 
-HOST = os.environ.get("ARIA_HOST", "127.0.0.1")
-PORT = int(os.environ.get("ARIA_PORT", "8765"))
+HOST = os.environ.get("PRISM_HOST", "127.0.0.1")
+PORT = int(os.environ.get("PRISM_PORT", "8765"))
 
 # 첨부 텍스트는 인라인으로 전달한다. 예산을 넘으면 조용히 자르지 않고
-# INPUT_TOO_LARGE 로 중단한다. ARIA 가 임의로 요약/청킹하면 "분석 방법을
+# INPUT_TOO_LARGE 로 중단한다. PRISM 이 임의로 요약/청킹하면 "분석 방법을
 # 갖지 않는다"는 원칙을 어기게 된다.
 DEFAULT_RUNTIME_CONTEXT = """당신은 문서 분석 실행기 안에서 동작합니다.
 
@@ -101,16 +101,16 @@ DEFAULT_RUNTIME_CONTEXT = """당신은 문서 분석 실행기 안에서 동작�
 
 # 유사 문헌 검색 작업의 시스템 프롬프트.
 #
-# DEFAULT_RUNTIME_CONTEXT 와 같은 자리(ARIA 런타임 규칙)이지만 내용이 다르다.
+# DEFAULT_RUNTIME_CONTEXT 와 같은 자리(PRISM 런타임 규칙)이지만 내용이 다르다.
 # 저 쪽은 "도구가 없다"가 전제고, 이 쪽은 허용된 검색 도구를 선택해 쓴다.
 #
 # **이것이 웹 후보의 내부 정규화 계약이다.**
 #
 # 웹 채널의 후보에는 도구 이벤트만으로는 얻을 수 없는 필드가 있다 — 문헌번호와
-# 명칭의 대응, 구성 대응 근거 문장, 그 문장을 읽은 범위. ARIA 는 그것을 모델의
-# 산문에서 추측하지 않고, 여기 있는 고정 스키마([ARIA_SEARCH_LOG_V1])로
+# 명칭의 대응, 구성 대응 근거 문장, 그 문장을 읽은 범위. PRISM 은 그것을 모델의
+# 산문에서 추측하지 않고, 여기 있는 고정 스키마([PRISM_SEARCH_LOG_V1])로
 # 받아 적게 한다. 그 블록은 감사 기록의 "모델이 보고한 것" 칸으로만 들어가고,
-# ARIA 가 스트림에서 직접 본 사실(observed)과 절대 같은 등급으로 합쳐지지 않는다.
+# PRISM 이 스트림에서 직접 본 사실(observed)과 절대 같은 등급으로 합쳐지지 않는다.
 #
 # 이 계약을 사용자 검색 전략 프롬프트로 옮기지 마라. 옮기는 순간 사용자가 전략
 # 한 줄을 지우는 것만으로 감사 기록과 보고서가 함께 사라진다. 전략 프롬프트가
@@ -123,13 +123,13 @@ DEFAULT_RUNTIME_CONTEXT = """당신은 문서 분석 실행기 안에서 동작�
 # WebFetch 는 페이지 원문을 그대로 돌려주는 도구가 아니라, 페이지를 마크다운으로
 # 바꾼 뒤 별도의 작은 모델이 추출 프롬프트를 돌린 결과를 돌려준다. 그래서 그
 # 출력은 특허·논문의 직접 인용문이 될 수 없다. 이 사실을 모델에게 명시한다.
-SEARCH_RUNTIME_CONTEXT = """당신은 ARIA의 단일 유사문헌 검색 에이전트입니다.
+SEARCH_RUNTIME_CONTEXT = """당신은 PRISM의 단일 유사문헌 검색 에이전트입니다.
 사용자 Master/Search Prompt의 전략에 따라 검색어·도구 선택·확장·종료·후보 선정·
 순위·A/B/C 분류·구성 대응과 기술적 설명을 이 실행 안에서 모두 판단하십시오.
-ARIA는 독립 검색, 후보 강제 추가, 기술 점수, 공식 응답 기반 재분류를 하지 않습니다.
+PRISM은 독립 검색, 후보 강제 추가, 기술 점수, 공식 응답 기반 재분류를 하지 않습니다.
 
 [도구와 안전 경계]
-- WebSearch/WebFetch와 명시적으로 제공된 aria-search MCP 도구만 사용하십시오.
+- WebSearch/WebFetch와 명시적으로 제공된 prism-search MCP 도구만 사용하십시오.
 - 도구 목록에 없는 연동은 사용할 수 없습니다. search_capabilities로 상태를 확인할 수 있습니다.
 - EPO/논문 조회는 선택 사항입니다. 비용·출처별 고정 슬롯이나 필수 호출 순서는 없습니다.
 - 논문 검색어·영문 전환도 직접 판단하고 실제 보낸 질의를 기록하십시오.
@@ -145,7 +145,7 @@ ARIA는 독립 검색, 후보 강제 추가, 기술 점수, 공식 응답 기반
 [판단과 사실 구분]
 A/B/C/null은 기술적 판단입니다. 초록만 확보했거나 원문이 미확인이라는 이유로
 그룹을 기계적으로 바꾸지 마십시오. 검토한 범위와 판단의 한계를 설명하십시오.
-ARIA는 문헌번호/DOI·응답·보존 아티팩트의 일치만 대조합니다.
+PRISM은 문헌번호/DOI·응답·보존 아티팩트의 일치만 대조합니다.
 도구가 준 evidence_refs를 대응 행의 evidence_ref에 그대로 넣으십시오.
 support_text는 실제로 읽은 해당 필드의 근거 문장이어야 합니다.
 원문 확인이 불가능하면 verbatim_excerpt·translation·source_location은 빈 문자열로
@@ -191,7 +191,7 @@ read_url_content는 content.md 경로를 반환합니다. 가져오기만 하고
 읽지 못한 후보도 기술적 설명을 남길 수 있으나 직접 인용을 주장하지 마십시오.
 """
 CODEX_SEARCH_RUNTIME_CONTEXT = SEARCH_RUNTIME_CONTEXT.replace("WebSearch/WebFetch", "web_search") + """
-Codex의 web_search URL 조회는 ARIA가 본문 열람 성공을 검증할 수 없습니다.
+Codex의 web_search URL 조회는 PRISM이 본문 열람 성공을 검증할 수 없습니다.
 MCP로 전달받은 보존 응답 외에는 직접 인용을 확인된 사실로 표시하지 마십시오.
 """
 
@@ -221,7 +221,7 @@ _AGY_ALLOWLIST_RULES = """
    access_failures 에 사유를 적은 뒤 다음 후보로 넘어가십시오.
 5. **어떤 접근 실패도 실행을 중단할 이유가 아닙니다.** 한 문헌을 열지 못했다고
    남은 검색을 그만두지 마십시오. 마지막에는 어떤 경우에도 반드시
-   [ARIA_SEARCH_LOG_V1] 블록을 출력하십시오. 블록이 없으면 그때까지 한 검색이
+   [PRISM_SEARCH_LOG_V1] 블록을 출력하십시오. 블록이 없으면 그때까지 한 검색이
    전부 버려지고 사용자는 아무 후보도 받지 못합니다."""
 
 
@@ -250,13 +250,13 @@ DEFAULTS: dict[str, object] = {
     "max_file_size_bytes": 25 * 1024 * 1024,
     "max_total_upload_bytes": 100 * 1024 * 1024,
     "max_files_per_job": 20,
-    # ARIA 자체의 글자 수 한도. 0(또는 null)이면 제한 없음이며 기본값이다.
+    # PRISM 자체의 글자 수 한도. 0(또는 null)이면 제한 없음이며 기본값이다.
     # 이 값은 안전 장치가 아니라 사용자가 스스로 걸어 두는 상한이다. 실행을
     # 실제로 막아야 하는 한도는 두 가지뿐이고, 둘 다 사용자가 끌 수 없다.
     #   1. Provider 전송 한도(Provider.max_input_bytes) — 그 CLI 가 자료 전체를
     #      손실 없이 모델에 전달할 수 있는 크기.
     #   2. 모델 컨텍스트 한도 — Provider 호출이 스스로 거절한다.
-    # 어느 쪽을 넘든 ARIA 는 문서를 자르거나 요약하지 않고 중단한다.
+    # 어느 쪽을 넘든 PRISM 은 문서를 자르거나 요약하지 않고 중단한다.
     "max_inline_chars": 0,
     "default_timeout_seconds": 900,
     "max_concurrency_per_provider": 1,
@@ -272,17 +272,17 @@ DEFAULTS: dict[str, object] = {
     "default_provider": "",
     "provider_paths": {},
     "default_models": {},
-    # provider -> 추론강도. 값이 없으면 **모델 기본값**이며, 그때 ARIA 는
+    # provider -> 추론강도. 값이 없으면 **모델 기본값**이며, 그때 PRISM 은
     # CLI 에 아무 것도 넘기지 않는다. 여기에 기본 레벨을 적어 두지 않는 이유는
-    # 그 순간 ARIA 가 모델 카탈로그의 기본값을 덮어쓰기 때문이다 — 사용자가
+    # 그 순간 PRISM 이 모델 카탈로그의 기본값을 덮어쓰기 때문이다 — 사용자가
     # 고르지 않았는데 강도를 정해 주는 셈이 된다.
     "reasoning_effort": {},
     "keep_raw_output": True,
     # 도구를 끌 수 없는 Provider 라도, 실제 도구 호출이 발생하면 실패로 본다.
     "fail_on_tool_use": True,
-    # 유사 문헌 검색 한 건에서 허용하는 도구 호출 총 횟수. 넘으면 ARIA 가
+    # 유사 문헌 검색 한 건에서 허용하는 도구 호출 총 횟수. 넘으면 PRISM 이
     # 프로세스를 끊고 SEARCH_BUDGET_EXCEEDED 로 실패시킨다. 프롬프트의
-    # 검색 라운드 수는 LLM이 결정하며 ARIA는 전체 호출 수만 제한한다.
+    # 검색 라운드 수는 LLM이 결정하며 PRISM은 전체 호출 수만 제한한다.
     "max_search_tool_calls": 40,
     # 인용발명 문헌을 최종 분석 모델에게 어떻게 전달할 것인가.
     #
@@ -324,7 +324,7 @@ DEFAULTS: dict[str, object] = {
     #
     # 입력 예산 = 컨텍스트 - 출력·추론 예약
     #
-    # 값의 출처는 providers/model_limits.py 를 보라. ARIA 는 모델 한도를
+    # 값의 출처는 providers/model_limits.py 를 보라. PRISM 은 모델 한도를
     # **추측하지 않는다.** 아는 값이 없으면 보수적 대체값을 쓰고 그 사실을
     # 판정 사유에 남긴다.
     #
@@ -358,7 +358,7 @@ DEFAULTS: dict[str, object] = {
     # Kiwee 특허 검색 연동. 기본 꺼짐. 켜도 지금은 연동 지점(모듈)만 준비된
     # 상태라 실제 외부 검색은 수행하지 않는다. app.patent_search 참조.
     "kiwee_integration_enabled": False,
-    # Optional agent tools; credentials and hard external quotas remain ARIA-owned.
+    # Optional agent tools; credentials and hard external quotas remain PRISM-owned.
     "epo_integration_enabled": False,
     "epo_consumer_key": "",
     "epo_consumer_secret": "",

@@ -19,9 +19,9 @@ GROUP_DEFINITIONS = {
 INPUT_KIND_QUERY, INPUT_KIND_URL = "query", "url"
 SEARCH_TOOL_NAMES = frozenset(("WebSearch", "search_web", "web_search"))
 FETCH_TOOL_NAMES = frozenset(("WebFetch", "read_url_content"))
-OPEN, CLOSE = "[ARIA_SEARCH_LOG_V1]", "[/ARIA_SEARCH_LOG_V1]"
+OPEN, CLOSE = "[PRISM_SEARCH_LOG_V1]", "[/PRISM_SEARCH_LOG_V1]"
 _MAX_OUTPUT_BYTES = 2_000_000
-_BLOCK = re.compile(r"(?m)^[ \t]*\[ARIA_SEARCH_LOG_V1\][ \t]*\r?\n(.*?)^[ \t]*\[/ARIA_SEARCH_LOG_V1\][ \t]*$", re.S | re.M)
+_BLOCK = re.compile(r"(?m)^[ \t]*\[PRISM_SEARCH_LOG_V1\][ \t]*\r?\n(.*?)^[ \t]*\[/PRISM_SEARCH_LOG_V1\][ \t]*$", re.S | re.M)
 
 class SearchLogError(ValueError):
     pass
@@ -124,10 +124,10 @@ def strip_block(text: str) -> str:
 def has_retrieval_attempt(calls, tool_uses=None, journal=None) -> bool:
     """Capabilities checks alone do not constitute a literature search."""
     names = set(tool_uses or []) | {call.get("name") for call in (calls or [])}
-    names.update("mcp__aria-search__" + str(row.get("tool", ""))
+    names.update("mcp__prism-search__" + str(row.get("tool", ""))
                  for row in (journal or []) if row.get("state") == "started")
     eligible = SEARCH_TOOL_NAMES | FETCH_TOOL_NAMES | {
-        f"mcp__aria-search__{source}_{action}"
+        f"mcp__prism-search__{source}_{action}"
         for source in ("epo", "literature", "kiwee") for action in ("search", "fetch")
     }
     return bool(names & eligible)
@@ -196,13 +196,16 @@ def build(*, claim_text, provider="", model="", prompt_id="", prompt_name="",
           date_filter=None, max_tool_calls_total=40, timeout_seconds=900, usage=None,
           raw_output="", search_depth="standard", claim_boundary_neutralized=False, spec_boundary_neutralized=False,
           focus_boundary_neutralized=False, template_mode="", strategy_boundary_neutralized=False,
-          tool_policy_name="", allowed_tools=(), mcp_tools=(), advertised_tools_enforced=False) -> dict:
+          tool_policy_name="", allowed_tools=(), mcp_tools=(), advertised_tools_enforced=False,
+          quality=None, verification_followup=None) -> dict:
     try:
         llm_output = parse_payload(raw_output) if raw_output else None
     except SearchLogError:
         llm_output = None
     return {
-        "version": MANIFEST_VERSION, "status": "incomplete" if error else "complete",
+        "version": MANIFEST_VERSION, "status": "incomplete" if error else (
+            "verification_incomplete" if quality and quality.get("verification_status") != "complete" else "complete"),
+        "quality": quality, "verification_followup": verification_followup,
         "provider": provider, "model": model, "group_definitions": dict(GROUP_DEFINITIONS),
         "input": {"claim_text": claim_text, "spec_document": spec_document, "search_focus": search_focus,
                   "claim_boundary_neutralized": claim_boundary_neutralized,

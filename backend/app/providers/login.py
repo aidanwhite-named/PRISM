@@ -1,6 +1,6 @@
-"""각 CLI가 소유하는 인증 흐름을 ARIA UI에서 시작하고 관찰한다.
+"""각 CLI가 소유하는 인증 흐름을 PRISM UI에서 시작하고 관찰한다.
 
-ARIA는 비밀번호, API Key, OAuth code/token, CLI 출력 원문을 저장하지 않는다.
+PRISM은 비밀번호, API Key, OAuth code/token, CLI 출력 원문을 저장하지 않는다.
 브라우저 인증은 CLI 프로세스가 직접 수행하고 자격증명도 CLI의 기본 저장소에
 남긴다. 이 모듈이 보관하는 것은 메모리상의 진행 상태와 프로세스 핸들뿐이다.
 
@@ -295,7 +295,7 @@ class ProviderLoginManager:
             self._prune_finished()
             session.task = asyncio.create_task(
                 self._run(session, resolved, executable_override),
-                name=f"aria-{intent}-{provider}-{session.session_id}",
+                name=f"prism-{intent}-{provider}-{session.session_id}",
             )
             return session.public()
 
@@ -480,7 +480,7 @@ class ProviderLoginManager:
         session.state = "WAITING_FOR_USER"
         session.message = (
             "열린 agy 창에서 Google 로그인을 완료한 뒤 해당 창을 닫으세요. "
-            "ARIA가 자동으로 로그인 상태를 다시 확인합니다."
+            "PRISM이 자동으로 로그인 상태를 다시 확인합니다."
         )
         flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
         session.process = await asyncio.create_subprocess_exec(
@@ -535,7 +535,7 @@ class ProviderLoginManager:
         session.state = "WAITING_FOR_USER"
         session.message = (
             "열린 agy 창에 /logout 을 입력해 로그아웃한 뒤 창을 닫으세요. "
-            "ARIA가 로그아웃 상태를 다시 확인합니다."
+            "PRISM이 로그아웃 상태를 다시 확인합니다."
         )
         flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
         session.process = await asyncio.create_subprocess_exec(

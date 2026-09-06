@@ -1,7 +1,7 @@
 """AI 가 돌려줄 수 있는 action 의 전체 목록.
 
 AI 에게 범용 셸이나 파일 도구를 주지 않는다. 대신 **이 파일에 있는 것만**
-JSON 으로 돌려주게 하고, 실제 조회는 ARIA 가 한다. 그래서 이 목록이 곧 AI 가
+JSON 으로 돌려주게 하고, 실제 조회는 PRISM 이 한다. 그래서 이 목록이 곧 AI 가
 로컬 자료에 대해 할 수 있는 일의 전부다.
 
 각 action 은 Pydantic 모델이라 형식 검증이 파싱 단계에서 끝난다. 존재하지 않는
@@ -74,7 +74,7 @@ class SearchDocument(_Base):
     attachment: str = ALL_DOCUMENTS
     queries: list[str] = Field(default_factory=list)
     limit: int = 8
-    # ARIA 내부 이월 검색용. 이미 모델에게 보여준 후보를 제외하고 다음 후보를
+    # PRISM 내부 이월 검색용. 이미 모델에게 보여준 후보를 제외하고 다음 후보를
     # 가져온다. 모델이 보내도 결과의 정확성에는 영향을 주지 않지만, 공개 action
     # 스키마에는 노출하지 않는다.
     exclude_chunk_ids: list[str] = Field(default_factory=list)
@@ -217,7 +217,7 @@ class EvidenceRef(_Base):
     """근거 하나. 원문은 여기 담지 않는다.
 
     모델은 **어느 청크인가**와 **왜 관련 있는가**만 적는다. 원문 텍스트는
-    ARIA 가 자기 인덱스에서 채운다. 그래야 모델이 원문을 고치거나 지어내는
+    PRISM 이 자기 인덱스에서 채운다. 그래야 모델이 원문을 고치거나 지어내는
     경로가 구조적으로 없다.
     """
 
@@ -237,7 +237,7 @@ class FinalizeComponent(_Base):
     component_id: str
     searched_terms: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
-    # 모델의 주장. ARIA 가 그대로 쓰지 않고 자기 관측과 대조해서 확정한다.
+    # 모델의 주장. PRISM 이 그대로 쓰지 않고 자기 관측과 대조해서 확정한다.
     status_claim: str = ""
     note: str = ""
 
@@ -273,7 +273,7 @@ AnyAction = Annotated[
 
 
 class ComponentDeclaration(_Base):
-    """AI 가 분해한 청구항 구성 하나. id 는 ARIA 가 붙인다."""
+    """AI 가 분해한 청구항 구성 하나. id 는 PRISM 이 붙인다."""
 
     label: str = ""
     feature: str = ""

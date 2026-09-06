@@ -29,10 +29,10 @@ class ProbeResult:
     capabilities: dict = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     install_hint: str = ""
-    # 설치·인증 상태와 별개로 ARIA가 이 Provider의 실행 경로를 구현했는가.
+    # 설치·인증 상태와 별개로 PRISM이 이 Provider의 실행 경로를 구현했는가.
     execution_supported: bool = True
 
-    # 제한된 안전성 Provider: 기술적으로는 동작하지만 ARIA 의 안전
+    # 제한된 안전성 Provider: 기술적으로는 동작하지만 PRISM 의 안전
     # 원칙(도구 없는 실행)을 충족하지 못한다.
     #
     # 이 표시는 '고지'이지 '관문'이 아니다. 예전에는 사용자가 체크박스로
@@ -104,7 +104,7 @@ class ToolPolicy:
                        검색 예산이 말라 버린다.
 
     도메인 제한은 여기에 없다. Claude CLI 는 WebFetch 에만 도메인 규칙을 걸 수
-    있고 WebSearch 에는 걸 수 없으므로, ARIA 가 '검색 도메인을 제한한다'고
+    있고 WebSearch 에는 걸 수 없으므로, PRISM 이 '검색 도메인을 제한한다'고
     주장할 근거가 없다. 없는 보증을 필드로 만들지 않는다.
     """
 
@@ -175,7 +175,7 @@ NO_TOOLS = ToolPolicy(name="no_tools")
 # WebSearch 를 한 번도 부르지 않으면 검색을 수행한 것이 아니므로 실패로 본다.
 # 추론강도. 값이 이 목록에 있어도 **모든 모델이 그 레벨을 지원하지는 않는다** —
 # 2026-08-30 기준 gpt-5.6-sol 은 여섯 개 전부, luna 는 ultra 없이 다섯 개,
-# gpt-5.5/5.4 는 앞의 네 개다. ARIA 는 모델별 지원 여부를 검사하지 않는다.
+# gpt-5.5/5.4 는 앞의 네 개다. PRISM 은 모델별 지원 여부를 검사하지 않는다.
 # 검사하려면 계정별 모델 카탈로그를 읽어야 하는데, 그 값은 CLI 가 명령으로
 # 알려주지 않고 캐시 파일 형태로만 있어서 우리가 보증할 수 없다. 지원하지 않는
 # 레벨을 넘기면 CLI 가 거절하고, 그 오류를 그대로 사용자에게 보인다.
@@ -194,7 +194,7 @@ WEB_SEARCH = ToolPolicy(
 # agy 검색 실행. agy 는 search_web/read_url_content 를 실제로 제공하지만
 # --tools 같은 노출 제한 플래그가 없다. 따라서 이 정책은 허용 도구의 사전
 # allowlist 가 아니라 실제 호출에 대한 사후 탐지 계약이다. --sandbox 와 agy 의
-# request-review 권한 모드를 함께 쓰지만, ARIA 가 호출 자체를 차단한다고 주장하지
+# request-review 권한 모드를 함께 쓰지만, PRISM 이 호출 자체를 차단한다고 주장하지
 # 않는다.
 #
 # view_file 은 allowed_tools 가 아니라 content_read_tools 에 있다. agy 의
@@ -243,7 +243,7 @@ CODEX_WEB_SEARCH = ToolPolicy(
     enforce_advertised_allowlist=False,
 )
 
-ARIA_MCP_TOOL_NAMES = (
+PRISM_MCP_TOOL_NAMES = (
     "search_capabilities",
     "epo_search",
     "epo_fetch",
@@ -252,8 +252,8 @@ ARIA_MCP_TOOL_NAMES = (
     "literature_search",
     "literature_fetch",
 )
-ARIA_MCP_TOOLS = tuple(
-    f"mcp__aria-search__{name}" for name in ARIA_MCP_TOOL_NAMES
+PRISM_MCP_TOOLS = tuple(
+    f"mcp__prism-search__{name}" for name in PRISM_MCP_TOOL_NAMES
 )
 
 POLICIES = {
@@ -271,7 +271,7 @@ class ExecutionRequest:
     model: str | None = None
     # 빈 문자열이면 **모델 기본값**이다. 그때 Provider 는 CLI 에 추론강도를
     # 아예 넘기지 않는다. 여기에 기본 레벨을 채워 두면 사용자가 고르지 않았는데
-    # ARIA 가 모델 카탈로그의 기본값을 덮어쓰게 된다.
+    # PRISM 이 모델 카탈로그의 기본값을 덮어쓰게 된다.
     reasoning_effort: str = ""
     timeout_seconds: int = 900
     # 지정하지 않으면 도구 없음. 새 호출 경로가 실수로 도구를 여는 일이 없도록
@@ -305,7 +305,7 @@ class ExecutionOutcome:
     cli_args: list[str] = field(default_factory=list)
     cancelled: bool = False
     timed_out: bool = False
-    # 최종 결과를 다 받았는데 CLI 프로세스가 끝나지 않아 ARIA 가 끊었다.
+    # 최종 결과를 다 받았는데 CLI 프로세스가 끝나지 않아 PRISM 이 끊었다.
     # timed_out 과 반드시 구분한다 — 이쪽은 result_text·usage·tool_calls 가
     # 전부 손에 있는 상태이고, 판정은 평소 경로(도구 정책·인증·상태값)를
     # 그대로 거친다. 이 값이 참이라고 해서 성공으로 건너뛰지 않는다.
@@ -328,9 +328,9 @@ class ExecutionOutcome:
     # 도구 호출 감사 기록. 이름·시각·요약된 입력·성공 여부.
     # 검색 작업의 "실제 검색어"는 모델의 자기 보고가 아니라 여기서 온다.
     tool_calls: list[dict] = field(default_factory=list)
-    # 정책의 max_tool_calls 를 넘겨서 ARIA 가 프로세스를 끊었다.
+    # 정책의 max_tool_calls 를 넘겨서 PRISM 이 프로세스를 끊었다.
     tool_budget_exceeded: bool = False
-    # 정책의 max_content_read_calls 를 넘겨서 ARIA 가 프로세스를 끊었다.
+    # 정책의 max_content_read_calls 를 넘겨서 PRISM 이 프로세스를 끊었다.
     # 검색 상한과 따로 센다 — 사용자에게 "검색을 줄여라"와 "본문 읽기를
     # 줄여라"는 다른 지시다.
     content_read_budget_exceeded: bool = False
@@ -356,7 +356,7 @@ class Provider(abc.ABC):
     # 끄지 못한다. None 이면 상한을 강제하지 않는다 — 자체적으로 큰 입력을
     # 조용히 잘라 버리는 Provider 만 값을 선언한다.
     #
-    # ARIA 의 글자 수 한도(max_inline_chars)는 이것을 대신하지 못한다. 그쪽은
+    # PRISM 의 글자 수 한도(max_inline_chars)는 이것을 대신하지 못한다. 그쪽은
     # 사용자가 스스로 거는 상한이라 0(제한 없음)으로 끌 수 있고, 애초에 문자로
     # 세는 다른 축이다. 한글 한 글자는 UTF-8 3 bytes 다.
     max_input_bytes: int | None = None

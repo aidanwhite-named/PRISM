@@ -4,7 +4,7 @@
 검증된 매핑만 넘긴다. 여기서 지키려는 성질은 이렇다.
 
   1. 매핑은 보고서에서 읽어 첨부와 대조해 검증한다. 모델이 쓴 별칭만 믿고
-     attachment_id 나 해시는 ARIA 가 채운다.
+     attachment_id 나 해시는 PRISM 이 채운다.
   2. 읽지 못해도 실행은 성공이다. 번호 유지 후속 실행만 막는다.
      보고서 전체 전달로 조용히 되돌아가지 않는다.
   3. MAPPED 는 번호와 이전 청구항만 넘기고 이전 보고서는 넘기지 않는다.
@@ -28,7 +28,7 @@ from app.config import PROMPT_DIR
 
 from .conftest import wait_for_job
 
-CAPABLE_PROMPT = """<!-- ARIA_PROMPT_METADATA
+CAPABLE_PROMPT = """<!-- PRISM_PROMPT_METADATA
 {
   "name": "매핑 지원 테스트 프롬프트",
   "output_mode": "markdown",
@@ -38,7 +38,7 @@ CAPABLE_PROMPT = """<!-- ARIA_PROMPT_METADATA
 -->
 청구항과 인용발명을 대비하십시오."""
 
-PLAIN_PROMPT = """<!-- ARIA_PROMPT_METADATA
+PLAIN_PROMPT = """<!-- PRISM_PROMPT_METADATA
 {
   "name": "매핑 미지원 테스트 프롬프트",
   "output_mode": "markdown",
@@ -120,7 +120,7 @@ def _aliases(*names: str) -> dict[str, AliasedAttachment]:
 
 def _block(items: list[dict]) -> str:
     payload = json.dumps({"items": items}, ensure_ascii=False)
-    return f"\n[ARIA_CITATION_MAPPING_V1]\n{payload}\n[/ARIA_CITATION_MAPPING_V1]\n"
+    return f"\n[PRISM_CITATION_MAPPING_V1]\n{payload}\n[/PRISM_CITATION_MAPPING_V1]\n"
 
 
 def test_parse_fills_identifiers_that_the_model_never_wrote() -> None:
@@ -192,11 +192,11 @@ def test_strip_block_handles_a_fenced_block() -> None:
         {"items": [{"citation_number": 1, "attachment": "ATT-01", "document_number": "K"}]}
     )
     report = (
-        "본문\n\n```json\n[ARIA_CITATION_MAPPING_V1]\n"
+        "본문\n\n```json\n[PRISM_CITATION_MAPPING_V1]\n"
         + payload
-        + "\n[/ARIA_CITATION_MAPPING_V1]\n```\n"
+        + "\n[/PRISM_CITATION_MAPPING_V1]\n```\n"
     )
-    assert "ARIA_CITATION_MAPPING" not in strip_block(report)
+    assert "PRISM_CITATION_MAPPING" not in strip_block(report)
     assert parse(report, _aliases("a.pdf"))["items"][0]["citation_number"] == 1
 
 
@@ -257,14 +257,14 @@ def test_mapping_is_verified_and_removed_from_the_deliverable(
     mapping = job["citation_mapping"]
     assert mapping is not None
     assert [item["citation_number"] for item in mapping["items"]] == [1, 2]
-    # 모델은 별칭만 썼다. 식별자와 해시는 ARIA 가 채운 것이라 첨부와 일치한다.
+    # 모델은 별칭만 썼다. 식별자와 해시는 PRISM 이 채운 것이라 첨부와 일치한다.
     by_hash = {a["sha256"]: a["attachment_id"] for a in job["attachments"]}
     for item in mapping["items"]:
         assert by_hash[item["attachment_sha256"]] == item["attachment_id"]
 
     # 사용자가 받아 가는 보고서에는 프로토콜 블록이 남지 않는다.
-    assert "ARIA_CITATION_MAPPING" not in (job["result_text"] or "")
-    assert "ARIA_CITATION_MAPPING" in client.get(f"/api/jobs/{job['id']}/raw").text
+    assert "PRISM_CITATION_MAPPING" not in (job["result_text"] or "")
+    assert "PRISM_CITATION_MAPPING" in client.get(f"/api/jobs/{job['id']}/raw").text
 
 
 def test_mapping_is_read_from_a_prompt_that_declares_nothing(
@@ -272,7 +272,7 @@ def test_mapping_is_read_from_a_prompt_that_declares_nothing(
 ) -> None:
     """capabilities 선언이 없어도 매핑을 읽는다.
 
-    출력 규칙을 ARIA 가 붙이므로(analysis_protocol) 선언은 더 이상 이 기능의
+    출력 규칙을 PRISM 이 붙이므로(analysis_protocol) 선언은 더 이상 이 기능의
     스위치가 아니다. 사용자가 프롬프트를 자기 것으로 갈아 끼우면서 선언을 잊는
     것이 기본값인데, 그때 번호 유지가 조용히 꺼지면 안 된다.
     """
@@ -280,13 +280,13 @@ def test_mapping_is_read_from_a_prompt_that_declares_nothing(
     assert job["status"] == "SUCCEEDED"
 
     # 선언하지 않은 프롬프트에도 규칙이 붙었고, 그 결과가 읽혔다.
-    assert "ARIA_CITATION_MAPPING_V1" in _final_prompt(client, job["id"])
+    assert "PRISM_CITATION_MAPPING_V1" in _final_prompt(client, job["id"])
     assert job["citation_mapping_error"] is None
     mapping = job["citation_mapping"]
     assert mapping is not None
     assert [item["citation_number"] for item in mapping["items"]] == [1]
     # 사용자가 받아 가는 보고서에는 프로토콜 블록이 남지 않는다.
-    assert "ARIA_CITATION_MAPPING" not in (job["result_text"] or "")
+    assert "PRISM_CITATION_MAPPING" not in (job["result_text"] or "")
 
 
 def test_unreadable_mapping_keeps_the_run_successful(

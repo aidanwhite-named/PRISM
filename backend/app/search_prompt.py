@@ -1,13 +1,13 @@
 """검색 전략 프롬프트 로딩과 데이터 구간 조립.
 
-분석 프롬프트와 같은 저장 방식(prompt/ 폴더의 UTF-8 파일 + ARIA 메타데이터
+분석 프롬프트와 같은 저장 방식(prompt/ 폴더의 UTF-8 파일 + PRISM 메타데이터
 헤더)을 쓰지만, 종류(kind)가 다르다. 검색 작업만 kind=search 프롬프트를 읽고,
 분석 작업은 그것을 보지 않는다. 검색 전략 프롬프트는 여러 개일 수 있고 실행마다
 고른다.
 
 두 가지 조립 방식
 -----------------
-    appended_sections   기본값. 사용자는 검색 전략만 쓰고, ARIA 가 그 뒤에
+    appended_sections   기본값. 사용자는 검색 전략만 쓰고, PRISM 이 그 뒤에
                         데이터 구간(청구항·미대응 구성·명세서)을 붙인다.
                         경계 표시와 placeholder 를 사용자가 관리하지 않는다.
     legacy_placeholders 본문에 ``{{CLAIM_TEXT}}`` 가 있는 옛 프롬프트. 예전
@@ -51,7 +51,7 @@ placeholder 가 없으면 실행하지 않고 오류를 낸다 — 경계 없이
 따로 렌더링하고 독립 실행한다. 여기서는 보조 프롬프트 안에서도 자료 역할이
 섞이지 않게 ``<SPEC_TEXT>`` … ``</SPEC_TEXT>`` 경계를 둔다.
 
-명세서 절 전체는 ``<!--ARIA_SPEC_BLOCK-->`` … ``<!--/ARIA_SPEC_BLOCK-->`` 로
+명세서 절 전체는 ``<!--PRISM_SPEC_BLOCK-->`` … ``<!--/PRISM_SPEC_BLOCK-->`` 로
 감싼다. 명세서를 넣지 않은 실행에서는 이 구간을 통째로 걷어낸다. 빈 칸과
 "명세서를 이렇게 쓰라"는 규칙만 남기면, 없는 자료에 대한 지시가 매 실행마다
 모델 앞에 놓인다. 걷어내면 명세서를 쓰지 않는 실행의 최종 본문은 이 기능이
@@ -86,21 +86,21 @@ CLOSE_TAG = "</CLAIM_TEXT>"
 SPEC_PLACEHOLDER = "{{SPEC_TEXT}}"
 SPEC_OPEN_TAG = "<SPEC_TEXT>"
 SPEC_CLOSE_TAG = "</SPEC_TEXT>"
-SPEC_BLOCK_OPEN = "<!--ARIA_SPEC_BLOCK-->"
-SPEC_BLOCK_CLOSE = "<!--/ARIA_SPEC_BLOCK-->"
+SPEC_BLOCK_OPEN = "<!--PRISM_SPEC_BLOCK-->"
+SPEC_BLOCK_CLOSE = "<!--/PRISM_SPEC_BLOCK-->"
 
 FOCUS_PLACEHOLDER = "{{SEARCH_FOCUS}}"
 FOCUS_OPEN_TAG = "<SEARCH_FOCUS>"
 FOCUS_CLOSE_TAG = "</SEARCH_FOCUS>"
-FOCUS_BLOCK_OPEN = "<!--ARIA_GAP_BLOCK-->"
-FOCUS_BLOCK_CLOSE = "<!--/ARIA_GAP_BLOCK-->"
+FOCUS_BLOCK_OPEN = "<!--PRISM_GAP_BLOCK-->"
+FOCUS_BLOCK_CLOSE = "<!--/PRISM_GAP_BLOCK-->"
 
 # 입력 안에 들어 있으면 경계를 깨는 문자열. 대소문자를 가리지 않는다.
 # 청구항 칸과 명세서 칸 양쪽에 같은 목록을 적용한다 — 명세서에 들어 있는
 # ``</CLAIM_TEXT>`` 는 자기 경계는 못 깨도 앞 칸이 닫힌 것처럼 보이게 만든다.
 _BOUNDARY_IN_INPUT = re.compile(
     r"</?\s*(?:CLAIM_TEXT|SPEC_TEXT|SEARCH_FOCUS)\s*>"
-    r"|<!--\s*/?\s*ARIA_(?:SPEC|GAP)_BLOCK\s*-->",
+    r"|<!--\s*/?\s*PRISM_(?:SPEC|GAP)_BLOCK\s*-->",
     re.IGNORECASE,
 )
 _NEUTRALIZED = "(경계 표시 제거됨)"
@@ -160,7 +160,7 @@ def is_legacy_template(body: str) -> bool:
 def validate_strategy_body(body: str, *, prompt_id: str = SEARCH_PROMPT_ID) -> None:
     """조립 전에 본문이 성립하는지 본다.
 
-    새 방식에는 요구하는 표시가 없다. 사용자는 전략만 쓰고 경계는 ARIA 가
+    새 방식에는 요구하는 표시가 없다. 사용자는 전략만 쓰고 경계는 PRISM 이
     붙이므로, 검사할 계약이 "비어 있지 않다" 하나뿐이다. 옛 방식 본문만 예전
     계약(placeholder 하나 + 경계 안)을 그대로 통과해야 한다.
     """
@@ -380,7 +380,7 @@ def compose(
     prompt_id: str = SEARCH_PROMPT_ID,
     cutoff: str = "",
 ) -> RenderedPrompt:
-    """검색 전략 본문에 ARIA 의 데이터 구간을 붙여 최종 본문을 만든다.
+    """검색 전략 본문에 PRISM 의 데이터 구간을 붙여 최종 본문을 만든다.
 
     옛 프롬프트(placeholder 를 직접 든 본문)는 예전 경로로 보낸다. 두 경로가
     만드는 결과는 다르지만 불변조건은 같다 — 청구항·명세서·미대응 구성이 각자
@@ -389,7 +389,7 @@ def compose(
     새 경로에서는 **사용자 전략 본문 자체도** 중화 대상이다. 전략에 적힌
     ``</CLAIM_TEXT>`` 가 그대로 나가면 그 뒤의 진짜 청구항 구간이 이미 닫힌
     것처럼 보인다. 사용자가 경계를 관리하지 않게 만든 이상, 위조도 막는 쪽이
-    ARIA 의 몫이다.
+    PRISM 의 몫이다.
     """
     if is_legacy_template(body):
         return render(
@@ -503,7 +503,7 @@ def render(
         FOCUS_PLACEHOLDER: focus,
     }
     rendered = _PLACEHOLDERS.sub(lambda m: filled.get(m.group(0), m.group(0)), body)
-    # 옛 본문에는 기준일 자리가 없다. placeholder 를 새로 요구하지 않고 ARIA 가
+    # 옛 본문에는 기준일 자리가 없다. placeholder 를 새로 요구하지 않고 PRISM 이
     # 소유하는 구간으로 뒤에 붙인다 — 사용자가 본문을 고쳐야만 기준일이 적용되면
     # 그 조건은 조용히 빠진다.
     rendered = rendered.rstrip() + (chr(10) * 2) + search_contract.cutoff_section(

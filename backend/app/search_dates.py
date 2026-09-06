@@ -238,7 +238,7 @@ def candidate_publication_date(candidate: dict) -> str:
 
     보는 자리는 세 곳이고 순서가 곧 신뢰 순서다.
 
-      1. ``publication_date`` — ARIA 가 공식 응답에서 채운 값
+      1. ``publication_date`` — PRISM 이 공식 응답에서 채운 값
       2. ``official_evidence.publication_date`` — 검증 단계가 확보한 값
       3. 채널별 발견 기록(``epo_discovery`` · ``literature_discovery``)
     """

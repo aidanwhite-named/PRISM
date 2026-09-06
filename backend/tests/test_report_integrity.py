@@ -292,10 +292,10 @@ def test_complete_run_gets_no_notice():
 
 def test_basis_is_optional_and_validated():
     text = (
-        "[ARIA_COMPONENT_ANALYSIS_V1]\n"
+        "[PRISM_COMPONENT_ANALYSIS_V1]\n"
         '{"items":[{"claim":"청구항 1","symbol":"(A)","feature":"f",'
         '"similarity":90,"status":"matched"}]}\n'
-        "[/ARIA_COMPONENT_ANALYSIS_V1]"
+        "[/PRISM_COMPONENT_ANALYSIS_V1]"
     )
     assert analysis_manifest.parse(text)["items"][0]["basis"] == ""
 

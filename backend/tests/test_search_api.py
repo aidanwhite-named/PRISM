@@ -39,7 +39,7 @@ def test_search_job_runs_and_stores_manifest(client) -> None:
     assert manifest is not None
     assert job["search_manifest_error"] is None
 
-    # ARIA 가 스트림에서 직접 본 것.
+    # PRISM 이 스트림에서 직접 본 것.
     observed = manifest["observed"]
     assert observed["search_queries"] == ["테스트 검색식 A", "테스트 검색식 B"]
     # 열려고 한 것과 실제로 열린 것을 구분한다.
@@ -66,14 +66,14 @@ def test_search_job_runs_and_stores_manifest(client) -> None:
 
 
 def test_report_is_generated_from_structured_fields(client) -> None:
-    """사용자 보고서는 ARIA 가 만든다. 모델 산문이 본문이 되지 않는다."""
+    """사용자 보고서는 PRISM 이 만든다. 모델 산문이 본문이 되지 않는다."""
     job = wait_for_job(client, _start(client)["id"])
     report = job["result_text"] or ""
 
-    assert "ARIA_SEARCH_LOG_V1" not in report
+    assert "PRISM_SEARCH_LOG_V1" not in report
     assert "유사 특허·논문 검토 후보" not in report
     assert "현재 검색 결과는 문헌 검토 후보 탐색 자료" not in report
-    assert "이 보고서는 ARIA 가 검증한 구조화 기록에서 생성했습니다" not in report
+    assert "이 보고서는 PRISM 이 검증한 구조화 기록에서 생성했습니다" not in report
     # 모델이 쓴 제목은 보고서 본문이 아니다.
     assert "유사 문헌 검토 후보 (테스트)" not in report
     # 구조화 필드에서 온 값은 들어간다.
@@ -192,7 +192,7 @@ def test_unread_page_does_not_erase_model_group_or_explanation(client):
     assert "source_not_read" in candidate["verification_issues"]
     assert candidate["group"] == "A"
     assert candidate["mapping"]
-    assert "LLM 그룹: A" in job["result_text"]
+    assert "## LLM 그룹 A" in job["result_text"]
 
 
 def test_runner_only_calls_mechanical_verification(client, monkeypatch):
@@ -205,7 +205,7 @@ def test_runner_only_calls_mechanical_verification(client, monkeypatch):
     monkeypatch.setattr(search_verification, "verify", verify)
     job = wait_for_job(client, _start(client)["id"])
     assert job["status"] == "SUCCEEDED"
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert "verification" not in job["search_manifest"]
 
 
@@ -638,7 +638,7 @@ def test_preflight_matches_what_the_runner_actually_sends(client) -> None:
 
 
 def test_preflight_reports_the_provider_byte_limit_not_just_chars(client) -> None:
-    """ARIA 글자 수 제한을 꺼도 최종 UTF-8 바이트 수는 보고한다."""
+    """PRISM 글자 수 제한을 꺼도 최종 UTF-8 바이트 수는 보고한다."""
     ahead = _preflight(client, batch_id=_upload_spec(client))
     assert ahead["char_budget"] is None
     # 이 테스트 Provider 는 바이트 한도를 선언하지 않는다. 그 사실이 그대로
@@ -807,7 +807,7 @@ def test_a_web_candidate_without_a_publication_date_is_marked_not_dropped(
 def test_search_prompt_never_carries_the_analysis_output_rules(client) -> None:
     """분석용 기계 판독 블록 규칙은 검색 실행에 붙지 않는다.
 
-    규칙을 ARIA 가 붙이게 되면서, 붙이지 않는 경로를 못박아 둘 필요가 생겼다.
+    규칙을 PRISM 이 붙이게 되면서, 붙이지 않는 경로를 못박아 둘 필요가 생겼다.
     검색은 자기 출력 계약(search_manifest)이 따로 있다. 두 계약이 한 프롬프트에
     같이 들어가면 모델이 어느 형식으로 답할지가 흔들린다.
     """
@@ -816,8 +816,8 @@ def test_search_prompt_never_carries_the_analysis_output_rules(client) -> None:
     assert job["status"] == JobStatus.SUCCEEDED, job["errors"]
 
     text = client.get(f"/api/jobs/{job['id']}/final-prompt").text
-    assert "ARIA_COMPONENT_ANALYSIS_V1" not in text
-    assert "ARIA_CITATION_MAPPING_V1" not in text
+    assert "PRISM_COMPONENT_ANALYSIS_V1" not in text
+    assert "PRISM_CITATION_MAPPING_V1" not in text
 
     # 규칙을 주지 않았으니 읽지도 않는다. 없는 블록을 찾다 실패를 기록하면
     # 검색 실행마다 근거 없는 오류가 남는다.

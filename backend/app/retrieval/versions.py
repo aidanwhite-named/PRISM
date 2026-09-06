@@ -21,7 +21,7 @@ INDEX_VERSION = 1
 
 # 추출기 신원. pypdf 버전을 그대로 싣는다 — requirements 를 올리면 자동으로
 # 달라지므로, 의존성만 바꾸고 인덱스를 그대로 쓰는 실수가 생기지 않는다.
-EXTRACTOR_VERSION = f"pypdf-{pypdf.__version__}+aria-1"
+EXTRACTOR_VERSION = f"pypdf-{pypdf.__version__}+prism-1"
 
 
 def library_versions() -> dict[str, str]:

@@ -7,7 +7,7 @@ OPS 는 요청 수가 아니라 **데이터량**으로 과금된다. 그래서 "
 두 개의 숫자를 따로 본다
 ------------------------
     OPS 가 알려주는 값   응답 헤더의 주간·시간당 사용량. **권위 있는 값**이다.
-    ARIA 가 세는 값      우리가 받은 응답 바이트의 누적. 헤더가 없을 때의
+    PRISM 이 세는 값      우리가 받은 응답 바이트의 누적. 헤더가 없을 때의
                          대비책이고, 헤더와 어긋나면 그 사실 자체가 신호다.
 
 둘을 하나로 합치지 않는다. 합치면 "OPS 는 3GB 라는데 우리는 1GB 로 셌다"는
@@ -162,7 +162,7 @@ def _max_or_none(left, right):
 
 
 def week_key(now: datetime | None = None) -> str:
-    """ARIA 로컬 카운터의 주간 창. UTC ISO 주(월요일 시작).
+    """PRISM 로컬 카운터의 주간 창. UTC ISO 주(월요일 시작).
 
     OPS 의 주간 창과 정확히 같다고 주장하지 않는다. 로컬 카운터는 헤더가 없을
     때의 대비책이므로, 창이 조금 어긋나면 더 보수적으로 셀 뿐이다.
@@ -177,7 +177,7 @@ class QuotaState:
     """저장되는 사용량 상태. AppSetting 한 칸에 JSON 으로 들어간다."""
 
     week: str = ""
-    local_bytes: int = 0            # ARIA 가 센 이번 주 누적 응답 바이트
+    local_bytes: int = 0            # PRISM 이 센 이번 주 누적 응답 바이트
     requests: int = 0               # 이번 주 OPS 요청 수 (참고용)
     ops_weekly_bytes: int | None = None   # OPS 헤더가 알려준 주간 사용량
     ops_hourly_bytes: int | None = None   # OPS 헤더가 알려준 시간당 사용량

@@ -261,14 +261,14 @@ def evaluate(
     policy = effective_policy(outcome)
 
     # --- 종료 상태가 먼저다 -------------------------------------------------
-    # 도구 상한을 넘겨 ARIA 가 프로세스를 끊은 경우에도 cancelled 는 참이다.
+    # 도구 상한을 넘겨 PRISM 이 프로세스를 끊은 경우에도 cancelled 는 참이다.
     # 그건 사용자가 누른 취소가 아니므로 여기서 삼키지 않고 아래로 넘긴다.
     if outcome.cancelled and not (
         outcome.tool_budget_exceeded or outcome.content_read_budget_exceeded
     ):
         return Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, errors)
 
-    # 최종 결과를 다 받은 뒤 CLI 가 안 죽어서 ARIA 가 끊은 실행은 타임아웃이
+    # 최종 결과를 다 받은 뒤 CLI 가 안 죽어서 PRISM 이 끊은 실행은 타임아웃이
     # 아니다. 결과 텍스트·사용량·도구 기록이 전부 있으므로 아래의 인증·사용량·
     # 도구 정책 검사를 그대로 통과해야만 성공이 된다. 여기서 성공으로 건너뛰지
     # 않는다 — status 가 SUCCESS 라는 문자열 하나로 정책 위반을 덮으면 안 된다.
@@ -311,7 +311,7 @@ def evaluate(
                     str(call.get("name") or "") for call in outcome.tool_calls
                     if isinstance(call, dict)
                 })[:10])
-                + ". ARIA 는 첨부 자료를 프롬프트에 직접 넣어 전달하므로 "
+                + ". PRISM 은 첨부 자료를 프롬프트에 직접 넣어 전달하므로 "
                 "도구 호출이 필요하지 않습니다."
             )
             return Verdict(JobStatus.FAILED, ErrorCode.TOOL_POLICY_VIOLATION, errors)
@@ -373,7 +373,7 @@ def evaluate(
         )
         return Verdict(JobStatus.FAILED, ErrorCode.SEARCH_BUDGET_EXCEEDED, errors)
 
-    # 정책을 선언하지 않은 Provider. 도구를 끌 수단이 없으므로 ARIA 는 호출을
+    # 정책을 선언하지 않은 Provider. 도구를 끌 수단이 없으므로 PRISM 은 호출을
     # 탐지할 뿐 막지 못한다. 여기서만 전역 설정이 개입한다 — 사용자가 완화할 수
     # 있는 것은 이 마지막 경로뿐이고, 위의 정책 검사에는 닿지 않는다.
     if policy is None and outcome.tool_uses and (
@@ -382,7 +382,7 @@ def evaluate(
         errors.append(
             "실행 중 도구가 호출되었습니다: "
             + ", ".join(sorted(set(outcome.tool_uses))[:10])
-            + ". ARIA 는 첨부 자료를 프롬프트에 직접 넣어 전달하므로 도구 호출이 필요하지 않습니다."
+            + ". PRISM 은 첨부 자료를 프롬프트에 직접 넣어 전달하므로 도구 호출이 필요하지 않습니다."
         )
         return Verdict(JobStatus.FAILED, ErrorCode.TOOL_POLICY_VIOLATION, errors)
 

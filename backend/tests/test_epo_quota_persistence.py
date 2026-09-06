@@ -515,7 +515,7 @@ def test_sync_runs_outside_the_store_lock(client, clean_quota) -> None:
 # 서브프로세스로 빼면 타임아웃으로 깔끔하게 실패한다.
 _DEADLOCK_PROBE = """
 import os, sys, tempfile, threading
-os.environ["ARIA_DATA_DIR"] = tempfile.mkdtemp(prefix="aria-deadlock-")
+os.environ["PRISM_DATA_DIR"] = tempfile.mkdtemp(prefix="prism-deadlock-")
 sys.path.insert(0, {backend!r})
 from app.db import init_engine, session_scope
 init_engine()

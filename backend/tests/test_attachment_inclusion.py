@@ -24,7 +24,7 @@ from .fake_provider import RECEIVED
 
 CLAIM = "청구항 1. 제1 센서와 제2 센서를 포함하는 장치."
 
-CAPABLE_PROMPT = """<!-- ARIA_PROMPT_METADATA
+CAPABLE_PROMPT = """<!-- PRISM_PROMPT_METADATA
 {
   "name": "포함 여부 테스트 프롬프트",
   "output_mode": "markdown",

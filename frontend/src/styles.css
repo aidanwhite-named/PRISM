@@ -1,4 +1,4 @@
-/* ARIA production interface — single consolidated stylesheet. */
+/* PRISM production interface — single consolidated stylesheet. */
 
 :root {
   --bg: #f5f5f1;
@@ -1068,6 +1068,23 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .pill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .search-candidate-note { margin-top: 4px; color: var(--text-muted); }
 .search-query-list { margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.7; }
+.search-results { font-size: 15px; line-height: 1.75; }
+.search-results details > summary { font-size: 14px; }
+.search-group-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.search-group-nav a { display: block; padding: 16px; border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-decoration: none; background: rgba(232, 235, 231, 0.48); }
+.search-group-nav a:hover, .search-group-nav a:focus-visible { outline: 2px solid var(--text-muted); }
+.search-group-nav strong { font-size: 21px; margin-right: 12px; }
+.search-group-nav small { display: block; margin-top: 6px; font-size: 14px; }
+.search-result-group { margin-top: 30px; scroll-margin-top: 24px; }
+.search-result-group > header { border-bottom: 2px solid var(--border); margin-bottom: 16px; padding: 12px 0; }
+.search-result-group h2 { font-size: 24px; margin: 0; }
+.search-result-group h2 span { font-size: 16px; font-weight: 500; margin-left: 10px; }
+.search-result-group > header p { margin: 6px 0 0; }
+.search-result-candidate h3 { font-size: 19px; line-height: 1.5; margin-top: 0; }
+.search-result-mapping { min-width: 760px; font-size: 14px; }
+.search-result-mapping th { font-size: 13px; letter-spacing: 0; }
+.search-result-mapping td { vertical-align: top; width: 25%; }
+.search-result-mapping p { margin: 6px 0; }
 .search-query-list li { margin-bottom: 3px; overflow-wrap: anywhere; }
 .search-log { margin-top: 14px; }
 .search-mapping-table { min-width: 940px; font-size: 11px; }

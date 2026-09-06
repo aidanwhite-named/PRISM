@@ -21,7 +21,7 @@ export interface JobStreamState {
   /** 검색 실행에서 관측한 도구 호출 수. 진행 표시에만 쓴다. */
   searchCount: number;
   fetchCount: number;
-  /** 로컬 검색 실행의 진행 상황. 색인·라운드·읽은 페이지는 ARIA 가 센다. */
+  /** 로컬 검색 실행의 진행 상황. 색인·라운드·읽은 페이지는 PRISM 이 센다. */
   retrievalRound: number;
   retrievalPagesRead: number;
 }

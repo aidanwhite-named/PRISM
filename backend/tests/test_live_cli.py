@@ -68,7 +68,7 @@ async def _run(
     async def emit(event_type: str, payload: dict) -> None:
         events.append((event_type, payload))
 
-    with tempfile.TemporaryDirectory(prefix="aria-live-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="prism-live-") as tmp:
         request = ExecutionRequest(
             job_id=f"live-{abs(hash(user_message)) % 10**8}",
             work_dir=Path(tmp),
@@ -127,7 +127,7 @@ async def test_claude_search_policy_opens_only_web_tools_live() -> None:
 
     이 테스트만이 "웹 검색이 이 PC 에서 실제로 동작하는가"를 확인한다.
     Anthropic 의 WebSearch 백엔드는 지역 제한이 있을 수 있으므로, 검색이
-    한 번도 일어나지 않으면 실패가 아니라 skip 으로 남긴다 — 그건 ARIA 의
+    한 번도 일어나지 않으면 실패가 아니라 skip 으로 남긴다 — 그건 PRISM 의
     결함이 아니라 계정/지역 조건이다.
     """
     provider = await _usable(
@@ -209,7 +209,7 @@ async def test_claude_cannot_read_local_files() -> None:
     async def emit(event_type: str, payload: dict) -> None:
         events.append((event_type, payload))
 
-    with tempfile.TemporaryDirectory(prefix="aria-live-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="prism-live-") as tmp:
         secret = Path(tmp) / "secret.txt"
         secret.write_text("SENTINEL_VALUE_9931", encoding="utf-8")
         request = ExecutionRequest(

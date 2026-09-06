@@ -2,15 +2,15 @@
 
 AI 에게 셸이나 파일 도구를 주지 않는다. 대신 이렇게 돈다.
 
-    ARIA → (청구항 + 문헌 목록 + 예산)      → AI
-    AI   → (구조화된 action JSON)            → ARIA
-    ARIA → (인덱스 조회 결과, 원문 구간)     → AI
+    PRISM → (청구항 + 문헌 목록 + 예산)      → AI
+    AI   → (구조화된 action JSON)            → PRISM
+    PRISM → (인덱스 조회 결과, 원문 구간)     → AI
     ...
-    AI   → finalize_evidence                 → ARIA (검증 후 근거 패키지)
+    AI   → finalize_evidence                 → PRISM (검증 후 근거 패키지)
 
 모든 LLM 호출은 기존 Provider 추상화의 NO_TOOLS 정책으로 나간다. Codex/Claude/
 agy 의 셸·파일 도구 호출에 기대지 않는다 — 그쪽은 실행마다 무엇을 읽었는지가
-달라지고, ARIA 는 그 사실을 확인할 수 없다.
+달라지고, PRISM 은 그 사실을 확인할 수 없다.
 
 라운드마다 새 프로세스를 띄우고 상태를 메시지로 다시 넣는다. CLI 세션
 (`--resume`)을 쓰지 않는 이유는 README 와 같다 — 모델이 실제로 무엇을 받았는지가
@@ -68,9 +68,6 @@ DEFAULT_HITS_PER_DOCUMENT = 6
 # 축이다 — 검색을 적게 하고도 페이지를 통째로 받아 가면 컨텍스트가 터진다.
 MAX_ROUND_RESULT_CHARS = 56_000
 
-# 후보가 없는 구성의 첫 결과를 페이지 재열람이 밀어내지 않도록 예약한다.
-UNSEEDED_RESULT_SHARE = 0.30
-
 # 검색 결과 한 줄에서 모델에게 보여주는 본문 길이. 근거 패키지에는 청크
 # 전체가 들어가므로 여기서 자른 것이 최종 보고서에 영향을 주지 않는다.
 SNIPPET_CHARS = 900
@@ -82,7 +79,7 @@ SNIPPET_CHARS = 900
 CONTEXT_NEIGHBOUR_CHUNKS = 1
 CONTEXT_CHARS = 500
 
-# 이 구성에 대해 ARIA 가 관측한 서로 다른 검색어가 이보다 적으면, 모델이
+# 이 구성에 대해 PRISM 이 관측한 서로 다른 검색어가 이보다 적으면, 모델이
 # not_found 를 주장해도 확정하지 않는다. 모델의 자기 보고가 아니라 실제 실행된
 # 검색을 센다.
 MIN_EXPANSION_TERMS = 3
@@ -207,7 +204,7 @@ class DocumentSearchRecord:
 
 @dataclass
 class ComponentState:
-    """구성 하나에 대해 ARIA 가 직접 관측한 것."""
+    """구성 하나에 대해 PRISM 이 직접 관측한 것."""
 
     id: str
     label: str
@@ -473,7 +470,7 @@ class CarryoverState:
 class CarryoverDelivery:
     """고정된 후보 목록의 미전달분을 돌려주는 내부 action.
 
-    모델이 만드는 action 이 아니다. ARIA 가 스스로 큐에 넣는다. 새 검색어나
+    모델이 만드는 action 이 아니다. PRISM 이 스스로 큐에 넣는다. 새 검색어나
     넓힌 범위는 여기로 오지 않고 별도의 검색으로 처리된다.
     """
 
@@ -539,13 +536,13 @@ class RetrievalRun:
     rounds: list[RoundRecord] = field(default_factory=list)
     components: list[ComponentState] = field(default_factory=list)
     finalize: FinalizeEvidence | None = None
-    # ARIA 가 이번 실행에서 **실제로 AI 에게 돌려준** 청크. (attachment_id, chunk_id)
+    # PRISM 이 이번 실행에서 **실제로 AI 에게 돌려준** 청크. (attachment_id, chunk_id)
     #
     # 근거 패키지에 들어갈 수 있는 것은 이 집합 안의 구간뿐이다. 없으면 AI 가
     # 본 적 없는 청크를 지목해도 원문이 실재하기만 하면 matched 가 된다 —
     # chunk_id 형식(P0012-003)은 action 스키마에 그대로 노출돼 있어 추측이
     # 쉽다. "AI 는 원문을 지어낼 수 없다"는 주장이 성립하려면 텍스트뿐 아니라
-    # **무엇을 보았는가**까지 ARIA 가 쥐고 있어야 한다.
+    # **무엇을 보았는가**까지 PRISM 이 쥐고 있어야 한다.
     exposed_chunks: set = field(default_factory=set)
     pages_read: int = 0
     # 이미 읽은 페이지를 다시 요청한 횟수. 막지는 않는다 — 앞뒤 문맥을 넓히다
@@ -887,7 +884,7 @@ class RetrievalAgent:
             "count": len(self._deferred_actions),
             "deferred": groups,
             "note": (
-                "ARIA 가 다음 action 을 자동 이월합니다. 같은 요청을 반복하지 "
+                "PRISM 이 다음 action 을 자동 이월합니다. 같은 요청을 반복하지 "
                 "말고, 이번 라운드에 반환된 새 결과와 구성별 우선순위를 "
                 "검토하십시오."
             ),
@@ -1033,7 +1030,7 @@ class RetrievalAgent:
                     f"{payload_bytes:,} bytes 로 이 Provider 의 전송 한도 "
                     f"{provider_budget:,} bytes 를 넘습니다. 인용발명 본문을 "
                     "빼고도 넘는 크기이므로(청구항·검색 결과만으로도 초과) "
-                    "ARIA 는 자르지 않고 중단합니다. 청구항을 나눠 실행하거나 "
+                    "PRISM 은 자르지 않고 중단합니다. 청구항을 나눠 실행하거나 "
                     "전송 한도가 더 큰 Provider 를 선택하십시오."
                 )
                 record.completed_at = _utcnow()
@@ -1117,7 +1114,7 @@ class RetrievalAgent:
                 pending_error = (
                     "components 가 비어 있습니다. 첫 응답에는 청구항을 구성요소로 "
                     "분해해서 components 에 최소 1개 이상 넣어야 합니다. 그 뒤에야 "
-                    "ARIA 가 구성마다 id 를 붙여 검색 기록을 남길 수 있습니다."
+                    "PRISM 이 구성마다 id 를 붙여 검색 기록을 남길 수 있습니다."
                 )
                 results_payload = []
                 self.trace.write(
@@ -1497,42 +1494,29 @@ class RetrievalAgent:
         budget_left = self.budget.max_round_result_chars
         scheduled = self._scheduled_actions(items)
 
-        # 후보 0건 구성마다 첫 검색 하나를 먼저 실행한다. 예약 몫을 나눠서
-        # 한 구성의 전체문헌 검색 하나가 다른 미확보 구성을 밀어내지 못하게 한다.
-        reserved = []
-        ordinary = []
-        unseeded_ids: set[str] = set()
+        # 문맥 열람을 먼저 처리한다. 각 단계 안에서는 구성별로 한 요청씩 순환한다.
+        # 읽기 요청은 페이지가 들어갈 실제 잔여 공간을 쓰고, 검색은 남은 구성과 나눈다.
+        reads, searches = [], []
         for row in scheduled:
-            item, _deferred = row
-            component = self._component(getattr(item, "component_id", ""))
-            if (
-                isinstance(item, SEARCH_OR_CARRYOVER)
-                and component is not None and not component.hit_chunks
-                and component.id not in unseeded_ids
-            ):
-                reserved.append(row)
-                unseeded_ids.add(component.id)
-            else:
-                ordinary.append(row)
-        scheduled = reserved + ordinary
-        reserved_left = (
-            int(budget_left * UNSEEDED_RESULT_SHARE) if ordinary else budget_left
-        )
+            target = reads if isinstance(row[0], (ReadPage, ReadPages, ReadParagraph)) else searches
+            target.append(row)
+        scheduled = []
+        for phase in (reads, searches):
+            queues: dict[str, list] = {}
+            for row in phase:
+                group = str(getattr(row[0], "component_id", "") or "~control")
+                queues.setdefault(group, []).append(row)
+            while any(queues.values()):
+                for queue in queues.values():
+                    if queue:
+                        scheduled.append(queue.pop(0))
 
         for position, (item, deferred) in enumerate(scheduled):
-            action_budget = budget_left
-            if position < len(reserved):
-                action_budget = min(budget_left, reserved_left // (len(reserved) - position))
-            elif isinstance(item, SEARCH_OR_CARRYOVER):
-                # 먼저 받은 큰 검색 하나가 남은 반환 공간을 독점하지 않도록
-                # 나눈다. 남은 후보는 기존 이월 큐에 보존하며 검색 범위를 버리지 않는다.
-                remaining_searches = sum(
-                    isinstance(next_item, SEARCH_OR_CARRYOVER)
-                    for next_item, _ in scheduled[position:]
-                )
-                action_budget = min(
-                    budget_left, max(4000, budget_left // max(1, remaining_searches))
-                )
+            remaining_groups = {getattr(row[0], "component_id", "") or "~control"
+                                for row in scheduled[position:]}
+            action_budget = budget_left if isinstance(item, (ReadPage, ReadPages, ReadParagraph)) else (
+                budget_left // len(remaining_groups)
+            )
             if self.is_cancelled():
                 run.cancelled = True
                 if deferred is not None:
@@ -1545,9 +1529,9 @@ class RetrievalAgent:
                         attempts=deferred.attempts + 1,
                     )
                 continue
-            if budget_left <= 0:
+            if action_budget <= 0:
                 reason = (
-                    "이번 라운드의 반환 문자 예산을 모두 썼습니다. action 을 "
+                    "이번 요청에 배정할 반환 문자 예산이 없습니다. action 을 "
                     "다음 라운드로 자동 이월합니다."
                 )
                 run.action_errors.append(
@@ -1607,8 +1591,6 @@ class RetrievalAgent:
                 )
                 continue
             budget_left -= entry_size
-            if position < len(reserved):
-                reserved_left -= entry_size
             results.append(entry)
             if deferred is not None:
                 run.deferred_executed += 1

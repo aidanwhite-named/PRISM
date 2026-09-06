@@ -8,7 +8,7 @@ from app import search_manifest as sm, search_verification as sv, search_report,
 from app import search_channels, search_dates
 from app.search_mcp_server import SearchTools, ToolLimitExceeded, _query_node, _response
 from app.patent_search import epo_backend, epo_parser, epo_cql, artifacts, base
-from app.providers.base import NO_TOOLS, WEB_SEARCH, ExecutionRequest, ARIA_MCP_TOOLS
+from app.providers.base import NO_TOOLS, WEB_SEARCH, ExecutionRequest, PRISM_MCP_TOOLS
 from app.providers.claude_cli import ClaudeCliProvider
 from app.providers.codex_cli import CodexCliProvider
 from . import epo_fixtures as fx
@@ -62,7 +62,7 @@ def test_agent_can_choose_a_validated_publication_date_query():
 
 
 def test_capability_probe_is_not_a_search_but_optional_db_fetch_is():
-    name = "mcp__aria-search__search_capabilities"
+    name = "mcp__prism-search__search_capabilities"
     assert not sm.has_retrieval_attempt([{"name": name}], [name],
         [{"state": "started", "tool": "search_capabilities"}])
     assert sm.has_retrieval_attempt([], [], [{"state": "started", "tool": "epo_fetch"}])
@@ -169,17 +169,17 @@ def test_cql_error_is_structured_and_not_free_text():
 @pytest.mark.parametrize("provider", [ClaudeCliProvider, CodexCliProvider])
 def test_no_tools_cannot_register_mcp(provider, tmp_path):
     req = ExecutionRequest(job_id="x", work_dir=tmp_path, system_prompt="", user_message="",
-        tool_policy=NO_TOOLS, mcp_servers={"aria-search": {"command": "python"}})
+        tool_policy=NO_TOOLS, mcp_servers={"prism-search": {"command": "python"}})
     with pytest.raises(ValueError):
         provider().build_args(req)
 
 def test_claude_mcp_names_use_allowed_tools_not_builtin_list(tmp_path):
     req = ExecutionRequest(job_id="x", work_dir=tmp_path, system_prompt="", user_message="",
-        tool_policy=replace(WEB_SEARCH, mcp_tools=ARIA_MCP_TOOLS),
-        mcp_servers={"aria-search": {"command": "python"}})
+        tool_policy=replace(WEB_SEARCH, mcp_tools=PRISM_MCP_TOOLS),
+        mcp_servers={"prism-search": {"command": "python"}})
     args = ClaudeCliProvider().build_args(req)
     assert args[args.index("--tools")+1] == "WebSearch,WebFetch"
-    assert "mcp__aria-search__epo_search" in args
+    assert "mcp__prism-search__epo_search" in args
     assert "--strict-mcp-config" in args
 
 def test_legacy_view_never_mutates_or_reexecutes():
@@ -190,7 +190,7 @@ def test_legacy_view_never_mutates_or_reexecutes():
     assert result["reported"]["candidates"][0]["group"] is None
     assert "이전 형식" in search_report.render(original)
 
-def test_api_one_execute_no_secondary_classifier(client, monkeypatch):
+def test_api_skips_web_reread_when_provenance_transport_is_unavailable(client, monkeypatch):
     from .fake_provider import DeterministicSearchProvider
     calls = []
     original = DeterministicSearchProvider.execute
@@ -203,6 +203,9 @@ def test_api_one_execute_no_secondary_classifier(client, monkeypatch):
     job = wait_for_job(client, created["id"])
     assert job["status"] == "SUCCEEDED", job["errors"]
     assert len(calls) == 1
+    assert not job["search_manifest"]["verification_followup"]["attempted"]
+    assert job["search_manifest"]["status"] == "verification_incomplete"
+    assert job["search_manifest"]["quality"]["verified_candidate_count"] == 0
     assert job["search_manifest"]["version"] == 14
     assert job["search_manifest"]["reported"]["candidates"]
     assert "official_verification" not in job["search_manifest"]
@@ -254,12 +257,12 @@ def test_backend_instance_is_reused_for_cumulative_budgets(tmp_path, monkeypatch
 def test_codex_cli_override_keys_are_not_quoted(tmp_path):
     from app.providers.base import CODEX_WEB_SEARCH
     req = ExecutionRequest(job_id="x", work_dir=tmp_path, system_prompt="", user_message="",
-        tool_policy=replace(CODEX_WEB_SEARCH, mcp_tools=ARIA_MCP_TOOLS),
-        mcp_servers={"aria-search": {"command": "python", "env": {"ARIA_DATA_DIR": "test"}}})
+        tool_policy=replace(CODEX_WEB_SEARCH, mcp_tools=PRISM_MCP_TOOLS),
+        mcp_servers={"prism-search": {"command": "python", "env": {"PRISM_DATA_DIR": "test"}}})
     args = CodexCliProvider().build_args(req)
-    assert any(arg.startswith("mcp_servers.aria-search.env.ARIA_DATA_DIR=") for arg in args)
+    assert any(arg.startswith("mcp_servers.prism-search.env.PRISM_DATA_DIR=") for arg in args)
     assert not any('mcp_servers."' in arg for arg in args)
-    assert 'mcp_servers.aria-search.default_tools_approval_mode="writes"' in args
+    assert 'mcp_servers.prism-search.default_tools_approval_mode="writes"' in args
 
 def test_mcp_protocol_is_utf8_and_tool_errors_are_not_protocol_errors(client, tmp_path):
     import os
@@ -271,13 +274,13 @@ def test_mcp_protocol_is_utf8_and_tool_errors_are_not_protocol_errors(client, tm
         {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_capabilities","arguments":{}}},
         {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"not_a_tool","arguments":{"query":"한글"}}},
     ]
-    env = {**os.environ, "ARIA_SEARCH_WORK_DIR": str(tmp_path), "PYTHONIOENCODING": "utf-8"}
+    env = {**os.environ, "PRISM_SEARCH_WORK_DIR": str(tmp_path), "PYTHONIOENCODING": "utf-8"}
     wire = "\n".join(json.dumps(row) for row in requests) + "\n{broken\n"
     completed = subprocess.run([sys.executable, "-m", "app.search_mcp_server"], input=wire,
         capture_output=True, text=True, encoding="utf-8", env=env, timeout=20)
     assert completed.returncode == 0, completed.stderr
     replies = [json.loads(line) for line in completed.stdout.splitlines()]
-    assert replies[0]["result"]["serverInfo"]["name"] == "aria-search"
+    assert replies[0]["result"]["serverInfo"]["name"] == "prism-search"
     assert replies[2]["result"]["isError"] is False
     assert replies[3]["result"]["isError"] is True
     assert replies[4]["id"] is None

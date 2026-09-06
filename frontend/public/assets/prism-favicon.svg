@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <title>ARIA</title>
-  <!-- The asymmetric tile echoes ARIA's report cards. -->
+  <title>PRISM</title>
+  <!-- The asymmetric tile echoes PRISM's report cards. -->
   <path
     d="M21 3h22c10 0 18 8 18 18v22c0 10-8 18-18 18H13C7.5 61 3 56.5 3 51V21C3 11 11 3 21 3Z"
     fill="#234f5c"
@@ -12,29 +12,40 @@
     stroke-width="2"
   />
 
-  <!-- Two inputs rise into one A; the warm bridge is their traceable evidence link. -->
+  <!-- One input enters the prism and leaves separated: the same move the report makes. -->
   <path
-    d="M16.5 47 28.4 18.2C29.1 16.7 30.3 16 32 16"
+    d="M8 32h17"
     fill="none"
     stroke="#f5f1e8"
-    stroke-width="7"
+    stroke-width="4"
     stroke-linecap="round"
+  />
+  <path
+    d="M32 17.5 44.5 45.5h-25Z"
+    fill="none"
+    stroke="#f5f1e8"
+    stroke-width="3.2"
     stroke-linejoin="round"
   />
   <path
-    d="M32 16c1.7 0 2.9.7 3.6 2.2L47.5 47"
+    d="M38.6 30.5 56 23.5"
+    fill="none"
+    stroke="#f5f1e8"
+    stroke-width="3.2"
+    stroke-linecap="round"
+  />
+  <path
+    d="M39.9 33.5 56 33.5"
     fill="none"
     stroke="#bed0c3"
-    stroke-width="7"
+    stroke-width="3.2"
     stroke-linecap="round"
-    stroke-linejoin="round"
   />
   <path
-    d="M24.8 36h14.4"
+    d="M41.2 36.5 56 43.5"
     fill="none"
     stroke="#e0aa62"
-    stroke-width="4.5"
+    stroke-width="3.2"
     stroke-linecap="round"
   />
-  <circle cx="32" cy="36" r="1.35" fill="#234f5c"/>
 </svg>

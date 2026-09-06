@@ -1,4 +1,4 @@
-"""ARIA FastAPI 앱.
+"""PRISM FastAPI 앱.
 
 localhost 전용. 외부 네트워크에 서버를 공개하지 않는다.
 """
@@ -30,7 +30,7 @@ if sys.platform == "win32":
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 # 변경 요청에 요구하는 전용 헤더. 교차 출처에서는 preflight 없이 붙일 수 없다.
-CLIENT_HEADER = "X-ARIA-Client"
+CLIENT_HEADER = "X-PRISM-Client"
 CLIENT_HEADER_VALUE = "1"
 
 @asynccontextmanager
@@ -46,13 +46,13 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # ARIA가 종료될 때 브라우저 로그인 대기 프로세스나 agy 도우미 창을
+        # PRISM이 종료될 때 브라우저 로그인 대기 프로세스나 agy 도우미 창을
         # 고아 프로세스로 남기지 않는다.
         await providers.LOGIN_MANAGER.shutdown()
 
 
 app = FastAPI(
-    title="ARIA",
+    title="PRISM",
     description="분석·검색 전용 프롬프트를 선택한 AI CLI에서 안전하게 실행하는 로컬 프로그램",
     version=__version__,
     lifespan=lifespan,
@@ -102,7 +102,7 @@ async def csrf_guard(request: Request, call_next):
                 {
                     "detail": (
                         f"변경 요청에는 {CLIENT_HEADER} 헤더가 필요합니다. "
-                        "ARIA UI 밖에서 호출한 경우 헤더를 추가하십시오."
+                        "PRISM UI 밖에서 호출한 경우 헤더를 추가하십시오."
                     )
                 },
                 status_code=403,

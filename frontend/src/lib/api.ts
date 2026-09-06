@@ -18,7 +18,7 @@ import type {
 
 // 백엔드 CSRF 가드가 변경 요청에 요구하는 헤더.
 // 커스텀 헤더는 preflight 를 강제하므로 외부 사이트가 붙일 수 없다.
-const CLIENT_HEADER = { "X-ARIA-Client": "1" } as const;
+const CLIENT_HEADER = { "X-PRISM-Client": "1" } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {

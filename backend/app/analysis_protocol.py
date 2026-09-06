@@ -1,6 +1,6 @@
 """분석 실행에 덧붙이는 기계 판독 블록 출력 규칙.
 
-ARIA 는 구성별 결과와 문헌 매핑을 사람이 읽는 Markdown 이 아니라 전용 JSON
+PRISM 은 구성별 결과와 문헌 매핑을 사람이 읽는 Markdown 이 아니라 전용 JSON
 블록으로 받는다(analysis_manifest, citation_mapping). 파서는 코드에 있는데 그
 짝인 출력 규칙은 기본 Master Prompt 본문에만 있었다. 그래서 사용자가 프롬프트를
 자기 것으로 바꾸면 파서는 그대로 기다리는데 규칙만 사라져서, 유사도 표도 번호
@@ -10,7 +10,7 @@ ARIA 는 구성별 결과와 문헌 매핑을 사람이 읽는 Markdown 이 아�
 계약의 두 짝을 같은 곳에 둔다. 규칙을 여기로 옮기고, 분석 조립이 선택된
 프롬프트 뒤에 이 절을 붙인다.
 
-이것은 "ARIA 는 Master Prompt 앞뒤로 업무 지시를 덧붙이지 않는다"는
+이것은 "PRISM 은 Master Prompt 앞뒤로 업무 지시를 덧붙이지 않는다"는
 prompt_assembly 의 원칙을 깨지 않는다. 무엇을 어떻게 분석할지 — 대비 기준,
 유사도 판단, 보고서 구성 — 은 여전히 Master Prompt 하나에서 온다. 여기 있는
 것은 "그 결론을 어느 형식으로 돌려 달라"는 프로토콜 한 절뿐이다.
@@ -43,7 +43,7 @@ from .citation_mapping import _OPEN as _MAPPING_OPEN
 # 함께 사라진다 — 예산이 빠듯한 실행일수록 후속 작업 수단을 잃는 셈이다.
 # 0 을 파서가 조용히 흡수하게 만들지는 않는다. 0% 는 「확인 범위 기준 대응 없음」
 # 이라는 판단이고, 판단 불가와 같은 칸에 넣으면 그 둘이 화면에서 구별되지 않는다.
-INSTRUCTIONS = f"""# ARIA 기계 판독 블록
+INSTRUCTIONS = f"""# PRISM 기계 판독 블록
 
 종합 요약 뒤에 아래 두 블록을 출력한다. 화면에서는 제거되므로 본문에서 설명하지 않는다.
 
@@ -53,7 +53,7 @@ INSTRUCTIONS = f"""# ARIA 기계 판독 블록
 
 {_COMPONENT_OPEN}
 {{"items":[{{"claim":"청구항 1","symbol":"(A)","feature":"청구항 구성 내용","similarity":92,"status":"matched","basis":"direct","difference":""}},{{"claim":"청구항 1","symbol":"(B)","feature":"청구항 구성 내용","similarity":0,"status":"below_threshold","basis":"inferred","difference":"확인 범위에서 대응 내용 없음"}},{{"claim":"청구항 1","symbol":"(C)","feature":"청구항 구성 내용","similarity":null,"status":"unreadable","basis":"inferred","difference":"검토 범위 제한으로 확인하지 못한 기능"}}]}}
-[/ARIA_COMPONENT_ANALYSIS_V1]
+[/PRISM_COMPONENT_ANALYSIS_V1]
 
 ## 문헌 매핑 블록
 
@@ -61,7 +61,7 @@ INSTRUCTIONS = f"""# ARIA 기계 판독 블록
 
 {_MAPPING_OPEN}
 {{"items":[{{"citation_number":1,"attachment":"ATT-02","document_number":"KR10-1234567"}}]}}
-[/ARIA_CITATION_MAPPING_V1]
+[/PRISM_CITATION_MAPPING_V1]
 """
 
 

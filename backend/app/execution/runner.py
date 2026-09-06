@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,8 @@ from .. import (
     search_prompt,
     search_report,
     search_verification,
+    search_quality,
+    search_followup,
     settings_service,
 )
 from ..config import PATHS
@@ -67,15 +70,15 @@ def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int) -> dict:
     """Per-run MCP config.  No credentials are placed in CLI arguments."""
     backend_root = Path(__file__).resolve().parents[2]
     return {
-        "aria-search": {
+        "prism-search": {
             "command": sys.executable,
             "args": ["-m", "app.search_mcp_server"],
             "env": {
                 "PYTHONPATH": str(backend_root),
-                "ARIA_SEARCH_WORK_DIR": str(work_dir.resolve()),
-                "ARIA_DATA_DIR": str(PATHS.data_dir.resolve()),
-                "ARIA_SEARCH_CUTOFF": cutoff or "",
-                "ARIA_SEARCH_MAX_TOOL_CALLS": str(max(1, int(max_calls))),
+                "PRISM_SEARCH_WORK_DIR": str(work_dir.resolve()),
+                "PRISM_DATA_DIR": str(PATHS.data_dir.resolve()),
+                "PRISM_SEARCH_CUTOFF": cutoff or "",
+                "PRISM_SEARCH_MAX_TOOL_CALLS": str(max(1, int(max_calls))),
             },
         }
     }
@@ -209,9 +212,9 @@ class JobRunner:
 
     def _semaphore(self, provider_id: str, limit: int) -> asyncio.Semaphore:
         existing = self._semaphores.get(provider_id)
-        if existing is None or getattr(existing, "_aria_limit", None) != limit:
+        if existing is None or getattr(existing, "_prism_limit", None) != limit:
             semaphore = asyncio.Semaphore(limit)
-            semaphore._aria_limit = limit  # type: ignore[attr-defined]
+            semaphore._prism_limit = limit  # type: ignore[attr-defined]
             self._semaphores[provider_id] = semaphore
             return semaphore
         return existing
@@ -282,7 +285,7 @@ class JobRunner:
         보내면 Provider 가 뒷부분을 잘라 앞부분만 모델에 넘기고도(agy 실측)
         종료 코드 0 으로 끝나, 절반이 빠진 분석이 '성공'으로 남는다.
 
-        그래서 ARIA 의 글자 수 한도(max_inline_chars)를 꺼도 이 검사는 남는다.
+        그래서 PRISM 의 글자 수 한도(max_inline_chars)를 꺼도 이 검사는 남는다.
         글자 수는 사용자가 스스로 거는 상한이지만 이 한도는 모델이 자료를 전부
         보았는지를 좌우한다. 모델 컨텍스트가 크다거나 Provider 에 자동 압축이
         있다는 이유로 완화해서는 안 된다 — 자르는 주체가 모델이 아니라 CLI 다.
@@ -311,7 +314,7 @@ class JobRunner:
             f"이번 입력은 {label} 가 자료 전체를 손실 없이 전달할 수 있는 한도를 "
             f"넘습니다 ({payload_bytes:,} bytes > {budget:,} bytes). 사용자 입력 "
             f"제한이 아니라 {label} 가 모델에 넘기기 전에 뒷부분을 잘라 버리는 "
-            "지점입니다. ARIA 는 문서를 임의로 자르거나 요약하지 않으므로 "
+            "지점입니다. PRISM 은 문서를 임의로 자르거나 요약하지 않으므로 "
             "Provider 를 호출하기 전에 막았고, 토큰은 소모되지 않았습니다. "
             "문헌을 나눠 여러 번 실행하거나, 입력 전송 한도가 더 큰 Provider 를 "
             "선택하십시오.",
@@ -839,8 +842,22 @@ class JobRunner:
             await self._emit(
                 job_id, "stage", {"stage": "executing", "message": "Provider 실행 중"}
             )
+            search_deadline = time.monotonic() + timeout
             outcome = await provider.execute(request, emit)
             verdict = evaluate(outcome, attachments, fail_on_tool_use=fail_on_tool_use)
+            verification_followup = None
+            if job_kind is JobKind.SIMILARITY_SEARCH and verdict.status == JobStatus.SUCCEEDED:
+                outcome, verification_followup = await search_followup.run(
+                    provider, request, outcome, emit, attachments=attachments,
+                    fail_on_tool_use=fail_on_tool_use, deadline=search_deadline,
+                    availability=tool_availability, cancelled=lambda: job_id in self._cancel_requested,
+                    keep_raw=keep_raw,
+                )
+                verdict = evaluate(outcome, attachments, fail_on_tool_use=fail_on_tool_use)
+                if verification_followup.get("execution_status") not in (None, JobStatus.SUCCEEDED.value):
+                    verdict = Verdict(JobStatus(verification_followup["execution_status"]),
+                                      ErrorCode(verification_followup["error_code"]) if verification_followup.get("error_code") else None,
+                                      verification_followup.get("errors", []))
             if job_id in self._cancel_requested:
                 verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, list(verdict.errors))
             await self._emit(
@@ -868,6 +885,8 @@ class JobRunner:
                 except search_manifest.SearchLogError as exc:
                     manifest_error = str(exc)
                 date_filter = search_dates.filter_candidates(reported, search_cutoff)
+                quality = search_quality.assess(reported, observed, journal, tool_availability,
+                                               execution_error=manifest_error, outcome=outcome)
                 manifest = search_manifest.build(
                     claim_text=claim_text, provider=provider_id, model=model,
                     prompt_id=prompt_id, prompt_name=prompt_name,
@@ -890,6 +909,7 @@ class JobRunner:
                     tool_policy_name=tool_policy.name, allowed_tools=tool_policy.allowed_tools,
                     mcp_tools=tool_policy.mcp_tools,
                     advertised_tools_enforced=tool_policy.enforce_advertised_allowlist,
+                    quality=quality, verification_followup=verification_followup,
                 )
                 if reported is None:
                     outcome.result_text = ""
@@ -902,7 +922,7 @@ class JobRunner:
                     outcome.result_text = search_report.render(manifest)
             self._providers.pop(job_id, None)
 
-            # 두 블록의 출력 규칙은 ARIA 가 분석 프롬프트 뒤에 직접 붙인다
+            # 두 블록의 출력 규칙은 PRISM 이 분석 프롬프트 뒤에 직접 붙인다
             # (analysis_protocol). 그러니 읽는 쪽도 프롬프트의 capabilities 선언에
             # 매달리지 않는다 — 사용자가 프롬프트를 자기 것으로 바꿔도 선언을 잊었다는
             # 이유로 유사도 표와 번호 유지가 조용히 꺼지면 안 된다. 검색 실행은
@@ -970,7 +990,7 @@ class JobRunner:
                 # 안 된다.
                 narrative_path = work_dir / "model_report.md"
                 narrative_path.write_text(
-                    "<!-- ARIA: 모델이 생성한 원문 출력입니다. 검증되지 않았으며 "
+                    "<!-- PRISM: 모델이 생성한 원문 출력입니다. 검증되지 않았으며 "
                     "여기 있는 인용문은 원문 직접 발췌가 아닙니다. -->\n\n"
                     + model_narrative,
                     encoding="utf-8",
@@ -984,6 +1004,11 @@ class JobRunner:
                     encoding="utf-8",
                 )
                 artifacts.append(("search_manifest", manifest_path))
+                followup_dir = work_dir / "verification_followup"
+                if followup_dir.exists():
+                    for path in sorted(followup_dir.iterdir()):
+                        if path.is_file() and path.name in {"prompt.txt", "initial_output.txt", "output.txt", "initial_usage.json", "usage.json"}:
+                            artifacts.append(("search_verification_" + path.stem, path))
 
             if component_result is not None:
                 component_path = work_dir / "analysis_manifest.json"

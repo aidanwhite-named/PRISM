@@ -488,7 +488,7 @@ def test_agent_loop_builds_verified_evidence_bundle(tmp_path) -> None:
     component = bundle["components"][0]
     assert component["status"] == evidence.STATUS_MATCHED
     finding = component["findings"][0]
-    # 원문은 ARIA 가 인덱스에서 꺼낸 값이고, AI 메모와 칸이 분리되어 있다.
+    # 원문은 PRISM 이 인덱스에서 꺼낸 값이고, AI 메모와 칸이 분리되어 있다.
     assert finding["source_text"]
     assert finding["ai_relevance"] == "테스트 관련성 메모"
     assert finding["pdf_page"] in {1, 2, 3, 4}
@@ -517,7 +517,7 @@ def test_agent_loop_builds_verified_evidence_bundle(tmp_path) -> None:
 
 
 def test_evidence_text_cannot_be_invented_by_the_model(tmp_path) -> None:
-    """모델이 없는 chunk_id 를 근거로 대면 ARIA 가 거절한다."""
+    """모델이 없는 chunk_id 를 근거로 대면 PRISM 이 거절한다."""
     item = _pdf_attachment(tmp_path, "doc.pdf", KOREAN_PAGES)
     result = _run_agent(tmp_path, [item], "청구항 1. RETRIEVAL_FAKETEXT 센서.")
 

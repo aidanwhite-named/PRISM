@@ -1,6 +1,6 @@
 """agy 전역 설정의 페이지 열람 허용 목록(permissions.allow).
 
-왜 ARIA 가 남의 도구 설정 파일을 만지는가
+왜 PRISM 이 남의 도구 설정 파일을 만지는가
 ------------------------------------------
 agy 는 headless 실행에서 승인 창을 띄울 수 없다. 그래서 허용 목록에 없는
 호스트로 ``read_url_content`` 를 부르면 자동 거부되는데, **거부된 호출 하나만
@@ -9,13 +9,13 @@ agy 는 headless 실행에서 승인 창을 띄울 수 없다. 그래서 허용 
 종료 코드 0 · ``status: CANCELED`` · 빈 응답으로 끝냈다. 이미 끝난 검색 결과도
 감사 블록도 함께 사라졌다.
 
-즉 이 파일 한 줄이 유사문헌 검색 채널 전체의 성패를 가른다. 그래서 ARIA 가
+즉 이 파일 한 줄이 유사문헌 검색 채널 전체의 성패를 가른다. 그래서 PRISM 이
 논문 출처로 자주 필요한 호스트만 권장 목록으로 병합한다.
 
 지키는 선
 ---------
 - **기존 항목을 덮어쓰지 않는다.** 병합만 한다. 사용자가 직접 넣은 규칙은
-  ARIA 가 모르는 이유로 거기 있는 것이다.
+  PRISM 이 모르는 이유로 거기 있는 것이다.
 - ``read_url(*)`` 를 쓰지 않는다. ``--dangerously-skip-permissions`` 도 쓰지
   않는다. 범위를 넓히는 것은 문제를 없애는 것이 아니라 감사할 수 없게 만드는
   것이다.
@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ARIA 가 권장하는 논문 출처. 특허 쪽은 patents.google.com 이 이미 관례적으로
+# PRISM 이 권장하는 논문 출처. 특허 쪽은 patents.google.com 이 이미 관례적으로
 # 들어가 있고, EPO 는 웹 페이지가 아니라 OPS API 로 가므로 여기 없다.
 #
 # 호스트는 **정확히** 적는다. agy 의 규칙은 호스트 문자열 일치라 www 유무가
@@ -77,7 +77,7 @@ RECOMMENDED_HOSTS: tuple[str, ...] = tuple(
 # 규칙 문법: read_url(<host>).
 _RULE = re.compile(r"^\s*read_url\s*\(\s*([^)\s]+)\s*\)\s*$", re.IGNORECASE)
 
-# 절대 만들지 않는 값. 사용자가 직접 넣었으면 지우지 않지만 ARIA 는 쓰지 않는다.
+# 절대 만들지 않는 값. 사용자가 직접 넣었으면 지우지 않지만 PRISM 은 쓰지 않는다.
 WILDCARD = "*"
 
 #: 지금 코드가 아는 마지막 버전. 저장된 표시가 이 값이면 자동 적용은 끝났다.
@@ -106,7 +106,7 @@ def hosts_since(stored_version: str) -> tuple[str, ...] | None:
     )
 
 
-_ENV_OVERRIDE = "ARIA_AGY_SETTINGS_PATH"
+_ENV_OVERRIDE = "PRISM_AGY_SETTINGS_PATH"
 
 
 class AgyPermissionsError(Exception):
@@ -141,7 +141,7 @@ class AgyPermissionState:
     applied: tuple[str, ...] = ()
     #: 권장 목록 중 아직 없는 것.
     missing: tuple[str, ...] = ()
-    #: read_url(*) 가 이미 들어 있는가. ARIA 가 넣지는 않지만 있으면 알린다.
+    #: read_url(*) 가 이미 들어 있는가. PRISM 이 넣지는 않지만 있으면 알린다.
     wildcard: bool = False
     #: 읽지 못한 이유. 비어 있지 않으면 다른 칸은 신뢰할 수 없다.
     error: str = ""
@@ -189,7 +189,7 @@ def _load(path: Path) -> dict:
         ) from exc
     if not raw.strip():
         raise AgyPermissionsError(
-            f"agy 설정 파일이 비어 있습니다: {path}. ARIA 가 임의로 새로 만들지 "
+            f"agy 설정 파일이 비어 있습니다: {path}. PRISM 이 임의로 새로 만들지 "
             "않았습니다. 파일을 확인한 뒤 다시 적용하십시오."
         )
     try:
@@ -237,11 +237,11 @@ def allowed_hosts() -> tuple[str, ...]:
 
 def _backup(path: Path) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = path.with_name(f"{path.name}.aria-backup-{stamp}")
+    target = path.with_name(f"{path.name}.prism-backup-{stamp}")
     counter = 1
     while target.exists():
         counter += 1
-        target = path.with_name(f"{path.name}.aria-backup-{stamp}-{counter}")
+        target = path.with_name(f"{path.name}.prism-backup-{stamp}-{counter}")
     target.write_bytes(path.read_bytes())
     return target
 

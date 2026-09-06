@@ -58,7 +58,7 @@ _STEP_DELAY = 0.12
 #: clear() 한다.
 RECEIVED: list[ExecutionRequest] = []
 
-# 최종 프롬프트의 첨부 헤더에 ARIA 가 찍어 두는 자료 번호.
+# 최종 프롬프트의 첨부 헤더에 PRISM 이 찍어 두는 자료 번호.
 _ALIAS_LINE = re.compile(r"^자료 번호: (ATT-\d+)$", re.MULTILINE)
 
 
@@ -72,9 +72,9 @@ def _mapping_block(message: str) -> list[str]:
         return []
     if "TEST_BADMAP" in message:
         return [
-            "\n[ARIA_CITATION_MAPPING_V1]\n",
+            "\n[PRISM_CITATION_MAPPING_V1]\n",
             '{"items": [{"citation_number": 1, "attachment": "ATT-99"}]}\n',
-            "[/ARIA_CITATION_MAPPING_V1]\n",
+            "[/PRISM_CITATION_MAPPING_V1]\n",
         ]
 
     parts = message.split("[인용발명 문헌]", 1)
@@ -93,15 +93,15 @@ def _mapping_block(message: str) -> list[str]:
         for index, alias in enumerate(aliases, start=1)
     ]
     return [
-        "\n[ARIA_CITATION_MAPPING_V1]\n",
+        "\n[PRISM_CITATION_MAPPING_V1]\n",
         json.dumps({"items": items}, ensure_ascii=False) + "\n",
-        "[/ARIA_CITATION_MAPPING_V1]\n",
+        "[/PRISM_CITATION_MAPPING_V1]\n",
     ]
 
 
 def _component_block(message: str) -> list[str]:
     """구성별 분석 계약을 선언한 프롬프트에 결정론적 결과를 붙인다."""
-    if "ARIA_COMPONENT_ANALYSIS_V1" not in message or "TEST_NOCOMPONENTS" in message:
+    if "PRISM_COMPONENT_ANALYSIS_V1" not in message or "TEST_NOCOMPONENTS" in message:
         return []
     payload = {
         "items": [
@@ -132,20 +132,20 @@ def _component_block(message: str) -> list[str]:
         ]
     }
     return [
-        "\n[ARIA_COMPONENT_ANALYSIS_V1]\n",
+        "\n[PRISM_COMPONENT_ANALYSIS_V1]\n",
         json.dumps(payload, ensure_ascii=False) + "\n",
-        "[/ARIA_COMPONENT_ANALYSIS_V1]\n",
+        "[/PRISM_COMPONENT_ANALYSIS_V1]\n",
     ]
 
 
 # --------------------------------------------------- 로컬 검색 라운드 대역
 
 #: 라운드 payload 앞에 붙는 표시. render_round 가 찍는다.
-_ROUND_MARKER = "[ARIA 로컬 검색 라운드]"
+_ROUND_MARKER = "[PRISM 로컬 검색 라운드]"
 
 
 def _round_payload(message: str) -> dict:
-    """라운드 메시지에서 ARIA 가 넣은 JSON 을 되읽는다."""
+    """라운드 메시지에서 PRISM 이 넣은 JSON 을 되읽는다."""
     start = message.find("{", message.find(_ROUND_MARKER))
     depth = 0
     for index in range(start, len(message)):
@@ -464,7 +464,7 @@ class DeterministicTestProvider(Provider):
             return self._cancelled_outcome(outcome)
 
         if "RETRIEVAL_TOOL" in claim:
-            # 도구를 끈 실행에서 도구를 부른 경우. ARIA 가 사후 탐지해서 실패로
+            # 도구를 끈 실행에서 도구를 부른 경우. PRISM 이 사후 탐지해서 실패로
             # 처리해야 한다.
             outcome.tool_uses.append("Bash")
             outcome.tool_calls.append({"name": "Bash", "input": {}, "ok": True})
@@ -483,7 +483,7 @@ class DeterministicTestProvider(Provider):
         head = prompt_preview[:400]
         return [
             "# 테스트 실행 결과\n\n",
-            "이 결과는 **실제 모델이 생성한 것이 아닙니다.** ARIA 의 실행 경로를 "
+            "이 결과는 **실제 모델이 생성한 것이 아닙니다.** PRISM 의 실행 경로를 "
             "검증하기 위한 시뮬레이션 출력입니다.\n\n",
             "## 수신한 입력\n\n",
             f"- 전달된 전체 문자 수: {total_chars:,}\n",
@@ -773,11 +773,11 @@ def _search_report(message: str) -> str:
         return (
             report
             + chr(10)
-            + "[ARIA_SEARCH_LOG_V1]"
+            + "[PRISM_SEARCH_LOG_V1]"
             + chr(10)
             + json.dumps(payload, ensure_ascii=False)
             + chr(10)
-            + "[/ARIA_SEARCH_LOG_V1]"
+            + "[/PRISM_SEARCH_LOG_V1]"
             + chr(10)
         )
 
@@ -881,7 +881,7 @@ def _search_report(message: str) -> str:
     }
     return (
         report
-        + "\n[ARIA_SEARCH_LOG_V1]\n"
+        + "\n[PRISM_SEARCH_LOG_V1]\n"
         + json.dumps(payload, ensure_ascii=False)
-        + "\n[/ARIA_SEARCH_LOG_V1]\n"
+        + "\n[/PRISM_SEARCH_LOG_V1]\n"
     )

@@ -11,7 +11,7 @@ from app.search_manifest import read_tool_journal
 @pytest.mark.parametrize("provider_type", [ClaudeCliProvider, CodexCliProvider])
 async def test_installed_cli_can_call_only_capabilities(provider_type, client, tmp_path):
     provider = provider_type()
-    name = "mcp__aria-search__search_capabilities"
+    name = "mcp__prism-search__search_capabilities"
     policy = replace(provider.search_tool_policy, allowed_tools=(), mcp_tools=(name,),
         required_tools=(name,), max_tool_calls=2)
     servers = _search_mcp_servers(tmp_path, "", 2)
@@ -21,7 +21,7 @@ async def test_installed_cli_can_call_only_capabilities(provider_type, client, t
         "kiwee_integration_enabled": False,
     }})
     request = ExecutionRequest(job_id="mcp-smoke-" + provider.id, work_dir=tmp_path,
-        system_prompt="Call only the aria-search search_capabilities tool exactly once. Do not call other tools. Then reply ARIA_MCP_SMOKE_OK.",
+        system_prompt="Call only the prism-search search_capabilities tool exactly once. Do not call other tools. Then reply PRISM_MCP_SMOKE_OK.",
         user_message="Verify the locally provided capability tool now.",
         tool_policy=policy, mcp_servers=servers, timeout_seconds=120)
     async def emit(kind, payload):

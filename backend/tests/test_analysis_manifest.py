@@ -10,9 +10,9 @@ from app import analysis_manifest
 def _block(items: list[dict]) -> str:
     return (
         "보고서 본문\n"
-        "[ARIA_COMPONENT_ANALYSIS_V1]\n"
+        "[PRISM_COMPONENT_ANALYSIS_V1]\n"
         + json.dumps({"items": items}, ensure_ascii=False)
-        + "\n[/ARIA_COMPONENT_ANALYSIS_V1]\n"
+        + "\n[/PRISM_COMPONENT_ANALYSIS_V1]\n"
     )
 
 
@@ -85,7 +85,7 @@ def test_protocol_block_is_removed_from_user_report() -> None:
     report = _block([_item()])
     visible = analysis_manifest.strip_block(report)
     assert "보고서 본문" in visible
-    assert "ARIA_COMPONENT_ANALYSIS_V1" not in visible
+    assert "PRISM_COMPONENT_ANALYSIS_V1" not in visible
 
 
 def test_requires_exactly_one_block() -> None:

@@ -4,7 +4,7 @@
 ``read_url_content`` 를 자동 거부했고, **거부 하나가 턴 전체를 취소시켜** 이미
 끝난 검색 5건과 감사 블록이 함께 사라졌다.
 
-그래서 ARIA 가 권장 호스트를 병합한다. 남의 도구 설정 파일을 만지는 일이므로
+그래서 PRISM 이 권장 호스트를 병합한다. 남의 도구 설정 파일을 만지는 일이므로
 지켜야 할 선이 그만큼 많고, 이 파일이 그 선을 지킨다.
 """
 
@@ -21,7 +21,7 @@ from app.providers import agy_permissions
 def settings_file(tmp_path, monkeypatch):
     """실제 홈 디렉터리 대신 임시 파일을 보게 만든다."""
     path = tmp_path / "antigravity-cli" / "settings.json"
-    monkeypatch.setenv("ARIA_AGY_SETTINGS_PATH", str(path))
+    monkeypatch.setenv("PRISM_AGY_SETTINGS_PATH", str(path))
     return path
 
 
@@ -35,7 +35,7 @@ def _read(path) -> dict:
 
 
 def _backups(path) -> list:
-    return sorted(path.parent.glob(f"{path.name}.aria-backup-*"))
+    return sorted(path.parent.glob(f"{path.name}.prism-backup-*"))
 
 
 # --------------------------------------------------------------- 병합 규칙
@@ -44,7 +44,7 @@ def _backups(path) -> list:
 def test_existing_rules_survive_and_recommended_hosts_are_added(settings_file):
     """기존 항목을 덮어쓰지 않는다. 권장 호스트만 뒤에 붙인다.
 
-    사용자가 직접 넣은 규칙은 ARIA 가 모르는 이유로 거기 있다. 병합이 아니라
+    사용자가 직접 넣은 규칙은 PRISM 이 모르는 이유로 거기 있다. 병합이 아니라
     치환이 되면 그 이유가 조용히 사라진다.
     """
     _write(
@@ -146,7 +146,7 @@ def test_an_existing_wildcard_is_reported_but_not_removed(settings_file):
 def test_broken_json_is_not_overwritten(settings_file):
     """JSON 이 깨져 있으면 손대지 않고 오류를 낸다.
 
-    새 파일로 덮어쓰면 trustedWorkspaces 처럼 ARIA 가 모르는 설정이 조용히
+    새 파일로 덮어쓰면 trustedWorkspaces 처럼 PRISM 이 모르는 설정이 조용히
     사라진다. 고칠 수 있는 사람은 사용자뿐이다.
     """
     settings_file.parent.mkdir(parents=True, exist_ok=True)
@@ -484,7 +484,7 @@ def test_a_version_bump_does_not_resurrect_a_host_deleted_in_the_old_version(
 ):
     """이 파일에서 가장 중요한 계약.
 
-    v1 을 적용받은 사용자가 그중 하나를 지웠다. 그 뒤 ARIA 가 v2 로 올라간다.
+    v1 을 적용받은 사용자가 그중 하나를 지웠다. 그 뒤 PRISM 이 v2 로 올라간다.
     v2 가 새로 도입한 호스트는 들어와야 하고, 사용자가 지운 v1 호스트는 지워진
     채로 남아야 한다.
     """

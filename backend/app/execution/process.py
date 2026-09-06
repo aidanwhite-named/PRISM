@@ -48,7 +48,7 @@ class ProcessResult:
     stdout: str = ""
     stderr: str = ""
     launch_error: str | None = None
-    # 최종 결과를 다 받았는데 CLI 가 스스로 끝나지 않아 ARIA 가 끊었다.
+    # 최종 결과를 다 받았는데 CLI 가 스스로 끝나지 않아 PRISM 이 끊었다.
     # 이건 타임아웃이 아니다 — 결과는 전부 손에 있다. 둘을 같은 칸에 넣으면
     # "답을 못 받았다"와 "답은 받았는데 프로세스가 안 죽었다"가 구분되지 않는다.
     completed_without_exit: bool = False
@@ -167,7 +167,7 @@ async def run_streaming(
     completion_signal 을 주면 "최종 결과를 다 받았다"는 신호로 쓴다. 스트림이
     닫히기를 기다리는 것만으로는 부족하기 때문이다 — 실측(job d39dc2cc, agy
     1.1.26): 모델이 최종 response 와 status SUCCESS 를 보낸 뒤에도 프로세스가
-    끝나지 않아 stdout 이 열린 채로 남았고, ARIA 는 15분 뒤 타임아웃으로 실패
+    끝나지 않아 stdout 이 열린 채로 남았고, PRISM 은 15분 뒤 타임아웃으로 실패
     처리했다. 결과 텍스트·사용량·도구 기록이 전부 손에 있는데도 보고서가
     버려졌다.
 
@@ -300,7 +300,7 @@ async def run_capture(
     입력이 없으면 stdin 을 DEVNULL 로 준다. PIPE 로 열어두고
     communicate(None) 을 호출하면 asyncio 가 stdin 을 닫지 않아서, 자식이
     EOF 를 기다리며 멈춘다. 실측: `agy models` 가 이 상태에서 60초 타임아웃까지
-    갔다가 빈 출력으로 끝났고, ARIA 는 이를 "로그인 필요"로 오판했다.
+    갔다가 빈 출력으로 끝났고, PRISM 은 이를 "로그인 필요"로 오판했다.
     """
     result = ProcessResult()
     try:

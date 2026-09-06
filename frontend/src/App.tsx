@@ -117,17 +117,17 @@ export default function App() {
     <div className="app" data-mode={openWorkspace?.id ?? "none"}>
       <header className="topbar no-print">
         <div className="topbar-inner">
-          <NavLink className="brand" to="/" aria-label="ARIA 첫 화면">
+          <NavLink className="brand" to="/" aria-label="PRISM 첫 화면">
             <img
               className="brand-mark"
-              src="/assets/aria-favicon.svg"
+              src="/assets/prism-favicon.svg"
               alt=""
               aria-hidden="true"
               draggable="false"
             />
             <span className="brand-name">
-              <strong>ARIA</strong>
-              <small>Analysis &amp; Retrieval for Invention Art</small>
+              <strong>PRISM</strong>
+              <small>Patent Retrieval &amp; Invention Similarity Mapping</small>
             </span>
           </NavLink>
 

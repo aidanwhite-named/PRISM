@@ -2,7 +2,7 @@
 
 두 부분으로 나눈다.
 
-  시스템 프롬프트 : ARIA 런타임 규칙 (첨부 자료의 신뢰 경계)
+  시스템 프롬프트 : PRISM 런타임 규칙 (첨부 자료의 신뢰 경계)
   사용자 메시지   : Master Prompt 원문 + 청구항 + 정규화된 첨부 본문
 
 런타임 규칙을 사용자 메시지 앞에 문자열로 붙이지 않고 시스템 프롬프트로
@@ -13,7 +13,7 @@
 분석 실행은 도구가 하나도 없고, 검색 실행은 읽기 전용 웹 도구 둘뿐이다. 어느
 쪽이든 출력은 비신뢰 데이터로 취급해서 렌더링해야 한다.
 
-ARIA 는 Master Prompt 앞뒤로 업무 지시를 덧붙이지 않는다. "위 지시를
+PRISM 은 Master Prompt 앞뒤로 업무 지시를 덧붙이지 않는다. "위 지시를
 수행하라" 같은 문장도 넣지 않는다. 업무 로직의 유일한 출처는 Master Prompt다.
 
 한 가지 예외는 업무 지시가 아니다. 분석 프롬프트 뒤에는 기계 판독 블록의 출력
@@ -21,10 +21,10 @@ ARIA 는 Master Prompt 앞뒤로 업무 지시를 덧붙이지 않는다. "위 �
 결과를 돌려받을 형식만 정한다 — 파서가 코드에 있으니 그 짝도 코드에 있어야
 사용자가 프롬프트를 바꿔도 연계 기능이 조용히 꺼지지 않는다.
 
-후속 분석(CONTINUED)도 같은 원칙을 지킨다. ARIA 는 이전 보고서를 "데이터"로만
+후속 분석(CONTINUED)도 같은 원칙을 지킨다. PRISM 은 이전 보고서를 "데이터"로만
 붙이고, 그것을 어떻게 이어서 다룰지는 정하지 않는다. 그 규칙은 Master Prompt 의
 「후속 처리 규칙」 절에 있다. 사용자가 직접 쓴 후속 지시는 별도 섹션으로 구분해서
-전달하며, ARIA 가 문장을 생성하거나 보강하지 않는다.
+전달하며, PRISM 이 문장을 생성하거나 보강하지 않는다.
 
 이전 보고서는 모델이 만든 출력이다. 1차 실행의 첨부에 지시문이 섞여 있었다면
 그 영향이 보고서에 남아 있을 수 있으므로, 첨부 자료와 같은 등급의 비신뢰
@@ -51,7 +51,7 @@ class InputTooLarge(Exception):
         super().__init__(
             f"입력이 설정한 글자 수 한도를 초과했습니다: {total_chars:,}자 "
             f"(한도 {budget:,}자). 조립 단계에서 막았으므로 Provider 를 호출하지 "
-            "않았고 토큰도 소모되지 않았습니다. ARIA 는 문서를 임의로 자르거나 "
+            "않았고 토큰도 소모되지 않았습니다. PRISM 은 문서를 임의로 자르거나 "
             "요약하지 않습니다. 문헌을 나눠 여러 번 실행하거나, 환경설정에서 이 "
             "한도를 0(제한 없음)으로 두십시오."
         )
@@ -103,7 +103,7 @@ def included_attachments(attachments: list[IngestedFile]) -> list[IngestedFile]:
 
 
 # 최종 프롬프트에 나타나는 순서. 별칭 번호가 이 순서를 따라야 모델이 본 화면과
-# ARIA 의 표가 일치한다. 정의는 citation_mapping 에 있다 — 정렬과 별칭 부여가
+# PRISM 의 표가 일치한다. 정의는 citation_mapping 에 있다 — 정렬과 별칭 부여가
 # 떨어져 있으면 새 호출부가 정렬을 잊고, 같은 실행 안에서 ATT-01 이 서로 다른
 # 자료를 가리키게 된다.
 ordered_attachments = citation_ordered_attachments
@@ -124,7 +124,7 @@ def _attachment_block(
     }.get(item.role, "기타 첨부 자료")
     header = [
         f"=== 첨부 {index}/{total} ===",
-        # 자료 번호는 ARIA 가 붙인 짧은 별칭이다. 모델이 자료를 가리켜야 할 때
+        # 자료 번호는 PRISM 이 붙인 짧은 별칭이다. 모델이 자료를 가리켜야 할 때
         # attachment_id 대신 이걸 쓴다. 긴 UUID 는 옮겨 적다가 틀린다.
         f"자료 번호: {alias}" if alias else f"attachment_id: {item.attachment_id}",
         f"attachment_id: {item.attachment_id}" if alias else "",
@@ -157,8 +157,8 @@ def _attachment_block(
         header.append(f"전체 문자 수: {item.char_count:,}")
         header.append(
             "상태: 이 문헌의 전체 본문은 이 프롬프트에 들어 있지 않습니다. "
-            "ARIA 가 로컬 색인한 뒤 검색으로 확인한 구간만 아래 "
-            "「ARIA 로컬 검색 근거 패키지」에 담았습니다."
+            "PRISM 이 로컬 색인한 뒤 검색으로 확인한 구간만 아래 "
+            "「PRISM 로컬 검색 근거 패키지」에 담았습니다."
         )
         return "\n".join(header)
 
@@ -223,7 +223,7 @@ def assemble(
         sections += [
             "",
             "[고정 문헌 매핑]",
-            "이전 분석에서 부여하고 ARIA 가 첨부와 대조해 검증한 번호입니다.",
+            "이전 분석에서 부여하고 PRISM 이 첨부와 대조해 검증한 번호입니다.",
             "",
             render_mapping(prior_citation_mapping, aliases),
         ]
@@ -269,7 +269,7 @@ def assemble(
             ]
             sections.append(
                 f"총 {len(attachments)}개 중 {len(indexed)}개(인용발명·기타 자료)를 "
-                "ARIA 가 로컬 색인했습니다. 그 자료의 본문 전체는 이 프롬프트에 "
+                "PRISM 이 로컬 색인했습니다. 그 자료의 본문 전체는 이 프롬프트에 "
                 "없고, 검색으로 확인한 구간만 아래 근거 패키지에 있습니다."
             )
             if inlined:
@@ -350,7 +350,7 @@ def assemble_search(
     attachments 는 그래서 본문에 쓰이지 않고 manifest 에만 들어간다. 어떤 파일이
     이 실행의 입력이었는지는 남아야 한다.
 
-    ARIA 는 여기서도 업무 지시를 덧붙이지 않는다. 시스템 프롬프트는 신뢰 경계와
+    PRISM 은 여기서도 업무 지시를 덧붙이지 않는다. 시스템 프롬프트는 신뢰 경계와
     증거 등급 계약이고, 무엇을 검색해서 어떻게 정리할지는 프롬프트 파일에 있다.
     """
     attachments = included_attachments(attachments or [])

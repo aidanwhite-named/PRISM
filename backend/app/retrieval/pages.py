@@ -319,7 +319,7 @@ def render(documents: list[dict], dropped: list[str] | None = None) -> list[str]
             if page.get("truncated"):
                 # 원문과 구분된 행에 위치·포함량·누락량을 남긴다.
                 lines.insert(len(lines) - 1,
-                    f"[ARIA 부분 수록: 원문 첫 {page['included_chars']:,}자 / "
+                    f"[PRISM 부분 수록: 원문 첫 {page['included_chars']:,}자 / "
                     f"전체 {page['source_chars']:,}자. 뒤 {page['omitted_chars']:,}자는 "
                     "예산으로 누락됐으며 검토 범위 밖입니다.]")
     if dropped:

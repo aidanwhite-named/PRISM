@@ -121,7 +121,7 @@ def test_bundled_analysis_prompt_is_listed_editable_but_not_deletable(client) ->
 def test_search_prompt_catalog_edit_validates_execution_contract(client) -> None:
     """검색 전략 본문에는 요구하는 표시가 없다. 반쯤 옮긴 옛 본문만 거절한다.
 
-    데이터 구간(청구항·명세서·미대응 구성)은 ARIA 가 전략 본문 뒤에 붙인다.
+    데이터 구간(청구항·명세서·미대응 구성)은 PRISM 이 전략 본문 뒤에 붙인다.
     그래서 전략만 적은 본문은 **정상**이다. 다만 옛 방식으로 placeholder 를
     직접 든 본문은 경계까지 온전해야 한다 — 반쯤 옮겨 적은 본문으로 실행하면
     청구항이 경계 밖에 놓인다.
@@ -456,7 +456,7 @@ def test_input_too_large(client, prompt) -> None:
 
 
 def test_inline_char_limit_defaults_to_unlimited(client, prompt) -> None:
-    """ARIA 자체 글자 수 한도는 기본적으로 없다.
+    """PRISM 자체 글자 수 한도는 기본적으로 없다.
 
     0 과 null 을 모두 '제한 없음'으로 받고, 그 상태에서는 큰 입력도 글자 수를
     이유로 막지 않는다. 실행을 막아야 하는 한도는 Provider 전송 한도와 모델
@@ -495,7 +495,7 @@ def test_provider_byte_budget_blocks_oversized_input(client, prompt, monkeypatch
     """문자수 한도는 통과해도 Provider 의 바이트 한도를 넘으면 실행 전에 막는다.
 
     agy 처럼 큰 입력을 조용히 자르는 Provider 를 위한 방어다. 자르기 전에 실패로
-    끝내, 앞부분만 분석하고 '성공'으로 남는 낭비를 없앤다. ARIA 의 글자 수
+    끝내, 앞부분만 분석하고 '성공'으로 남는 낭비를 없앤다. PRISM 의 글자 수
     한도를 꺼 두어도(기본값) 이 검사는 남는다는 것을 고정한다 — 사용자 입력
     제한이 아니라 Provider 가 자료 전체를 손실 없이 전달할 수 있는 한도다.
     """
@@ -769,7 +769,7 @@ def test_no_api_key_endpoint_exists(client) -> None:
 
 
 def test_reasoning_effort_defaults_to_the_model_default(client) -> None:
-    """기본값은 "모델 기본값" 이다. ARIA 가 레벨을 대신 정해 주지 않는다."""
+    """기본값은 "모델 기본값" 이다. PRISM 이 레벨을 대신 정해 주지 않는다."""
     values = client.get("/api/settings").json()["values"]
     assert values["reasoning_effort"] == {}
 
@@ -843,8 +843,8 @@ def test_model_output_never_reaches_the_event_stream(client, prompt) -> None:
 
     # 어떤 이벤트에도 감사 블록이나 보고서 본문이 실려 있지 않아야 한다.
     blob = json.dumps(events, ensure_ascii=False)
-    assert "ARIA_COMPONENT_ANALYSIS_V1" not in blob
-    assert "ARIA_CITATION_MAPPING_V1" not in blob
+    assert "PRISM_COMPONENT_ANALYSIS_V1" not in blob
+    assert "PRISM_CITATION_MAPPING_V1" not in blob
     assert "citation_number" not in blob
 
     progress = [e["payload"] for e in events if e["type"] == "result_progress"]
@@ -869,8 +869,8 @@ def test_completed_result_is_stored_and_served_clean(client, prompt) -> None:
 
     assert final["status"] == "SUCCEEDED"
     assert final["result_text"].strip()
-    assert "ARIA_COMPONENT_ANALYSIS_V1" not in final["result_text"]
-    assert "ARIA_CITATION_MAPPING_V1" not in final["result_text"]
+    assert "PRISM_COMPONENT_ANALYSIS_V1" not in final["result_text"]
+    assert "PRISM_CITATION_MAPPING_V1" not in final["result_text"]
 
     # 파싱 결과는 따로 남는다 — 본문에서 지웠다고 잃어버리지 않는다.
     assert final["analysis_manifest"]["items"]
