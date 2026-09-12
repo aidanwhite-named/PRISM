@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from .. import settings_service
+from .. import search_channels, settings_service
 from ..db import get_db
 from ..models import ProviderSnapshot
 from ..providers.registry import (
@@ -189,4 +189,60 @@ async def smoke_test(provider_id: str, session: Session = Depends(get_db)) -> di
         "cli_path": outcome.cli_path,
         "cli_version": outcome.cli_version,
         "stderr_tail": (outcome.raw_stderr or "")[-2000:],
+    }
+
+
+@router.post("/{provider_id}/search-check")
+async def search_check(provider_id: str, session: Session = Depends(get_db)) -> dict:
+    """검색 도구를 실제로 한 번 부른다. 사용량이 발생할 수 있다.
+
+    smoke-test 와 나눈 이유: 그쪽이 확인하는 것은 "모델이 답하는가"이고, 이쪽이
+    확인하는 것은 "검색 도구가 응답하는가"다. 2026-09-12 의 agy 는 앞의 것만
+    참이었다 — 로그인도 대화도 정상인데 search_web 만 전부 죽어 있었고, 그
+    상태로 돌린 유사문헌 검색은 후보 0건을 내놓았다.
+    """
+    overrides = settings_service.get(session, "provider_paths") or {}
+    provider = build_provider(provider_id, overrides)
+    if provider is None:
+        raise HTTPException(404, "알 수 없는 Provider 입니다.")
+    policy = getattr(provider, "search_tool_policy", None)
+    if policy is None:
+        raise HTTPException(400, f"{provider_id} 는 검색 도구를 지원하지 않습니다.")
+
+    try:
+        model = (settings_service.get(session, "default_models") or {}).get(provider_id) or None
+        outcome = await provider.search_check(model=model)
+    except NotImplementedError:
+        raise HTTPException(
+            400, f"{provider_id} 는 검색 도구 확인을 지원하지 않습니다."
+        ) from None
+
+    cli_version = outcome.cli_version or ""
+    record = search_channels.web_evidence(
+        outcome.tool_calls,
+        policy.required_tools or policy.allowed_tools,
+        cli_version=cli_version,
+        source="check",
+    )
+    if record is None:
+        # 모델이 도구를 부르지 않았으면 도달성에 대해 아는 것이 없다. 모르는
+        # 것을 기록하면 다음 화면이 그것을 실측으로 읽는다. 기록하지 않는다.
+        return {
+            "provider": provider_id, "recorded": False,
+            "status": search_channels.web_status(None),
+            "message": (
+                "모델이 검색 도구를 호출하지 않아 확인하지 못했습니다. "
+                "도달성 기록은 바꾸지 않았습니다."
+            ),
+            "result_text": outcome.result_text[:2000],
+            "cli_version": cli_version,
+        }
+
+    settings_service.record_web_health(provider_id, record)
+    return {
+        "provider": provider_id, "recorded": True,
+        "status": search_channels.web_status(record, cli_version=cli_version),
+        "record": record,
+        "result_text": outcome.result_text[:2000],
+        "cli_version": cli_version,
     }

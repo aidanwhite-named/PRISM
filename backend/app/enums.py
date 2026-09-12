@@ -46,6 +46,10 @@ class ErrorCode(StrEnum):
     # 거부됐다. agy 는 이 경우에도 종료 코드 0 과 빈 응답을 돌려줄 수 있으므로
     # EMPTY_RESULT 보다 먼저 구분해야 한다.
     SEARCH_PERMISSION_DENIED = "SEARCH_PERMISSION_DENIED"
+    # 쓸 수 있는 검색 채널이 하나도 없다. 웹 도구가 죽은 것을 실측으로 알고
+    # 나머지 채널이 모두 닫혀 있으면, 실행해도 남는 경로는 모델이 기억에서
+    # 후보를 지어내는 것뿐이다. 토큰을 쓰기 전에 막는다.
+    SEARCH_CHANNELS_UNAVAILABLE = "SEARCH_CHANNELS_UNAVAILABLE"
     # 로컬 검색(retrieval) 전용.
     # 이 실행 환경에서 로컬 검색 인덱스를 만들 수 없거나(FTS5 없음), 색인할 수
     # 있는 문헌이 하나도 없다. 검색 없이 근거를 지어내지 않으므로 실패시킨다.

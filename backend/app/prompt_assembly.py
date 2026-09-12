@@ -186,6 +186,7 @@ def assemble(
     prior_report: str = "",
     prior_citation_mapping: dict | None = None,
     evidence_bundle: dict | None = None,
+    report_context: str = "",
 ) -> AssembledPrompt:
     """최종 분석 프롬프트를 만든다.
 
@@ -209,6 +210,9 @@ def assemble(
 
     if claim_text.strip():
         sections += ["", "[출원발명 청구항]", claim_text.strip()]
+
+    if report_context:
+        sections += ["", report_context]
 
     if followup_instruction.strip():
         sections += [

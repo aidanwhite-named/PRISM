@@ -66,6 +66,10 @@ class Paths:
     def run_dir(self, job_id: str) -> Path:
         return self.runs_dir / job_id
 
+    @property
+    def answer_library_dir(self) -> Path:
+        return self.data_dir / "answer_library"
+
     def ensure(self) -> None:
         for path in (
             self.data_dir,
@@ -366,6 +370,10 @@ DEFAULTS: dict[str, object] = {
     "epo_hourly_quota_bytes": 0,
     "epo_max_detail_fetches": 40,
     "epo_quota_state": {},
+    # Provider 웹 검색 도구의 실측 도달성. epo_quota_state 와 같은 이유로
+    # EDITABLE_KEYS 밖이다 — PRISM 이 관측해 적는 값이고, 사용자가 PUT 으로
+    # "사용 가능"이라고 고쳐 쓸 수 있으면 실측이 아니라 다시 선언이 된다.
+    "web_search_health": {},
     "agy_allowlist_migration": "",
     "literature_integration_enabled": True,
     "literature_contact_email": "",

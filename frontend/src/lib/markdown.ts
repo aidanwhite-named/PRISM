@@ -84,6 +84,43 @@ export function renderMarkdown(source: string): string {
 const COMPONENT_TITLE = /^\((?:[A-Z](?:-?\d+)?|전제부)\)\s+\S/;
 const REPORT_LABEL = /^(?:→\s*)?(?:대응 정도|유사도 기준 문헌|근거|대응|차이점|도출 용이성|보완|결합 동기 및 가능성|결합 결과|결합 후 남는 차이점|결합 후 도출 용이성|대응 결론)\s*[:：]/;
 
+// `인용발명 3` 형태의 표식. 줄바꿈은 건너뛰어 문단 사이를 묶지 않는다.
+const CITATION = /인용발명[ \t]?\d{1,2}/g;
+
+/** 「인용발명 N」에 표시용 표식을 단다.
+ *
+ * 문서에서 가장 자주 되짚는 참조인데 본문과 같은 굵기·색이라 문장 안에서
+ * 찾기 어려웠다. 여기서는 화면 표시만 바꾼다 — 정화가 끝난 DOM 의 텍스트
+ * 노드만 나누고 span 의 내용은 textContent 로만 넣으므로, 원문 문구도
+ * 복사·인쇄본도 그대로다. 코드·링크 안은 건드리지 않는다.
+ */
+function markCitations(root: DocumentFragment): void {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const targets: Text[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node as Text;
+    if (!text.data.includes("인용발명")) continue;
+    if (text.parentElement?.closest("code, pre, a")) continue;
+    targets.push(text);
+  }
+  targets.forEach((text) => {
+    const parts = document.createDocumentFragment();
+    let cursor = 0;
+    for (const match of text.data.matchAll(CITATION)) {
+      const start = match.index ?? 0;
+      if (start > cursor) parts.append(text.data.slice(cursor, start));
+      const tag = document.createElement("span");
+      tag.className = "report-citation";
+      tag.textContent = match[0];
+      parts.append(tag);
+      cursor = start + match[0].length;
+    }
+    if (!parts.childNodes.length) return;
+    if (cursor < text.data.length) parts.append(text.data.slice(cursor));
+    text.replaceWith(parts);
+  });
+}
+
 /** 보고서 예시를 통째로 백틱에 넣은 출력도 본문 서식으로 표시한다.
  * 이미 정화한 DOM의 텍스트만 옮긴다. 코드 안의 HTML/수식은 재해석하지 않는다.
  * 일반적인 인라인 코드와 코드 블록은 그대로 보존한다. */
@@ -119,6 +156,9 @@ export function renderReportMarkdown(source: string): string {
       paragraph.prepend(title);
     }
   });
+  // 문단 정리가 끝난 뒤에 붙인다. 코드 서식을 벗기는 위 단계가 문단의 자식을
+  // 통째로 갈아 끼우므로, 먼저 달면 그 표식이 사라진다.
+  markCitations(template.content);
   return template.innerHTML;
 }
 

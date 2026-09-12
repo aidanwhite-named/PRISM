@@ -825,3 +825,39 @@ def test_search_prompt_never_carries_the_analysis_output_rules(client) -> None:
     assert job["analysis_manifest_error"] is None
     assert job["citation_mapping"] is None
     assert job["citation_mapping_error"] is None
+
+
+def test_preflight_blocks_before_the_button_when_every_channel_is_dead(client) -> None:
+    """채널이 하나도 없으면 실행을 만들기 전에 화면에서 막는다.
+
+    runner 에도 같은 검사가 있지만 시점이 다르다. runner 에서만 막으면 사용자는
+    「검색 시작」을 누른 뒤 실패한 작업으로 그 사실을 안다. 그리고 그 문장에는
+    **빠져나갈 길**이 있어야 한다 — 실측 실패 기록은 시간이 지나야 만료되므로,
+    도구가 복구됐을 때 다시 확인하는 방법을 모르면 그 시간 내내 막힌다.
+    """
+    from datetime import datetime, timezone
+
+    from app import settings_service
+    from app.db import session_scope
+    from app.models import AppSetting
+    from app.search_channels import WEB_HEALTH_KEY
+
+    settings_service.record_web_health("test-search", {
+        "ok": False, "at": datetime.now(timezone.utc).isoformat(),
+        "detail": "no summary returned from GenerateContent",
+        "source": "check", "cli_version": "1.2.2", "calls": 1,
+    })
+    try:
+        ahead = _preflight(client)
+        assert ahead["blocked"] is True
+        assert "no summary returned from GenerateContent" in ahead["message"]
+        assert "검색 도구 확인" in ahead["message"]
+        assert "claude" in ahead["message"] and "codex" in ahead["message"]
+    finally:
+        with session_scope() as session:
+            row = session.get(AppSetting, WEB_HEALTH_KEY)
+            if row is not None:
+                session.delete(row)
+
+    # 기록을 지우면(=확인한 적 없음) 다시 열린다. 모름은 사망이 아니다.
+    assert _preflight(client)["blocked"] is False

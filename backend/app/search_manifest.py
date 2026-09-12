@@ -133,6 +133,33 @@ def has_retrieval_attempt(calls, tool_uses=None, journal=None) -> bool:
     return bool(names & eligible)
 
 
+def has_successful_query(calls, journal=None) -> bool:
+    """검색 **질의**가 한 건이라도 응답했는가.
+
+    has_retrieval_attempt 와 다른 질문이다. 그쪽은 "검색 계열 도구를 부르기는
+    했는가"를 보므로 URL 열람만으로도 참이 된다. 그런데 질의가 전멸한 실행에서
+    모델이 URL 을 직접 만들어 열면, 거기서 나온 후보는 검색 결과가 아니라 모델이
+    기억하고 있던 문헌이다.
+
+    실측(job 377c866d, 2026-09-12): search_web 3회가 모두 죽은 뒤 모델이
+    Google Patents 주소 5개를 스스로 만들어 열었고, 그중 하나(KR102143000B1)는
+    존재하지 않는 번호라 404 였다. 그 실행은 후보 1건짜리 "검색 결과"로
+    보고됐다. 사용자는 그것을 "이 정도밖에 없다"로 읽는다 — 실제로는 검색
+    자체가 없었는데.
+
+    성패를 모르는 호출(ok is None)은 성공 쪽으로 센다. Codex 의 web_search 는
+    완료 이벤트에 성공 신호를 싣지 않으므로, 모름을 실패로 세면 정상 실행이
+    검색 미수행으로 뒤집힌다.
+    """
+    for call in calls or []:
+        if str(call.get("name") or "") in SEARCH_TOOL_NAMES and call.get("ok") is not False:
+            return True
+    for row in journal or []:
+        if str(row.get("tool") or "").endswith("_search") and row.get("ok") is not False:
+            return True
+    return False
+
+
 def observed(calls, tool_uses=None, **_context) -> dict:
     calls = [copy.deepcopy(call) for call in (calls or []) if isinstance(call, dict)]
     queries, attempted, read, lookups = [], [], [], []

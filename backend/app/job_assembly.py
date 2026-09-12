@@ -562,6 +562,7 @@ def assemble_job(
     prior_claim_text: str = "",
     prior_report: str = "",
     prior_citation_mapping: dict | None = None,
+    report_context: str = "",
     tool_policy_name: str = "",
     # agy 가 지금 실제로 열 수 있는 호스트. 검색 조립에서만 쓰이며, 호출부가
     # 넘기지 않으면 "하나도 열 수 없음"으로 안내한다 — 모르는 상태를 제한 없음
@@ -605,6 +606,7 @@ def assemble_job(
             "prior_claim_text": prior_claim_text,
             "prior_report": prior_report,
             "prior_citation_mapping": prior_citation_mapping,
+            "report_context": report_context,
         }
 
         # auto 판정에는 전체 인라인 조립본의 실제 바이트가 필요하다. 이 조립에는

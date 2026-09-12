@@ -309,7 +309,7 @@ def test_the_standard_report_survives_a_strategy_that_demands_another_format(
 
         report = job["result_text"] or ""
         # 전략이 금지한 절이 그대로 나온다. 보고서는 매니페스트가 만든다.
-        assert "## 사용 가능한 도구" in report
+        assert "## 검색 도구 상태" in report
         assert "LLM의 기술적 판단" in report
         # 모델 산문은 보고서 본문이 되지 않는다.
         assert "★ 결과 ★" not in report
@@ -475,7 +475,7 @@ def test_a_legacy_placeholder_prompt_still_runs(client) -> None:
 
         # 옛 본문이어도 감사 기록과 표준 보고서는 그대로 나온다.
         assert job["search_manifest_error"] is None
-        assert "## 사용 가능한 도구" in (job["result_text"] or "")
+        assert "## 검색 도구 상태" in (job["result_text"] or "")
     finally:
         client.delete(f"/api/prompts/{legacy['id']}")
 

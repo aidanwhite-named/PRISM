@@ -15,6 +15,7 @@ import type {
   RelationType,
   UploadResponse,
 } from "./types";
+import type { AnswerCase, AnswerCaseSummary, AnswerContent } from "./answers";
 
 // 백엔드 CSRF 가드가 변경 요청에 요구하는 헤더.
 // 커스텀 헤더는 preflight 를 강제하므로 외부 사이트가 붙일 수 없다.
@@ -51,6 +52,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  answerCases: () => request<AnswerCaseSummary[]>("/api/answers"),
+  answerCase: (id: string) => request<AnswerCase>(`/api/answers/${id}`),
+  registerAnswer: (body: FormData) => request<AnswerCase>("/api/answers", {method: "POST", body}),
+  updateAnswer: (id: string, body: {title: string; claim_text: string; report_text: string; draft: AnswerContent; edit_version: number}) =>
+    request<AnswerCase>(`/api/answers/${id}`, {method: "PUT", body: JSON.stringify(body)}),
+  approveAnswer: (id: string, edit_version: number) => request<AnswerCase>(`/api/answers/${id}/approve`,
+    {method: "POST", body: JSON.stringify({edit_version})}),
+  archiveAnswer: (id: string, edit_version: number) => request<AnswerCase>(`/api/answers/${id}/archive`,
+    {method: "POST", body: JSON.stringify({edit_version})}),
+  extractAnswer: (id: string) => request<AnswerCase>(`/api/answers/${id}/extract`, {method: "POST", body: "{}"}),
+  cancelAnswerExtraction: (id: string, attempt: string) => request<AnswerCase>(`/api/answers/${id}/extractions/${attempt}/cancel`, {method: "POST"}),
+  answerStyle: () => request<{text: string; path: string; max_chars: number; token_budget: number}>("/api/answers/style"),
+  saveAnswerStyle: (text: string) => request<{text: string; path: string}>("/api/answers/style", {method: "PUT", body: JSON.stringify({text})}),
   health: () => request<{ status: string; version: string }>("/api/health"),
 
   /**
@@ -105,6 +119,10 @@ export const api = {
     request<Record<string, unknown>>(`/api/providers/${id}/smoke-test`, {
       method: "POST",
     }),
+  searchCheck: (id: string) =>
+    request<Record<string, unknown>>(`/api/providers/${id}/search-check`, {
+      method: "POST",
+    }),
   startProviderLogin: (id: string, method?: string) =>
     request<ProviderLoginSession>(`/api/providers/${id}/login`, {
       method: "POST",
@@ -135,6 +153,7 @@ export const api = {
   },
 
   createJob: (body: {
+    use_answer_library?: boolean;
     job_kind?: JobKind;
     prompt_id?: string | null;
     provider?: string | null;
@@ -161,6 +180,7 @@ export const api = {
   /** 실행하지 않고 최종 조립 프롬프트의 크기만 받아 온다. 작업을 만들지 않고
    *  Provider 도 부르지 않는다. */
   preflight: (body: {
+    use_answer_library?: boolean;
     job_kind?: JobKind;
     prompt_id?: string | null;
     provider?: string | null;

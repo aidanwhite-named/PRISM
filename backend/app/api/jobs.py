@@ -44,6 +44,8 @@ from ..ingestion.service import (
     ingest_many,
 )
 from ..models import Attachment, ExecutionJob, ResultArtifact
+from ..answer_models import ReportContextSnapshot
+from .. import answer_library
 from ..prompt_assembly import InputTooLarge
 from ..prompt_store import PROMPT_STORE, InvalidPromptFile, PromptNotFound
 from ..providers.registry import build_provider, probe_one
@@ -308,6 +310,7 @@ def _job_out(job: ExecutionJob) -> JobOut:
         prompt_capabilities=list(job.prompt_capabilities or []),
         citation_mapping_error=job.citation_mapping_error,
         analysis_manifest=job.analysis_manifest,
+        report_context=job.report_context.manifest if job.report_context else None,
         analysis_manifest_error=job.analysis_manifest_error,
         # 저장하지 않고 조회 시점에 계산한다. 입력은 이미 이 행에 다 있고
         # (retrieval_manifest, analysis_manifest), 이 값으로 검색하거나 정렬할
@@ -581,6 +584,7 @@ async def _create_search_job(
         validate_search_strategy(prompt.body, prompt_id=prompt.id)
     except SearchPromptError as exc:
         raise HTTPException(422, str(exc)) from exc
+
     if not prompt.enabled:
         raise HTTPException(
             400, f"검색 전략 프롬프트가 비활성화되어 있습니다: {prompt.name}"
@@ -856,6 +860,14 @@ async def create_job(payload: JobCreate, session: Session = Depends(get_db)) -> 
         PATHS.run_dir(payload.batch_id) if payload.batch_id else None
     )
 
+    try:
+        context_manifest = answer_library.build_context(session, payload.claim_text,
+            enabled=payload.use_answer_library, exclude_job_id=payload.source_job_id,
+            exclude_source_hashes={r.sha256 for r in (*batch_rows, *inherited_rows)
+                if (r.id in selected if selected is not None else r.included)})
+    except (ValueError, OSError) as exc:
+        raise HTTPException(422, f"정답 사례를 준비하지 못했습니다: {exc}") from exc
+
     relation_kind = RelationType(relation) if relation else None
     carries_claims = relation_kind is not None and relation_kind.inherits_mapping
     job = ExecutionJob(
@@ -885,6 +897,7 @@ async def create_job(payload: JobCreate, session: Session = Depends(get_db)) -> 
     session.add(job)
     session.flush()
 
+    session.add(ReportContextSnapshot(job_id=job.id, manifest=context_manifest))
     if work_dir is None:
         work_dir = PATHS.run_dir(job.id)
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -1042,7 +1055,33 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
     # 상한과 실행이 강제하는 상한이 어긋난다.
     retrieval_budget = retrieval.budget_from_settings(values)
 
+    # --- 검색 채널 -------------------------------------------------------
+    # runner 에도 같은 검사가 있다. 여기서 한 번 더 보는 이유는 **시점**이다.
+    # runner 에서만 막으면 사용자는 실행 버튼을 누른 뒤에야 실패한 작업으로
+    # 그 사실을 안다. 화면은 누르기 전에 말할 수 있어야 한다.
+    if job_kind is JobKind.SIMILARITY_SEARCH and provider_id:
+        channels = search_channels.availability(values, provider_id)
+        if search_channels.no_usable_channel(channels):
+            return PreflightOut(
+                job_kind=job_kind.value,
+                provider=provider_id,
+                lanes=[],
+                chars=0,
+                bytes=0,
+                char_budget=max_chars,
+                byte_budget=byte_budget,
+                blocked=True,
+                message=search_channels.unusable_channel_message(channels),
+            )
+
     # --- 실제 조립 --------------------------------------------------------
+    try:
+        context_manifest = answer_library.build_context(session, payload.claim_text,
+            enabled=payload.use_answer_library and job_kind is not JobKind.SIMILARITY_SEARCH,
+            exclude_job_id=payload.source_job_id,
+            exclude_source_hashes={a.sha256 for a in attachments})
+    except (ValueError, OSError) as exc:
+        raise HTTPException(422, f"정답 사례를 준비하지 못했습니다: {exc}") from exc
     try:
         assembly = job_assembly.assemble_job(
             job_kind=job_kind,
@@ -1061,6 +1100,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
             prior_claim_text=prior_claim_text,
             prior_report=prior_report,
             prior_citation_mapping=prior_mapping,
+            report_context=context_manifest["text"],
             tool_policy_name=tool_policy_name,
             agy_allowed_hosts=job_assembly.allowed_hosts_for(tool_policy_name),
             retrieval_mode=str(values.get("retrieval_mode") or "auto"),
@@ -1187,6 +1227,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
         job_kind=job_kind.value,
         provider=provider_id,
         lanes=lanes,
+        report_context=context_manifest,
         chars=chars,
         bytes=largest,
         char_budget=max_chars,

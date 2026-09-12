@@ -299,6 +299,14 @@ def _reply(request_id, result=None, error=None):
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
     sys.stdout.flush()
 
+def _tool_result(value, *, error=False):
+    # No outputSchema is advertised. Text JSON is the complete MCP result;
+    # an identical structuredContent doubles the wire payload in Codex logs.
+    # The full evidence remains in the PRISM journal.
+    return {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False, separators=(",", ":"))}],
+            "isError": error}
+
+
 def main():
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
@@ -334,8 +342,7 @@ def main():
                     value = {"error_code": getattr(exc, "fault_code", "") or type(exc).__name__,
                              "detail": scrub(str(exc), *tools.secrets)[:500]}
                     error = True
-                _reply(request_id, {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}],
-                                    "structuredContent": value, "isError": error})
+                _reply(request_id, _tool_result(value, error=error))
             else:
                 _reply(request_id, error={"code": -32601, "message": "Method not found"})
         except (ValueError, TypeError):

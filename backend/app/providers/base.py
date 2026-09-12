@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import abc
+import tempfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -390,3 +391,41 @@ class Provider(abc.ABC):
     async def smoke_test(self, emit: EmitFn | None = None) -> ExecutionOutcome:
         """실제 모델을 호출하는 검증. 사용량이 발생한다."""
         raise NotImplementedError
+
+    async def search_check(self, emit: EmitFn | None = None, *, model: str | None = None) -> ExecutionOutcome:
+        """검색 도구를 **실제로 한 번 불러** 도달성을 확인한다. 사용량이 발생한다.
+
+        smoke_test 로는 이것을 대신할 수 없다. 그쪽은 도구 없이 모델에게 한 줄을
+        받아 오므로, CLI 가 살아 있고 로그인도 되어 있는데 그 안의 검색 도구만
+        죽은 상태를 통과시킨다. 2026-09-12 의 agy 가 정확히 그 상태였다 —
+        `agy models` 도 대화도 정상인데 search_web 만 전부 TOOL_ERROR 였다.
+
+        질의는 결과의 내용이 아니라 **도구가 응답하는지**만 보므로 아무 기술
+        용어나 쓴다. 판정은 호출자가 tool_calls 로 한다(search_channels).
+        """
+        policy = self.search_tool_policy
+        if policy is None:
+            raise NotImplementedError
+        tool = (policy.required_tools or policy.allowed_tools or ("",))[0]
+
+        async def noop(_type: str, _payload: dict) -> None:
+            return None
+
+        with tempfile.TemporaryDirectory(prefix="prism-search-check-") as tmp:
+            request = ExecutionRequest(
+                job_id=f"search-check-{self.id}-{id(self)}",
+                work_dir=Path(tmp),
+                model=model,
+                system_prompt=(
+                    "You are a connectivity test for a search tool. "
+                    "Do not answer from memory and do not open any URL."
+                ),
+                user_message=(
+                    f"Call the `{tool}` tool exactly once with the query: "
+                    "photovoltaic module junction box. Then reply with only OK, "
+                    "or the exact tool error text if the call failed."
+                ),
+                tool_policy=policy,
+                timeout_seconds=180,
+            )
+            return await self.execute(request, emit or noop)

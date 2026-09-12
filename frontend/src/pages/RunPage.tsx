@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import AnswerContextView from "../components/AnswerContextView";
 
 import GapSearchPanel from "../components/GapSearchPanel";
 import AnalysisDegreeOverview from "../components/AnalysisDegreeOverview";
@@ -253,6 +254,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const [gapSearchOpen, setGapSearchOpen] = useState(false);
   const [selectedGapIds, setSelectedGapIds] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [useAnswerLibrary, setUseAnswerLibrary] = useState(() => localStorage.getItem("prism.answerLibrary") !== "false");
   const citationFileInput = useRef<HTMLInputElement>(null);
   const searchSpecInput = useRef<HTMLInputElement>(null);
 
@@ -487,6 +489,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           source_job_id: lineage?.sourceJobId ?? null,
           relation_type: lineage?.relationType ?? null,
           followup_instruction: followupInstruction,
+          use_answer_library: useAnswerLibrary,
         })
         .then((result) => {
           if (!cancelled) setPreflight(result);
@@ -514,6 +517,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     lineage?.sourceJobId,
     lineage?.relationType,
     followupInstruction,
+    useAnswerLibrary,
   ]);
 
   const selectedUploadItems = useMemo(
@@ -737,6 +741,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
       }
       const created = await api.createJob({
         job_kind: "patent_analysis",
+        use_answer_library: useAnswerLibrary,
         // 화면에서 고른 값을 그대로 보낸다. 생략하면 백엔드가 설정
         // 기본값으로 되돌아가서, 화면 표시와 실제 실행이 어긋난다.
         prompt_id: promptId || null,
@@ -1400,6 +1405,15 @@ export default function RunPage({ kind }: { kind: JobKind }) {
       </div>
 
       <div className="run-side-rail no-print">
+      {!searching && <div className="card answer-run-card">
+        <h2>내 정답 사례 활용</h2>
+        <label className="checkbox"><input type="checkbox" checked={useAnswerLibrary} disabled={running} onChange={e => {
+          setUseAnswerLibrary(e.target.checked); localStorage.setItem("prism.answerLibrary", String(e.target.checked));
+        }} />확정한 판단 사례와 문체 참고</label>
+        <p className="faint">관련 사례만 입력 예산 안에서 선택합니다.</p>
+        <AnswerContextView context={preflight?.report_context} />
+        <Link to="/answers">정답 라이브러리 관리</Link>
+      </div>}
       {searching && (
         <div className="card search-spec-card">{searchSpecPanel}</div>
       )}
@@ -1524,6 +1538,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               submitting ||
               !providerId ||
               !selectedProvider?.usable ||
+              // preflight 가 이미 막기로 판정한 실행은 누를 수 없게 한다.
+              // 빨간 경고만 띄우고 버튼을 열어 두면, 사용자는 실패할 것이
+              // 확정된 작업을 만들어 실패 목록에서 같은 문장을 다시 읽는다.
+              Boolean(preflight?.blocked) ||
               (searching
                 ? !searchClaimText.trim() || !searchAvailable || !searchPromptId
                 : !promptId || !claimText.trim() || !analysisMaterialReady)
@@ -1744,6 +1762,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               <AnalysisDegreeOverview components={job.analysis_manifest.items} />
             )}
 
+          {job.job_kind === "patent_analysis" && !running && <>
+            <AnswerContextView context={job.report_context} />
+            {displayText && <div className="answer-actions no-print"><Link className="btn" to={`/answers?source=${job.id}`}>이 실행에 정답 보고서 등록</Link></div>}
+          </>}
           {job.job_kind === "similarity_search" && !running && job.search_manifest?.version === 14 && job.output_mode === "markdown" ? (
             <SearchResults data={job.search_manifest} />
           ) : (displayText || running) && (

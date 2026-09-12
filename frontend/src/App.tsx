@@ -16,6 +16,7 @@ const WORKSPACE_ICON: Record<JobKind, IconName> = {
 /** 두 작업을 거들 뿐 그 자체가 작업은 아닌 것들. 위계를 다르게 둔다 — 같은
  *  목록에 섞어 번호를 매기면 다섯 개가 한 줄기 순서로 읽힌다. */
 const TOOLS: Array<{ to: string; label: string; icon: IconName }> = [
+  { to: "/answers", label: "정답 라이브러리", icon: "prompts" },
   { to: "/prompts", label: "프롬프트", icon: "prompts" },
   { to: "/history", label: "실행 기록", icon: "history" },
   { to: "/settings", label: "환경 설정", icon: "settings" },
@@ -126,7 +127,7 @@ export default function App() {
               draggable="false"
             />
             <span className="brand-name">
-              <strong>PRISM</strong>
+              <strong>PRISM <span className="version-badge">v2</span></strong>
               <small>Patent Retrieval &amp; Invention Similarity Mapping</small>
             </span>
           </NavLink>

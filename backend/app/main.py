@@ -15,9 +15,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm.exc import StaleDataError
 
 from . import __version__, settings_service
-from .api import history, jobs, prompts, providers, settings
+from .api import answers, history, jobs, prompts, providers, settings
+from . import answer_extraction
 from .config import HOST, PATHS, PORT
 from .db import init_engine
 from .prompt_store import PROMPT_STORE
@@ -39,6 +41,7 @@ async def lifespan(app: FastAPI):
     PATHS.ensure()
     PROMPT_STORE.ensure()
     init_engine()
+    answer_extraction.recover()
     # agy 권장 열람 허용 목록의 **일회성** 적용. 여기 한 곳에서만 자동으로
     # 병합하고, Provider 검사는 읽기 전용이다. 사용자가 지운 호스트가 다음
     # 검사에서 되살아나지 않게 하는 것이 이 배치의 이유다.
@@ -49,6 +52,7 @@ async def lifespan(app: FastAPI):
         # PRISM이 종료될 때 브라우저 로그인 대기 프로세스나 agy 도우미 창을
         # 고아 프로세스로 남기지 않는다.
         await providers.LOGIN_MANAGER.shutdown()
+        await answer_extraction.shutdown()
 
 
 app = FastAPI(
@@ -114,6 +118,12 @@ app.include_router(providers.router)
 app.include_router(jobs.router)
 app.include_router(history.router)
 app.include_router(settings.router)
+app.include_router(answers.router)
+
+
+@app.exception_handler(StaleDataError)
+async def stale_edit(_request: Request, _error: StaleDataError):
+    return JSONResponse(status_code=409, content={"detail": "다른 화면에서 변경되었습니다. 새로 불러온 뒤 다시 저장하십시오."})
 
 
 @app.get("/api/health")

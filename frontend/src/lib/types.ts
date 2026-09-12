@@ -307,7 +307,7 @@ export interface SearchManifestV14 {
   started_at: string; completed_at: string;
   limits: { max_tool_calls: number; timeout_seconds: number };
   tool_availability: Record<string, { status: "available" | "disabled" | "not_configured" |
-    "not_implemented" | "unsupported_transport"; detail: string }>;
+    "not_implemented" | "unsupported_transport" | "unverified" | "unreachable"; detail: string }>;
   tool_journal: Record<string, unknown>[];
   observed: { tool_calls: Record<string, unknown>[]; tool_call_counts: Record<string, number>;
     search_queries: string[]; search_call_count: number; attempted_fetch_urls: string[]; succeeded_fetch_urls: string[]; url_lookup_attempts: string[]; tool_failures: unknown[]; unknown_tool_outcomes: unknown[] };
@@ -500,6 +500,7 @@ export interface AnalysisCompleteness {
 }
 
 export interface Job {
+  report_context?: import("./answers").ReportContext | null;
   id: string;
   status: JobStatus;
   error_code: string | null;
@@ -764,6 +765,7 @@ export type PreflightLane = {
 };
 
 export type Preflight = {
+  report_context?: import("./answers").ReportContext | null;
   job_kind: JobKind;
   provider: string;
   lanes: PreflightLane[];

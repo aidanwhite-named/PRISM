@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import patent_search
+from . import patent_search, search_channels
 from .config import DEFAULTS
 from .models import AppSetting
 from .providers.base import REASONING_EFFORTS
@@ -311,6 +311,43 @@ def merge_epo_quota(delta: dict) -> dict:
 def _max_or_none(left, right):
     values = [int(v) for v in (left, right) if v is not None]
     return max(values) if values else None
+
+
+_WEB_HEALTH_LOCK = threading.Lock()
+
+
+def web_health(values: dict[str, Any]) -> dict:
+    """Provider 별 웹 검색 도달성 실측 기록. 없으면 빈 dict."""
+    record = values.get(search_channels.WEB_HEALTH_KEY)
+    return dict(record) if isinstance(record, dict) else {}
+
+
+def record_web_health(provider: str, record: dict | None) -> dict:
+    """관측한 도달성을 Provider 별로 적는다.
+
+    epo_quota 와 같은 이유로 **자기 트랜잭션을 연다.** 도구가 죽은 것은
+    호출자의 트랜잭션에 속한 사실이 아니다. 실행이 실패해 롤백되어도 도구가
+    죽었다는 관측은 남아야 한다 — 오히려 그 실행이야말로 죽은 것을 본 실행이다.
+
+    EDITABLE_KEYS 밖인 것도 같은 이유다. 사용자가 PUT 으로 "사용 가능"이라고
+    써 넣을 수 있으면 이 값은 실측이 아니라 다시 선언이 된다.
+    """
+    if not provider or not isinstance(record, dict):
+        return {}
+
+    from .db import session_scope
+
+    with _WEB_HEALTH_LOCK, session_scope() as session:
+        row = session.get(AppSetting, search_channels.WEB_HEALTH_KEY)
+        stored = dict(row.value) if row is not None and isinstance(row.value, dict) else {}
+        stored[str(provider)] = dict(record)
+        if row is None:
+            session.add(AppSetting(key=search_channels.WEB_HEALTH_KEY, value=stored))
+        else:
+            # dict 를 제자리에서 고치면 SQLAlchemy 가 변경을 못 본다.
+            row.value = stored
+        session.flush()
+    return stored
 
 
 # 프로세스 전역 사용량 원장. **쿼터가 하나이므로 원장도 하나다.**

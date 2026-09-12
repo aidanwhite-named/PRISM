@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
+import sqlite3
 
 from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import PATHS
 from .models import Base
+from . import answer_models  # noqa: F401 — register v2 tables before create_all
 
 _engine = None
 _SessionLocal = None
@@ -19,6 +22,7 @@ def init_engine(db_path=None):
     global _engine, _SessionLocal
     PATHS.ensure()
     target = db_path or PATHS.db_path
+    _backup_before_v2(Path(target))
     _engine = create_engine(
         f"sqlite:///{target}",
         connect_args={"check_same_thread": False},
@@ -36,6 +40,22 @@ def init_engine(db_path=None):
     _add_compatible_columns(_engine)
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
     return _engine
+
+
+def _backup_before_v2(target: Path) -> None:
+    """Consistent SQLite backup before first additive v2 schema installation."""
+    if not target.is_file():
+        return
+    with sqlite3.connect(str(target)) as source:
+        tables = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "execution_jobs" not in tables or "answer_cases" in tables:
+            return
+        directory = target.parent / "backups"
+        directory.mkdir(parents=True, exist_ok=True)
+        from uuid import uuid4
+        backup = directory / f"{target.stem}-before-prism-v2-{uuid4().hex[:8]}.db"
+        with sqlite3.connect(str(backup)) as destination:
+            source.backup(destination)
 
 
 # 후속 분석 계보 컬럼. relation_type 만 NULL 을 허용한다 (독립 실행).

@@ -10,6 +10,7 @@ REASON_LABELS = {
     "timeout": "시간 한도 소진", "rate_limited": "Provider 사용량 제한",
     "cancelled": "취소됨", "outcome_unknown": "호출 완료 여부 미확인",
     "page_read_without_provenance": "페이지 열람 성공 · 보존 근거 대조 경로 없음",
+    "unverified": "연결 미확인", "unreachable": "연결 실패",
 }
 
 

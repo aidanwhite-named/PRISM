@@ -35,9 +35,14 @@ def render(manifest: dict) -> str:
     definitions = data.get("group_definitions") or GROUP_DEFINITIONS
     for group, meaning in definitions.items():
         lines.append(f"- {cell(group)}: {cell(meaning)}")
-    lines += ["", "## 사용 가능한 도구", ""]
+    # 제목이 "사용 가능한 도구"였다. 그 목록에는 쓸 수 없는 도구도 들어 있고,
+    # web 은 실패한 실행에서도 "사용 가능"으로 찍혔다. 상태를 상태라고 부르고,
+    # 판단 근거(마지막 실측 시각·실패 사유)를 같이 적는다.
+    lines += ["", "## 검색 도구 상태", ""]
     for name, status in data.get("tool_availability", {}).items():
-        lines.append(f"- {cell(name)}: {cell(STATUS_LABELS.get(status.get('status'), status.get('status')))}")
+        label = STATUS_LABELS.get(status.get("status"), status.get("status"))
+        detail = str(status.get("detail") or "").strip()
+        lines.append(f"- {cell(name)}: {cell(label)}" + (f" — {cell(detail)}" if detail else ""))
     failures = [row for row in data.get("tool_journal", []) if row.get("ok") is False]
     failures += (data.get("observed") or {}).get("tool_failures", [])
     if failures:

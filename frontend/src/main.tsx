@@ -15,6 +15,7 @@ import HistoryPage from "./pages/HistoryPage";
 import PromptsPage from "./pages/PromptsPage";
 import RunPage from "./pages/RunPage";
 import SettingsPage from "./pages/SettingsPage";
+import AnswersPage from "./pages/AnswersPage";
 import "./styles.css";
 
 /** 첫 화면은 마지막으로 열어 두었던 작업이다.
@@ -52,6 +53,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               element={<RunPage kind="similarity_search" />}
             />
             <Route path="prompts" element={<PromptsPage />} />
+            <Route path="answers" element={<AnswersPage />} />
             <Route path="history" element={<HistoryPage />} />
             <Route path="settings" element={<SettingsPage />} />
             {/* 주소를 나누기 전의 즐겨찾기와 세션 캐시. ?job= 이 붙어 있으면

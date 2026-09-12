@@ -219,6 +219,10 @@ class JobRunner:
             return semaphore
         return existing
 
+    def provider_slot(self, provider_id: str, limit: int):
+        """Share the provider concurrency limit with answer-library extraction."""
+        return self._semaphore(provider_id, limit)
+
     async def submit(self, job_id: str) -> None:
         self._cancel_requested.discard(job_id)
         task = asyncio.create_task(self._run(job_id))
@@ -352,6 +356,8 @@ class JobRunner:
             # 생성 시점에 복사해 둔 값이다. 원본 실행을 여기서 다시 읽지 않는다.
             prior_claim_text = job.prior_claim_text or ""
             prior_report = job.prior_report or ""
+            report_context = (job.report_context.manifest.get("text", "")
+                if job.report_context else "")
             prior_mapping = job.prior_citation_mapping
             search_focus = job.search_focus
             # 선택적 검색 기준일. 빈 문자열이면 **날짜 조건이 없다**는 뜻이고,
@@ -486,6 +492,7 @@ class JobRunner:
                     prior_claim_text=prior_claim_text,
                     prior_report=prior_report,
                     prior_citation_mapping=prior_mapping,
+                    report_context=report_context,
                     tool_policy_name=tool_policy.name,
                     agy_allowed_hosts=job_assembly.allowed_hosts_for(
                         tool_policy.name
@@ -619,6 +626,7 @@ class JobRunner:
                             prior_claim_text=prior_claim_text,
                             prior_report=prior_report,
                             prior_citation_mapping=prior_mapping,
+                            report_context=report_context,
                             retrieval_mode=RetrievalMode.RETRIEVAL,
                             provider_byte_budget=getattr(
                                 provider, "max_input_bytes", None
@@ -823,6 +831,22 @@ class JobRunner:
             tool_availability = {}
             if job_kind is JobKind.SIMILARITY_SEARCH:
                 tool_availability = search_channels.availability(values, provider_id)
+                # 채널이 하나도 없는 실행은 시작할 이유가 없다.
+                #
+                # 실측(2026-09-12): web 이 죽고 나머지가 모두 닫힌 상태에서도
+                # 실행은 끝까지 갔다. 모델이 Google Patents 주소를 스스로 만들어
+                # 열었고(그중 하나는 존재하지 않는 번호라 404), 후보 1건짜리
+                # 보고서가 나왔다. 그것은 검색 결과가 아니라 모델의 기억이다.
+                #
+                # 막는 조건은 좁게 잡는다 — web 이 "확인 안 됨"이 아니라 실측으로
+                # 죽었을 때만이다. 모르는 것을 이유로 실행을 막지는 않는다.
+                if search_channels.no_usable_channel(tool_availability):
+                    await self._fail(
+                        job_id,
+                        ErrorCode.SEARCH_CHANNELS_UNAVAILABLE,
+                        search_channels.unusable_channel_message(tool_availability),
+                    )
+                    return
                 if provider_id in ("claude", "codex"):
                     mcp_servers = _search_mcp_servers(work_dir, search_cutoff, search_budget)
                 available_names = search_channels.available_mcp_names(tool_availability) if mcp_servers else ()
@@ -868,6 +892,24 @@ class JobRunner:
             model_narrative = ""
             if job_kind is JobKind.SIMILARITY_SEARCH:
                 model_narrative = outcome.result_text
+                # 이 실행이 실제로 부른 웹 검색 호출이 web 채널 도달성의 유일한
+                # 증거다. 실행 전 상태는 지난 기록에 기반한 예상이므로, 감사
+                # 기록에는 이번 실행이 본 사실을 적는다 — 네 번 다 죽은 실행이
+                # "web: 사용 가능"이라고 적힌 보고서를 남기지 않게.
+                policy_for_web = getattr(provider, "search_tool_policy", None)
+                web_record = None
+                if policy_for_web is not None:
+                    web_record = search_channels.web_evidence(
+                        outcome.tool_calls,
+                        policy_for_web.required_tools or policy_for_web.allowed_tools,
+                        cli_version=outcome.cli_version or "",
+                    )
+                if web_record is not None:
+                    settings_service.record_web_health(provider_id, web_record)
+                    tool_availability = dict(tool_availability)
+                    tool_availability["web"] = search_channels.web_status(
+                        web_record, cli_version=outcome.cli_version or ""
+                    )
                 reported = None
                 notes = []
                 journal = search_manifest.read_tool_journal(work_dir)
@@ -880,6 +922,17 @@ class JobRunner:
                     if not search_manifest.has_retrieval_attempt(outcome.tool_calls, outcome.tool_uses, journal):
                         verdict = Verdict(JobStatus.FAILED, ErrorCode.SEARCH_NOT_PERFORMED, ["실제 검색 도구 호출이 없습니다."])
                         raise search_manifest.SearchLogError("실제 검색 도구 호출이 없습니다.")
+                    # 질의가 전멸한 실행은 검색이 아니다. 도구가 죽어도 모델은
+                    # 계속 진행해서 기억하던 주소를 직접 열고 후보를 만들어 낸다.
+                    # 그것을 결과로 내보내면 "검색해 보니 이것뿐"과 구분되지
+                    # 않는다 — 정작 채널은 하나도 돌지 않았는데.
+                    if not search_manifest.has_successful_query(outcome.tool_calls, journal):
+                        verdict = Verdict(JobStatus.FAILED, ErrorCode.SEARCH_NOT_PERFORMED,
+                                          ["검색 질의가 한 건도 응답하지 않았습니다."])
+                        raise search_manifest.SearchLogError(
+                            "검색 질의가 한 건도 응답하지 않았습니다. 열람한 문헌이 있어도 "
+                            "검색으로 찾은 것이 아니라 모델이 스스로 만든 주소입니다."
+                        )
                     reported, notes = search_manifest.parse(outcome.result_text, observed)
                     reported = search_verification.verify(reported, observed, journal)
                 except search_manifest.SearchLogError as exc:

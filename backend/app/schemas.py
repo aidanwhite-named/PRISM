@@ -108,6 +108,7 @@ class UploadResponse(BaseModel):
 
 
 class JobCreate(BaseModel):
+    use_answer_library: bool = True
     # 작업 종류. 생략하면 기존 PDF 구성대비 분석이다. 기존 API 클라이언트가
     # 이 필드를 모르고 보내도 동작이 바뀌지 않아야 한다.
     job_kind: str = JobKind.PATENT_ANALYSIS
@@ -208,6 +209,7 @@ class PreflightLane(BaseModel):
 
 
 class PreflightOut(BaseModel):
+    report_context: dict[str, Any] | None = None
     """실행 전에 잰 최종 조립 프롬프트의 크기.
 
     화면이 원본 첨부의 글자 수를 세는 것으로는 이 값을 맞힐 수 없다. 실제로
@@ -253,6 +255,7 @@ class PreflightOut(BaseModel):
 
 
 class JobOut(BaseModel):
+    report_context: dict[str, Any] | None = None
     id: str
     status: str
     error_code: str | None = None

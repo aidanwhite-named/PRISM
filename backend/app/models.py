@@ -159,6 +159,9 @@ class ExecutionJob(Base):
     attachments = relationship(
         "Attachment", back_populates="job", cascade="all, delete-orphan"
     )
+    report_context = relationship(
+        "ReportContextSnapshot", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class ExecutionEvent(Base):

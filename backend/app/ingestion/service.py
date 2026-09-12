@@ -166,7 +166,7 @@ def extract_pdf(path: Path) -> tuple[str, int, str | None]:
         return (
             text,
             page_count,
-            "텍스트 레이어가 거의 없습니다. 스캔 PDF 로 보이며 PRISM v0.1 은 OCR 을 "
+            "텍스트 레이어가 거의 없습니다. 스캔 PDF 로 보이며 PRISM은 OCR을 "
             "지원하지 않습니다. 텍스트 PDF 로 변환한 뒤 업로드하십시오.",
         )
 

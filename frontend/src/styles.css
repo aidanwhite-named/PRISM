@@ -1,5 +1,45 @@
 /* PRISM production interface — single consolidated stylesheet. */
 
+.version-badge { font-size: 11px; vertical-align: top; color: var(--accent); }
+.answer-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+.answer-sidebar { position: sticky; top: 20px; }
+.answer-sidebar > .btn { width: 100%; }
+.answer-case-list { display: grid; gap: 8px; max-height: 65vh; overflow-y: auto; }
+.answer-case { text-align: left; padding: 16px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; cursor: pointer; }
+.answer-case.selected { border-color: var(--accent); background: var(--accent-soft); }
+.answer-case strong, .answer-case span { display: block; overflow-wrap: anywhere; }
+.answer-case span { font-size: 12px; margin-top: 6px; color: var(--text-muted); }
+.answer-case:disabled { cursor: default; }
+.answer-main { min-width: 0; display: grid; gap: 24px; }
+.answer-card { padding: 28px; }
+.answer-card h2 { margin: 0 0 18px; }
+.answer-card label { display: grid; gap: 8px; margin: 16px 0; font-size: 13px; font-weight: 600; }
+.answer-card input:not([type=checkbox]), .answer-card select, .answer-card textarea { width: 100%; min-width: 0; }
+.answer-card textarea { line-height: 1.7; }
+.answer-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.answer-title-row, .answer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.answer-title-row { justify-content: space-between; }
+.answer-actions { margin: 14px 0; }
+.answer-status { font-size: 11px; display: inline-block; padding: 4px 9px; background: var(--surface-2); border-radius: 5px; margin-bottom: 8px; }
+.answer-status.approved { background: var(--ok-soft); color: var(--ok); }
+.answer-example { border: 1px solid var(--border); border-radius: 12px; margin: 12px 0; overflow: hidden; }
+.answer-example > summary { padding: 16px; background: var(--surface-2); cursor: pointer; overflow-wrap: anywhere; }
+.answer-example-fields { padding: 0 18px 18px; }
+.answer-file-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 20px; font-size: 12px; }
+.answer-file-links a { overflow-wrap: anywhere; }
+.answer-card summary { cursor: pointer; }
+.answer-audit { margin-top: 24px; }
+.answer-card pre, .answer-context pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; max-height: 400px; overflow-y: auto; background: var(--surface-2); padding: 12px; }
+.answer-run-card { margin-bottom: 16px; }
+.answer-context { margin: 12px 0; font-size: 12px; overflow-wrap: anywhere; }
+.answer-context summary { cursor: pointer; }
+@media (max-width: 850px) {
+  .answer-layout { grid-template-columns: 1fr; }
+  .answer-sidebar { position: static; }
+  .answer-case-list { max-height: 230px; }
+  .answer-card { padding: 20px; }
+}
+
 :root {
   --bg: #f5f5f1;
   --surface: rgba(255, 255, 252, 0.9);
@@ -13,6 +53,9 @@
   --accent: #315d73;
   --accent-strong: #24495d;
   --accent-soft: #e2ebef;
+  /* 보고서 본문의 「인용발명 N」 바탕. 코드(--surface-2)의 중립 회색과 갈리도록
+     분석 축의 색을 아주 옅게 깐다 — 회색을 쓰면 참조가 코드처럼 읽힌다. */
+  --citation-tint: rgba(49, 93, 115, 0.085);
   /* 유사문헌 검색 축의 색. 분석 축(--accent)의 청색과 한눈에 갈리도록 자주
      계열을 쓴다. 오류(--danger)·경고(--warn)와 겹치지 않아야 한다 — 검색
      화면 전체가 붉으면 정상 실행이 늘 경고처럼 읽힌다. */
@@ -1280,6 +1323,22 @@ tbody tr:hover { background: rgba(230, 237, 238, 0.43); }
 .result .report-field { margin: 12px 0; overflow-wrap: anywhere; }
 .result .report-field > strong:first-child { font-weight: 700; }
 .result .report-degree { font-size: 15px; font-weight: 650; }
+/* 보고서에서 가장 자주 되짚는 표식인데 본문과 같은 굵기·색이라 문장 안에서
+   눈에 걸리지 않았다. 배지처럼 튀지 않을 만큼만 얹는다 — 한 문단에 여러 번
+   나오므로 채도를 올리면 본문이 얼룩덜룩해진다. nowrap 은 줄 끝에서 번호가
+   앞말과 갈라지는 것을 막는다(.report-field 의 overflow-wrap: anywhere).
+
+   좌우 여백을 두지 않는 것은 한국어 조사 때문이다. 「인용발명 1의」에 가로
+   padding 을 주면 조사가 밀려나 「인용발명 1 의」로 읽힌다. 글자 폭을 그대로
+   두고 형광펜처럼 밑에 깔기만 한다. */
+.result .report-citation {
+  padding: 1px 0;
+  border-radius: 2px;
+  background: var(--citation-tint);
+  color: var(--accent-strong);
+  font-weight: 600;
+  white-space: nowrap;
+}
 .result p, .result li { line-height: 1.78; }
 .result pre, .result code { background: #eceeea; }
 .result a { color: var(--accent); }
@@ -1461,6 +1520,7 @@ details > summary { color: var(--text-muted); font-size: 12px; }
     --accent: #8cb5c7;
     --accent-strong: #b4d3df;
     --accent-soft: #24363e;
+    --citation-tint: rgba(140, 181, 199, 0.15);
     --ok: #91baa0;
     --ok-soft: #26382c;
     --amber: #c99a62;
@@ -1662,4 +1722,6 @@ details > summary { color: var(--text-muted); font-size: 12px; }
   .result { border: none; padding: 0; }
   .analysis-degree-overview { border-color: #bbb; background: transparent; }
   .analysis-degree-item { background: transparent; }
+  /* 인쇄는 바탕을 떨어뜨리는 브라우저가 많다. 굵기만 남겨 표식을 유지한다. */
+  .result .report-citation { background: transparent; padding: 0; color: inherit; }
 }

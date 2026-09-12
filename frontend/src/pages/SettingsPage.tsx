@@ -68,6 +68,7 @@ export default function SettingsPage() {
   const [probing, setProbing] = useState(false);
   const [applyingAgy, setApplyingAgy] = useState(false);
   const [smoke, setSmoke] = useState<Record<string, unknown> | null>(null);
+  const [searchChecking, setSearchChecking] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [paths, setPaths] = useState<Record<string, string>>({});
@@ -296,6 +297,29 @@ export default function SettingsPage() {
       notify("실행 기본 설정을 저장했습니다.");
     } catch (e) {
       setError((e as Error).message);
+    }
+  };
+
+  // 검색 도구 확인. smoke-test 와 나눈 이유는 확인하는 대상이 다르기 때문이다
+  // — 그쪽은 모델이 답하는지, 이쪽은 검색 도구가 응답하는지를 본다. 결과는
+  // 서버가 실측 기록으로 남기고, 그 기록만이 web 채널을 "사용 가능"으로
+  // 만든다.
+  const runSearchCheck = async (id: string) => {
+    if (
+      !window.confirm(
+        "검색 도구를 실제로 한 번 호출합니다. 계정 사용량이 발생할 수 있습니다. 계속할까요?",
+      )
+    ) {
+      return;
+    }
+    setSmoke(null);
+    setSearchChecking(id);
+    try {
+      setSmoke(await api.searchCheck(id));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSearchChecking("");
     }
   };
 
@@ -1222,6 +1246,15 @@ export default function SettingsPage() {
                     disabled={!p.executable_ok}
                   >
                     실제 호출 테스트 (사용량 발생)
+                  </button>
+                  <button
+                    className="btn small"
+                    onClick={() => runSearchCheck(p.provider)}
+                    disabled={!p.executable_ok || searchChecking === p.provider}
+                  >
+                    {searchChecking === p.provider
+                      ? "검색 도구 확인 중…"
+                      : "검색 도구 확인 (사용량 발생)"}
                   </button>
                 </div>
               </div>

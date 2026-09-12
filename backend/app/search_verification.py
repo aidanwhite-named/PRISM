@@ -77,6 +77,11 @@ def _matching_sources(candidate: dict, journal: list[dict], store) -> list[dict]
     return found
 
 def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -> dict:
+    # MCP retrieval runs in another process. Register the literature re-parser
+    # here as well; otherwise a fresh web process falsely marks saved DOI
+    # evidence unresolved and needlessly asks the model to fetch it again.
+    from .patent_search import literature_parser
+    literature_parser.register()
     result = copy.deepcopy(reported)
     store = store or ArtifactStore(PATHS.evidence_dir.resolve())
     read_urls = {manifest.normalize_url(url) for url in observed.get("succeeded_fetch_urls", [])}

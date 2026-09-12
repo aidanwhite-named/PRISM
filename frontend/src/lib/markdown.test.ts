@@ -34,6 +34,24 @@ describe("보고서 가독성", () => {
     expect(result.querySelector("pre code")?.textContent).toBe("x = 1\n");
   });
 
+  it("인용발명 표식만 감싸고 문구·코드·링크는 건드리지 않는다", () => {
+    const source = [
+      "`근거: 인용발명 2 (KR10-1234567) — \"제어부\"(단락 [0031]).`",
+      "인용발명 10의 제어부는 인용발명 1과 다르다.",
+      "`인용발명 3` 및 [인용발명 4](https://example.com)",
+      "### 주 인용발명 선정 이유",
+    ].join("\n\n");
+    const result = fragment(renderReportMarkdown(source));
+    const marks = [...result.querySelectorAll(".report-citation")].map((n) => n.textContent);
+    expect(marks).toEqual(["인용발명 2", "인용발명 10", "인용발명 1"]);
+    // 코드·링크 안과 번호 없는 제목은 그대로 둔다.
+    expect(result.querySelector("code")?.textContent).toBe("인용발명 3");
+    expect(result.querySelector("a .report-citation")).toBeNull();
+    expect(result.querySelector("h3")?.textContent).toBe("주 인용발명 선정 이유");
+    // 표시만 바꾼다. 사람이 읽는 문구는 원문과 같아야 한다.
+    expect(result.textContent).toBe(fragment(renderMarkdown(source)).textContent);
+  });
+
   it("코드 속 HTML을 실행 가능한 마크업으로 바꾸지 않는다", () => {
     const result = fragment(renderReportMarkdown('`근거: <img src=x onerror=alert(1)> <script>alert(1)</script>`\n\n<script>alert(2)</script>'));
     expect(result.querySelector("img, script")).toBeNull();
