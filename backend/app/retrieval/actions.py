@@ -30,6 +30,7 @@ ACTION_NUMBERS = "search_numbers_and_symbols"
 ACTION_READ_PAGE = "read_page"
 ACTION_READ_PAGES = "read_pages"
 ACTION_READ_PARAGRAPH = "read_paragraph"
+ACTION_READ_CHUNK = "read_chunk"
 ACTION_STATUS = "get_document_status"
 ACTION_FINALIZE = "finalize_evidence"
 
@@ -40,6 +41,7 @@ ACTION_NAMES = (
     ACTION_READ_PAGE,
     ACTION_READ_PAGES,
     ACTION_READ_PARAGRAPH,
+    ACTION_READ_CHUNK,
     ACTION_STATUS,
     ACTION_FINALIZE,
 )
@@ -208,6 +210,15 @@ class ReadParagraph(_Base):
         return text[:32]
 
 
+class ReadChunk(_Base):
+    """검색으로 받은 구간의 전문과 같은 페이지 앞뒤 문맥만 열람한다."""
+
+    action: Literal["read_chunk"]
+    component_id: str = ""
+    attachment: str
+    chunk_id: str = Field(min_length=1, max_length=100)
+
+
 class GetDocumentStatus(_Base):
     action: Literal["get_document_status"]
     attachment: str = ALL_DOCUMENTS
@@ -265,6 +276,7 @@ AnyAction = Annotated[
         ReadPage,
         ReadPages,
         ReadParagraph,
+        ReadChunk,
         GetDocumentStatus,
         FinalizeEvidence,
     ],
@@ -388,6 +400,8 @@ def schema_summary() -> str:
         f'- {{"action":"{ACTION_READ_PARAGRAPH}","component_id":"R001",'
         '"attachment":"ATT-01",'
         '"paragraph":"[0032]"}',
+        f'- {{"action":"{ACTION_READ_CHUNK}","component_id":"R001",'
+        '"attachment":"ATT-01","chunk_id":"P0012-003"}',
         f'- {{"action":"{ACTION_STATUS}","attachment":"ATT-01|{ALL_DOCUMENTS}"}}',
         f'- {{"action":"{ACTION_FINALIZE}","components":[{{"component_id":"R001",'
         '"status_claim":"matched|not_found","searched_terms":["실제로 쓴 검색어"],'

@@ -39,6 +39,7 @@ from .actions import (
     ReadPage,
     ReadPages,
     ReadParagraph,
+    ReadChunk,
     SearchDocument,
     SearchExact,
     SearchNumbersAndSymbols,
@@ -72,12 +73,11 @@ MAX_ROUND_RESULT_CHARS = 56_000
 # 전체가 들어가므로 여기서 자른 것이 최종 보고서에 영향을 주지 않는다.
 SNIPPET_CHARS = 900
 
-# 검색 hit 앞뒤로 함께 실어 보내는 문맥. 같은 페이지의 인접 청크를 붙여서
-# 모델이 후보 하나를 볼 때마다 read_page 를 다시 요청하지 않아도 되게 한다.
-# 한 청크만 보여 주면 모델은 문맥을 확인하려고 페이지 전문을 부르고, 그
-# 페이지 읽기가 라운드 예산과 페이지 예산을 동시에 갉아먹는다.
+# read_chunk 에서 요청한 구간에만 붙이는 같은 페이지 앞뒤 문맥.
+# 검색 후보에는 발췌만 보내고, 전문·문맥이 필요한 후보를 모델이 선택한다.
 CONTEXT_NEIGHBOUR_CHUNKS = 1
 CONTEXT_CHARS = 500
+READ_ITEMS = (ReadPage, ReadPages, ReadParagraph, ReadChunk)
 
 # 이 구성에 대해 PRISM 이 관측한 서로 다른 검색어가 이보다 적으면, 모델이
 # not_found 를 주장해도 확정하지 않는다. 모델의 자기 보고가 아니라 실제 실행된
@@ -714,6 +714,9 @@ class RetrievalAgent:
         self._round_text_chunks: dict[tuple[str, str], dict] = {}
         # 이번 호출에서 본문을 이미 실은 (attachment_id, page) -> ref
         self._round_pages: dict[tuple[str, int], dict] = {}
+        # 실제 반환이 확정된 원문만 등록한다. 같은 문헌·페이지의 정확히
+        # 포함된 문자열을 참조할 수 있으며, 다음 호출에서는 다시 비운다.
+        self._round_sources: dict[tuple[str, int], list[tuple[str, dict]]] = {}
 
     # ------------------------------------------------------------- 유틸리티
 
@@ -776,7 +779,7 @@ class RetrievalAgent:
                     score += 500
                 if not component.hit_chunks:
                     score += 90
-        elif isinstance(item, (ReadPage, ReadPages, ReadParagraph)):
+        elif isinstance(item, READ_ITEMS):
             # 후보의 앞뒤 문맥 확인은 같은 우선순위의 추가 검색보다 먼저 한다.
             score += 180
         elif isinstance(item, GetDocumentStatus):
@@ -853,7 +856,7 @@ class RetrievalAgent:
             key=lambda row: (
                 # 열람을 먼저 묶으면 페이지 본문을 뒤의 검색 후보도 참조할 수
                 # 있다. 새 광범위 검색이 이월 열람의 반환 공간을 차지하지 않는다.
-                0 if isinstance(row[0], (ReadPage, ReadPages, ReadParagraph))
+                0 if isinstance(row[0], READ_ITEMS)
                 else 1 if row[1] is not None else 2,
                 -self._action_priority(
                     row[0],
@@ -1369,7 +1372,7 @@ class RetrievalAgent:
         for entry in results or []:
             for document in entry.get("documents") or []:
                 for hit in document.get("hits") or []:
-                    if hit.get("text") and hit.get("chunk_id"):
+                    if (hit.get("text") or hit.get("text_ref")) and hit.get("chunk_id"):
                         shown.add((str(hit.get("alias") or ""), str(hit["chunk_id"])))
             alias = str(entry.get("attachment") or "")
             for page in entry.get("pages") or []:
@@ -1490,6 +1493,7 @@ class RetrievalAgent:
             self._round_scope = round_no
             self._round_text_chunks.clear()
             self._round_pages.clear()
+            self._round_sources.clear()
         results: list[dict] = []
         budget_left = self.budget.max_round_result_chars
         scheduled = self._scheduled_actions(items)
@@ -1498,7 +1502,7 @@ class RetrievalAgent:
         # 읽기 요청은 페이지가 들어갈 실제 잔여 공간을 쓰고, 검색은 남은 구성과 나눈다.
         reads, searches = [], []
         for row in scheduled:
-            target = reads if isinstance(row[0], (ReadPage, ReadPages, ReadParagraph)) else searches
+            target = reads if isinstance(row[0], READ_ITEMS) else searches
             target.append(row)
         scheduled = []
         for phase in (reads, searches):
@@ -1514,7 +1518,7 @@ class RetrievalAgent:
         for position, (item, deferred) in enumerate(scheduled):
             remaining_groups = {getattr(row[0], "component_id", "") or "~control"
                                 for row in scheduled[position:]}
-            action_budget = budget_left if isinstance(item, (ReadPage, ReadPages, ReadParagraph)) else (
+            action_budget = budget_left if isinstance(item, READ_ITEMS) else (
                 budget_left // len(remaining_groups)
             )
             if self.is_cancelled():
@@ -1631,6 +1635,9 @@ class RetrievalAgent:
                     reason=f"{alias} 문헌 상태가 라운드 반환 예산으로 누락됨",
                 )
             return entry, reported
+
+        if isinstance(item, ReadChunk):
+            return self._read_chunk(item, documents, run, round_no, budget_left)
 
         if isinstance(item, (ReadPage, ReadPages, ReadParagraph)):
             return await self._read(item, documents, run, round_no, budget_left)
@@ -1841,6 +1848,73 @@ class RetrievalAgent:
             return "", ""
         return (before or "")[-CONTEXT_CHARS:], (after or "")[:CONTEXT_CHARS]
 
+    def _share_source_fields(self, row: dict, document: IndexedDocument) -> dict:
+        """본문을 고치지 않고, 같은 입력의 더 큰 원문에 포함된 필드만 참조한다."""
+        result = dict(row)
+        sources = self._round_sources.get((document.attachment_id, row["pdf_page"]), [])
+        for field_name in ("text", "context_before", "context_after"):
+            value = row.get(field_name)
+            if not value:
+                continue
+            for source, source_ref in sources:
+                start = source.find(value)
+                if start < 0:
+                    continue
+                ref = {**source_ref, "start": start, "end": start + len(value)}
+                if json_size({field_name + "_ref": ref}) < json_size({field_name: value}):
+                    result.pop(field_name)
+                    result[field_name + "_ref"] = ref
+                    break
+        return result
+
+    def _register_source_fields(self, row: dict, document: IndexedDocument, ref: dict) -> None:
+        sources = self._round_sources.setdefault((document.attachment_id, row["pdf_page"]), [])
+        for field_name in ("text", "context_before", "context_after"):
+            value = row.get(field_name)
+            if value:
+                sources.append((value, {**ref, "pdf_page": row["pdf_page"], "field": field_name}))
+
+    def _read_chunk(
+        self, item: ReadChunk, documents: list[IndexedDocument], run: RetrievalRun,
+        round_no: int, budget_left: int,
+    ) -> tuple[dict, int]:
+        """선택한 구간을 좁게 확장한다. 페이지 전체를 읽었다고 기록하지 않는다.
+
+        검색으로 이미 반환한 구간만 허용한다. 인접 문맥에는 새로운 인용 권한을
+        부여하지 않으며, 전문과 요청한 문맥을 모두 담지 못하면 요청을 이월한다.
+        """
+        entry = {"action": item.action, "component_id": item.component_id}
+        document = documents[0]
+        row = document.index.chunk(item.chunk_id) if (
+            len(documents) == 1 and item.attachment != ALL_DOCUMENTS
+        ) else None
+        if (row is None or self._component(item.component_id) is None
+                or (document.attachment_id, item.chunk_id) not in run.exposed_chunks):
+            entry["error"] = "read_chunk 는 알려진 구성·단일 문헌의 실제 반환된 chunk_id 만 열람할 수 있습니다."
+            self.trace.write("action_error", entry, round_no=round_no)
+            return entry, json_size(entry)
+        before, after = self._chunk_context(document, item.chunk_id)
+        hit = {
+            "alias": document.alias, "chunk_id": row.chunk_id,
+            "pdf_page": row.page_number, "section": row.section,
+            "extraction_status": row.extraction_status,
+            "text": row.text, "context_before": before, "context_after": after,
+        }
+        hit = self._share_source_fields(hit, document)
+        entry["documents"] = [{"attachment": document.alias, "hits": [hit]}]
+        size = json_size(entry)
+        if size <= budget_left:
+            self._register_source_fields(hit, document, {
+                "action": item.action, "component_id": item.component_id,
+                "attachment": document.alias, "chunk_id": row.chunk_id,
+            })
+            self.trace.write("read_chunk", {
+                "component_id": item.component_id, "attachment": document.alias,
+                "chunk_id": row.chunk_id, "pdf_page": row.page_number,
+                "source_chars": len(row.text), "context_chars": len(before) + len(after),
+            }, round_no=round_no)
+        return entry, size
+
     async def _search(
         self,
         item,
@@ -2011,9 +2085,7 @@ class RetrievalAgent:
         preview_limit = 40
         include_hint = True
         omission_hint = (
-            "일부 문헌은 이번 라운드의 반환 문자 예산이 부족해 결과를 싣지 "
-            "못했습니다. 검색 자체는 실행됐습니다. 다음 라운드에 문헌을 "
-            "나눠 요청하십시오."
+            "미전달 후보는 자동 이월됩니다. 같은 요청을 추가하지 마십시오."
         )
 
         def make_payload(document_rows: list[dict], aliases: list[str]) -> dict:
@@ -2108,13 +2180,7 @@ class RetrievalAgent:
                         row["text_shown_in_this_round"] = shown["ref"]
                     else:
                         row["text"] = snippet
-                        before, after = self._chunk_context(
-                            document, hit.row.chunk_id
-                        )
-                        if before:
-                            row["context_before"] = before
-                        if after:
-                            row["context_after"] = after
+                        row = self._share_source_fields(row, document)
                     document_entry["hits"].append(row)
                     omitted = len(hits) - len(document_entry["hits"])
                     if omitted:
@@ -2135,6 +2201,12 @@ class RetrievalAgent:
             # 예산 조정이 끝난 다음, 실제 payload 에 남은 행만 노출로 기록한다.
             # 잠깐 넣었다 뺀 행을 먼저 기록하면 AI 가 못 본 청크가 근거가 된다.
             for row in returned_rows:
+                self._register_source_fields(row, document, {
+                    "action": getattr(item, "action", "?"),
+                    "component_id": getattr(item, "component_id", ""),
+                    "attachment": document.alias,
+                    "chunk_id": row["chunk_id"],
+                })
                 attachment_id = document.attachment_id
                 chunk_id = str(row.get("chunk_id") or "")
                 if not attachment_id or not chunk_id:
@@ -2335,6 +2407,7 @@ class RetrievalAgent:
         def make_payload(page_rows: list[dict], omitted_pages: list[int]) -> dict:
             payload: dict = {
                 "action": item.action,
+                "component_id": getattr(item, "component_id", ""),
                 "attachment": document.alias,
                 "pages": page_rows,
                 "pages_read_total": starting_pages_read
@@ -2431,6 +2504,7 @@ class RetrievalAgent:
                     "pdf_page": page,
                 }
                 self._round_pages.setdefault(page_key, ref)
+                self._register_source_fields(page_entry, document, ref)
                 for row in rows:
                     self._round_text_chunks.setdefault(
                         (document.attachment_id, row.chunk_id),

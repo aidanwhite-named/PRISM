@@ -830,12 +830,24 @@ JSON 으로 돌려주는 것뿐입니다.
 
 ```
 search_document · search_exact · search_numbers_and_symbols
-read_page · read_pages · read_paragraph
+read_chunk · read_page · read_pages · read_paragraph
 get_document_status · finalize_evidence
 ```
 
 잘못된 action(없는 자료 번호, 범위 밖 페이지, 예산 초과)은 셸 실행으로
 우회하지 않고 **구조화된 오류로 AI 에게 돌려줍니다.**
+
+검색 후보에는 본문 앞부분 최대 900자와 출처를 먼저 전달합니다. AI는 발췌로
+해석하기 어려운 후보만 `read_chunk`로 전문과 같은 페이지 앞뒤 문맥(각 최대
+500자)을 확인하고, 더 넓은 범위가 필요할 때 페이지를 열람합니다. `read_chunk`는
+이미 반환한 구간만 허용하며 페이지 전체 열람으로 집계하지 않습니다. 최종 근거
+패키지의 원문·문맥 및 페이지 확장 규칙은 유지합니다.
+
+같은 호출에서 같은 문헌·페이지의 원문에 정확히 포함되는 본문·문맥은 참조와
+문자 범위로 연결합니다. 원문을 요약하거나 수정하지 않으며, 참조가 원문보다
+짧을 때만 사용합니다. 매 회차는 별도 AI 호출이므로 이전 회차의 원문을 현재
+입력에 있는 것처럼 참조하지 않습니다. 검증 결과는
+[검색 전달 개선 기록](docs/search-delivery-2026-09-07.md)에 있습니다.
 
 ### 검색 채널
 

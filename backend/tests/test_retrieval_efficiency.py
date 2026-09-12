@@ -8,7 +8,7 @@ import pytest
 from app import config, retrieval
 from app.providers.agy_cli import AgyCliProvider
 from app.retrieval import agent as agent_module, pages
-from app.retrieval.actions import ReadPage, SearchDocument, parse_response
+from app.retrieval.actions import ReadChunk, ReadPage, SearchDocument, parse_response
 from app.retrieval.agent import ComponentState, DeferredAction, RetrievalBudget, RetrievalRun
 from app.retrieval.prompts import AGENT_SYSTEM_PROMPT, dump_round_json, render_round
 from .fake_provider import DeterministicTestProvider
@@ -258,22 +258,25 @@ def test_undelivered_search_cache_is_replayed_instead_of_disappearing(agent, fir
     assert not agent._deferred_actions
 
 
-def test_search_hits_carry_neighbouring_context(agent, monkeypatch):
-    """후보 청크의 같은 페이지 앞뒤 구간을 함께 싣고, 길이는 상한으로 자른다."""
+def test_search_is_compact_and_selected_chunk_expands_context(agent, monkeypatch):
     document = agent.corpus[0]
-    monkeypatch.setattr(
-        document.index, "neighbours",
-        lambda chunk_id, before=1, after=1: ("앞" * 900, "뒤" * 900),
-    )
+    monkeypatch.setattr(document.index, "neighbours",
+                        lambda *args, **kwargs: ("앞" * 900, "뒤" * 900))
     state = ComponentState("R001", "센서", "센서")
     agent._components[state.id] = state
-    request = SearchDocument(action="search_document", component_id=state.id, queries=["센서"])
-    result = asyncio.run(agent._execute_actions([request], RetrievalRun(), 1))
-    hits = [hit for entry in result for doc in entry["documents"] for hit in doc["hits"]]
-    assert hits
-    for hit in hits:
-        assert hit["context_before"] == "앞" * agent_module.CONTEXT_CHARS
-        assert hit["context_after"] == "뒤" * agent_module.CONTEXT_CHARS
+    run = RetrievalRun()
+    search = SearchDocument(action="search_document", component_id=state.id, queries=["센서"])
+    results = asyncio.run(agent._execute_actions([search], run, 1))
+    hits = [h for e in results for d in e["documents"] for h in d["hits"]]
+    assert hits and all("context_before" not in h and "context_after" not in h for h in hits)
+    target = hits[0]["chunk_id"]
+    request = ReadChunk(action="read_chunk", component_id=state.id, attachment=document.alias, chunk_id=target)
+    results = asyncio.run(agent._execute_actions([request], run, 2))
+    hit = results[0]["documents"][0]["hits"][0]
+    assert hit["text"] == document.index.chunk(target).text
+    assert hit["context_before"] == "앞" * agent_module.CONTEXT_CHARS
+    assert hit["context_after"] == "뒤" * agent_module.CONTEXT_CHARS
+    assert not state.reviewed_pages and run.pages_read == 0
 
 
 def test_already_served_page_reuses_cache_and_resends_text(agent, monkeypatch):
@@ -553,20 +556,22 @@ def test_later_calls_retain_document_state_feature_and_candidate_text(agent):
         assert all(row.get("snippet") for row in payload["components"][0]["candidate_ledger"])
 
 
-def test_later_search_keeps_context_that_can_reverse_a_match(agent, monkeypatch):
+def test_later_chunk_reads_keep_context_that_can_reverse_a_match(agent, monkeypatch):
     before = "This method does not support independent generation."
     after = "Both channels reference each other."
     monkeypatch.setattr(agent.corpus[0].index, "neighbours", lambda *args, **kwargs: (before, after))
     state = ComponentState("R001", "센서", "센서")
     agent._components[state.id] = state
-    request = SearchDocument(action="search_document", component_id=state.id, queries=["센서"])
     run = RetrievalRun()
-    for round_no in range(1, 6):
+    search = SearchDocument(action="search_document", component_id=state.id, queries=["센서"])
+    results = asyncio.run(agent._execute_actions([search], run, 1))
+    target = results[0]["documents"][0]["hits"][0]["chunk_id"]
+    request = ReadChunk(action="read_chunk", component_id=state.id, attachment="ATT-01", chunk_id=target)
+    for round_no in range(2, 6):
         results = asyncio.run(agent._execute_actions([request], run, round_no))
-        hits = [hit for entry in results for doc in entry.get("documents", []) for hit in doc["hits"]]
-        assert hits
-        assert all(hit.get("text") and hit.get("context_before") == before
-                   and hit.get("context_after") == after for hit in hits)
+        hit = results[0]["documents"][0]["hits"][0]
+        assert hit["text"] == agent.corpus[0].index.chunk(target).text
+        assert hit["context_before"] == before and hit["context_after"] == after
 
 
 def test_final_package_shares_only_identical_source_and_context():
