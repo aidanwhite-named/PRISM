@@ -85,6 +85,9 @@ export default function SettingsPage() {
   const [loginProvider, setLoginProvider] = useState<ProviderInfo | null>(null);
   const [loginSession, setLoginSession] = useState<ProviderLoginSession | null>(null);
   const [loginStarting, setLoginStarting] = useState(false);
+  const [loginCode, setLoginCode] = useState("");
+  const [loginCodeSubmitting, setLoginCodeSubmitting] = useState(false);
+  const [loginCodeError, setLoginCodeError] = useState("");
   const [loggingOut, setLoggingOut] = useState<string | null>(null);
   const [logoutProvider, setLogoutProvider] = useState<ProviderInfo | null>(null);
   const [logoutSession, setLogoutSession] = useState<ProviderLoginSession | null>(
@@ -172,6 +175,11 @@ export default function SettingsPage() {
       window.clearInterval(timer);
     };
   }, [loginSession?.session_id, loginSession?.can_cancel]);
+
+  useEffect(() => {
+    setLoginCode("");
+    setLoginCodeError("");
+  }, [loginProvider?.provider, loginSession?.session_id, loginSession?.can_cancel]);
 
   // 도우미 창 로그아웃(agy)은 사용자가 창을 닫아야 끝난다. 창이 닫히면 백엔드가
   // 인증 상태를 다시 검사하므로, 여기서는 그 결과만 기다린다.
@@ -378,6 +386,27 @@ export default function SettingsPage() {
       }
     } catch (e) {
       setError((e as Error).message);
+    }
+  };
+
+  const submitLoginCode = async () => {
+    if (!loginSession?.needs_authorization_code || loginCodeSubmitting) return;
+    const code = loginCode.trim();
+    if (!/^4\/[A-Za-z0-9_-]{10,2048}$/.test(code)) {
+      setLoginCodeError("브라우저에 표시된 인증 코드만 붙여넣어 주세요.");
+      return;
+    }
+    setLoginCodeSubmitting(true);
+    setLoginCodeError("");
+    setLoginCode("");
+    try {
+      setLoginSession(await api.submitProviderLoginCode(
+        loginSession.provider, loginSession.session_id, code,
+      ));
+    } catch {
+      setLoginCodeError("인증 코드를 전달하지 못했습니다. 로그인 상태를 확인하고 다시 시도해 주세요.");
+    } finally {
+      setLoginCodeSubmitting(false);
     }
   };
 
@@ -1141,7 +1170,7 @@ export default function SettingsPage() {
                             onClick={() => openLogin(p)}
                             disabled={!p.executable_ok}
                           >
-                            {p.provider === "agy" ? "로그인 도우미" : "로그인"}
+                            로그인
                           </button>
                         )}
                       </div>
@@ -1548,9 +1577,10 @@ export default function SettingsPage() {
             </div>
 
             <div className="notice info">
-              PRISM은 비밀번호, API Key 또는 OAuth 토큰을 입력받거나 저장하지
-              않습니다. 인증은 {loginProvider.display_name} CLI와 공식 로그인
-              페이지가 처리합니다.
+              계정 로그인은 {loginProvider.display_name} CLI와 공식 로그인
+              페이지가 처리합니다. PRISM은 비밀번호나 OAuth 토큰을 저장하지 않습니다.
+              {loginProvider.provider === "agy" &&
+                " 일회용 인증 코드는 로그인 완료를 위해 CLI에 전달하며 저장하지 않습니다."}
             </div>
 
             {!loginSession ? (
@@ -1587,17 +1617,16 @@ export default function SettingsPage() {
                   </button>
                 ) : (
                   <>
-                    <div className="notice warn">
-                      agy는 전용 로그인 명령을 제공하지 않습니다. 별도 도우미 창이
-                      열리면 Google 로그인, 테마와 약관 설정을 마친 뒤 창을 닫으세요.
-                      도우미는 빈 전용 폴더에서 샌드박스 모드로 실행됩니다.
+                    <div className="notice info">
+                      기본 웹브라우저에서 Google 로그인 페이지가 열립니다.
+                      인증 코드가 표시되면 이 창으로 돌아와 코드를 붙여넣어 주세요.
                     </div>
                     <button
                       className="btn primary"
                       onClick={() => beginLogin("google")}
                       disabled={loginStarting}
                     >
-                      agy 로그인 도우미 열기
+                      Google로 로그인
                     </button>
                   </>
                 )}
@@ -1634,9 +1663,33 @@ export default function SettingsPage() {
                 <p>{loginSession.message}</p>
                 {loginSession.mode === "browser" && loginSession.can_cancel && (
                   <p className="faint">
-                    열린 브라우저에서 로그인을 마치면 이 화면이 자동으로 갱신됩니다.
+                    {loginSession.provider === "agy"
+                      ? "브라우저에 ‘Paste this code into your application’이 표시되면 아래에 인증 코드를 입력하세요."
+                      : "열린 브라우저에서 로그인을 마치면 이 화면이 자동으로 갱신됩니다."}
                   </p>
                 )}
+                {loginSession.provider === "agy" && loginSession.can_cancel && (
+                  <form onSubmit={(event) => { event.preventDefault(); void submitLoginCode(); }}>
+                    <label htmlFor="agy-authorization-code">Google 인증 코드</label>
+                    <input
+                      id="agy-authorization-code"
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      autoCapitalize="none"
+                      placeholder="브라우저에서 복사한 4/… 코드"
+                      maxLength={2050}
+                      value={loginCode}
+                      onChange={(event) => setLoginCode(event.target.value)}
+                      disabled={loginCodeSubmitting}
+                      style={{ width: "100%", margin: "8px 0 12px" }}
+                    />
+                    <button className="btn primary" type="submit" disabled={!loginCode.trim() || loginCodeSubmitting || !loginSession.needs_authorization_code}>
+                      {loginCodeSubmitting ? "인증 코드 확인 중…" : "로그인 완료"}
+                    </button>
+                  </form>
+                )}
+                {loginCodeError && <p className="notice danger" role="alert">{loginCodeError}</p>}
                 <div className="btn-row">
                   {loginSession.can_cancel ? (
                     <button

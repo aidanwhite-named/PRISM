@@ -449,9 +449,8 @@ async def test_agy_logout_helper_passes_no_prompt_to_the_model(
     assert finished["message"] == "로그아웃했습니다."
 
 
-@pytest.mark.parametrize("intent", [LOGIN_INTENT, LOGOUT_INTENT])
 async def test_agy_helper_windows_launch_with_auto_update_disabled(
-    intent, monkeypatch, tmp_path
+    monkeypatch, tmp_path
 ) -> None:
     """도우미 창도 agy 를 띄운다. 거기서 업데이터가 돌면 고정해 둔 버전이 바뀐다."""
     from app.providers import login as login_module
@@ -480,8 +479,7 @@ async def test_agy_helper_windows_launch_with_auto_update_disabled(
     monkeypatch.setattr(login_module.asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(login_module, "probe_one", fake_probe)
 
-    start = manager.start if intent == LOGIN_INTENT else manager.start_logout
-    started = await start("agy")
+    started = await manager.start_logout("agy")
     task = manager._sessions[started["session_id"]].task
     assert task is not None
     await task

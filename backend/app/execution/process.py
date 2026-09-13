@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import subprocess
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -312,6 +313,7 @@ async def run_capture(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             limit=_STREAM_LIMIT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, NotImplementedError, ValueError) as exc:
         result.launch_error = f"{type(exc).__name__}: {exc}"
@@ -329,4 +331,11 @@ async def run_capture(
         result.timed_out = True
         if process.pid is not None:
             await asyncio.to_thread(kill_process_tree, process.pid)
+    except asyncio.CancelledError:
+        # Browser login polls authentication with a short-lived probe. Cancelling
+        # that login must also reap a probe that is still waiting on the network.
+        if process.pid is not None:
+            await asyncio.to_thread(kill_process_tree, process.pid)
+        await process.wait()
+        raise
     return result

@@ -5,9 +5,8 @@ PRISM은 비밀번호, API Key, OAuth code/token, CLI 출력 원문을 저장하
 남긴다. 이 모듈이 보관하는 것은 메모리상의 진행 상태와 프로세스 핸들뿐이다.
 
 Claude와 Codex는 로그인도 로그아웃도 비대화식 자식 프로세스로 처리할 수 있다.
-agy는 전용 login/logout 명령이 없고 대화형 TUI 안에서만 인증 상태를 바꿀 수
-있으므로, Windows에서만 샌드박스가 켜진 별도 도우미 콘솔을 연다. 로그인과
-로그아웃은 같은 세션 관리자를 쓰고 intent 로만 구분한다.
+agy 로그인은 숨겨진 Windows 의사 터미널에서 Google OAuth를 시작한다.
+로그아웃은 별도 도우미 콘솔을 쓰며 두 작업은 intent 로 구분한다.
 """
 
 from __future__ import annotations
@@ -25,6 +24,10 @@ from ..enums import AuthState
 from ..execution import process as proc
 from ..execution.process import kill_process_tree
 from .agy_cli import build_agy_env, resolve_agy
+from .agy_login import (
+    AgyLoginTerminal, AuthorizationCodePrompt, GoogleLoginMenu,
+    run_agy_models, validate_authorization_code,
+)
 from .env import build_child_env
 from .registry import probe_one
 from .resolver import ResolvedExecutable, resolve_claude, resolve_simple
@@ -152,9 +155,11 @@ class LoginSession:
     message: str = "로그인을 준비하고 있습니다."
     started_at: str = field(default_factory=_now)
     completed_at: str | None = None
+    needs_authorization_code: bool = False
+    code_submitted_at: float | None = field(default=None, repr=False)
     # 재검사에 필요하다. 로컬 경로이므로 public() 에는 넣지 않는다.
     executable_override: str | None = field(default=None, repr=False)
-    process: asyncio.subprocess.Process | None = field(default=None, repr=False)
+    process: asyncio.subprocess.Process | AgyLoginTerminal | None = field(default=None, repr=False)
     task: asyncio.Task | None = field(default=None, repr=False)
 
     def public(self) -> dict:
@@ -169,6 +174,7 @@ class LoginSession:
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "can_cancel": self.state not in TERMINAL_STATES,
+            "needs_authorization_code": self.needs_authorization_code,
         }
 
 
@@ -226,7 +232,7 @@ class ProviderLoginManager:
             provider,
             intent=LOGIN_INTENT,
             method=selected_method,
-            mode="helper_window" if provider == "agy" else "browser",
+            mode="browser",
             message="로그인을 준비하고 있습니다.",
             resolved=resolved,
             executable_override=executable_override,
@@ -289,6 +295,11 @@ class ProviderLoginManager:
                 intent=intent,
                 message=message,
                 executable_override=executable_override,
+                # agy's browser flow may show the code prompt in a terminal
+                # sequence that redraws while OAuth completes. Keep the entry
+                # ready from the start; the code itself is still validated and
+                # goes only to the live CLI process.
+                needs_authorization_code=(provider == "agy" and intent == LOGIN_INTENT),
             )
             self._sessions[session.session_id] = session
             self._active_by_provider[provider] = session.session_id
@@ -326,15 +337,16 @@ class ProviderLoginManager:
             return session.public()
 
         process = session.process
-        if process is not None and process.returncode is None and process.pid is not None:
-            await asyncio.to_thread(kill_process_tree, process.pid)
         if session.task is not None and not session.task.done():
             session.task.cancel()
+            await asyncio.gather(session.task, return_exceptions=True)
+        if process is not None and process.returncode is None and process.pid is not None:
+            await asyncio.to_thread(kill_process_tree, process.pid)
 
         state, message = "CANCELLED", _cancel_message(session.intent)
         if (
             verify
-            and session.mode == "helper_window"
+            and (session.mode == "helper_window" or session.provider == "agy")
             and await self._helper_reached_expected_auth(session)
         ):
             # agy TUI는 로그인/로그아웃을 끝내도 프로세스가 계속 열린다. 사용자가
@@ -343,6 +355,37 @@ class ProviderLoginManager:
             # 취소로 표시되고 Settings 캐시도 이전 상태에 머문다.
             state, message = "SUCCEEDED", _success_message(session.intent)
         self._finish(session, state, message)
+        return session.public()
+
+    async def submit_authorization_code(
+        self, provider: str, session_id: str, value: object,
+    ) -> dict:
+        try:
+            code = validate_authorization_code(value)
+        except ValueError:
+            raise LoginError("브라우저에 표시된 인증 코드만 붙여넣어 주세요.") from None
+        session = self._sessions.get(session_id)
+        if (
+            session is None or session.provider != provider or provider != "agy"
+            or session.intent != LOGIN_INTENT or session.state in TERMINAL_STATES
+            or not session.needs_authorization_code or session.process is None
+            or session.code_submitted_at is not None
+            or session.process.returncode is not None
+        ):
+            raise LoginError("인증 코드를 입력할 수 있는 로그인 세션이 아닙니다. 다시 로그인해 주세요.")
+        # No await between checking the prompt and sending data: a cancel or
+        # duplicate submission cannot interleave with this transition.
+        session.needs_authorization_code = False
+        session.code_submitted_at = asyncio.get_running_loop().time()
+        try:
+            session.process.submit_authorization_code(code)
+        except (OSError, ValueError):
+            self._finish(session, "FAILED", "인증 코드를 전달하지 못했습니다. 다시 로그인해 주세요.")
+            if session.task is not None:
+                session.task.cancel()
+                await asyncio.gather(session.task, return_exceptions=True)
+            raise LoginError("인증 코드를 전달하지 못했습니다. 다시 로그인해 주세요.") from None
+        session.message = "인증 코드를 확인하고 있습니다. 잠시 기다려 주세요."
         return session.public()
 
     async def _helper_reached_expected_auth(self, session: LoginSession) -> bool:
@@ -384,6 +427,7 @@ class ProviderLoginManager:
             self._sessions.pop(session.session_id, None)
 
     def _finish(self, session: LoginSession, state: str, message: str) -> None:
+        session.needs_authorization_code = False
         session.state = state
         session.message = message
         session.completed_at = _now()
@@ -401,7 +445,7 @@ class ProviderLoginManager:
                 await self._run_agy_logout_helper(session, resolved)
                 expected = AuthState.NOT_LOGGED_IN
             elif session.provider == "agy":
-                await self._run_agy_helper(session, resolved)
+                await self._run_agy_browser_login(session, resolved)
                 expected = AuthState.OK
             else:
                 await self._run_browser_login(session, resolved)
@@ -420,7 +464,7 @@ class ProviderLoginManager:
         except asyncio.CancelledError:
             if session.state not in TERMINAL_STATES:
                 self._finish(session, "CANCELLED", _cancel_message(session.intent))
-        except (OSError, NotImplementedError, ValueError):
+        except (OSError, NotImplementedError, ValueError, RuntimeError):
             # 예외 원문에는 로컬 경로나 CLI 출력 조각이 포함될 수 있으므로 UI로
             # 전달하거나 DB/로그에 남기지 않는다.
             self._finish(session, "FAILED", _start_failure_message(session.intent))
@@ -466,37 +510,97 @@ class ProviderLoginManager:
                 "CLI 로그인 절차가 완료되지 않았습니다. 취소했다면 다시 시도하세요.",
             )
 
-    async def _run_agy_helper(
+    async def _run_agy_browser_login(
         self, session: LoginSession, resolved: ResolvedExecutable
     ) -> None:
         if sys.platform != "win32":
             self._finish(
                 session,
                 "FAILED",
-                "현재 agy 로그인 도우미는 Windows에서만 지원합니다.",
+                "현재 agy 브라우저 로그인은 Windows에서만 지원합니다.",
             )
             return
 
         session.state = "WAITING_FOR_USER"
-        session.message = (
-            "열린 agy 창에서 Google 로그인을 완료한 뒤 해당 창을 닫으세요. "
-            "PRISM이 자동으로 로그인 상태를 다시 확인합니다."
+        session.message = "Google 로그인 페이지를 준비하고 있습니다."
+        env = build_agy_env()
+        env["TERM"] = "xterm-256color"
+        terminal = AgyLoginTerminal(
+            resolved, str(self._login_dir()), env,
         )
-        flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-        session.process = await asyncio.create_subprocess_exec(
-            *resolved.command(["--sandbox"]),
-            cwd=str(self._login_dir()),
-            env=build_agy_env(),
-            creationflags=flags,
-        )
+        session.process = terminal
+        menu = GoogleLoginMenu()
+        code_prompt = AuthorizationCodePrompt()
+
+        async def interact() -> None:
+            start = asyncio.get_running_loop().time()
+            code_result_tail = ""
+            while terminal.returncode is None:
+                output = terminal.read()
+                if menu.feed(output):
+                    terminal.select_google()
+                    session.message = (
+                        "브라우저에서 Google 로그인을 완료한 뒤 표시되는 인증 코드를 "
+                        "아래 입력란에 붙여넣으세요."
+                    )
+                if session.code_submitted_at is None and code_prompt.feed(output):
+                    session.needs_authorization_code = True
+                    session.message = (
+                        "브라우저에서 Google 로그인을 마친 뒤 표시된 인증 코드를 "
+                        "아래에 붙여넣고 로그인 완료를 누르세요."
+                    )
+                if session.code_submitted_at is not None:
+                    code_result_tail = (code_result_tail + output)[-4096:]
+                    if "invalid_grant" in code_result_tail.lower():
+                        self._finish(
+                            session, "FAILED",
+                            "인증 코드가 거부되었습니다. 다시 로그인하여 새 코드를 받아 주세요.",
+                        )
+                        return
+                if (
+                    session.code_submitted_at is not None
+                    and asyncio.get_running_loop().time() - session.code_submitted_at > 60
+                ):
+                    self._finish(
+                        session, "FAILED",
+                        "인증 코드로 로그인을 완료하지 못했습니다. 다시 로그인하여 새 코드를 받아 주세요.",
+                    )
+                    return
+                if not menu.selected and asyncio.get_running_loop().time() - start > 30:
+                    self._finish(
+                        session, "FAILED",
+                        "agy의 Google 로그인 화면을 확인하지 못했습니다. "
+                        "설치된 agy 버전과 인증 상태를 확인한 뒤 다시 시도하세요.",
+                    )
+                    return
+                await asyncio.sleep(0.1)
+
+        async def check_auth() -> None:
+            while True:
+                await asyncio.sleep(2)
+                result = await run_agy_models(
+                    resolved,
+                    cwd=self._login_dir(), env=build_agy_env(), timeout_seconds=15,
+                )
+                if result.exit_code == 0 and result.stdout.strip():
+                    return
+
+        readers = [asyncio.create_task(interact()), asyncio.create_task(check_auth())]
         try:
-            await asyncio.wait_for(
-                session.process.wait(), timeout=_LOGIN_TIMEOUT_SECONDS
+            done, _ = await asyncio.wait(
+                readers, timeout=_LOGIN_TIMEOUT_SECONDS,
+                return_when=asyncio.FIRST_COMPLETED,
             )
-        except (asyncio.TimeoutError, TimeoutError):
-            if session.process.pid is not None:
-                await asyncio.to_thread(kill_process_tree, session.process.pid)
-            self._finish(session, "FAILED", "로그인 제한 시간(15분)이 지났습니다.")
+            if not done:
+                self._finish(session, "FAILED", "로그인 제한 시간(15분)이 지났습니다.")
+            for task in done:
+                task.result()
+        finally:
+            for task in readers:
+                task.cancel()
+            await asyncio.gather(*readers, return_exceptions=True)
+            if terminal.returncode is None:
+                await asyncio.to_thread(kill_process_tree, terminal.pid)
 
     async def _run_agy_logout_helper(
         self, session: LoginSession, resolved: ResolvedExecutable

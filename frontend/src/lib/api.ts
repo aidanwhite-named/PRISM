@@ -134,6 +134,11 @@ export const api = {
     request<ProviderLoginSession>(`/api/providers/${id}/login/${sessionId}`, {
       method: "DELETE",
     }),
+  submitProviderLoginCode: (id: string, sessionId: string, code: string) =>
+    request<ProviderLoginSession>(`/api/providers/${id}/login/${sessionId}/code`, {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
   logoutProvider: (id: string) =>
     request<ProviderLogoutResult>(`/api/providers/${id}/logout`, {
       method: "POST",

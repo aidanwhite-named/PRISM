@@ -138,6 +138,24 @@ vi.mock("../lib/api", () => ({
     updateSettings: vi.fn(async () => settingsResponse),
     probeProviders: vi.fn(async () => []),
     applyAgyPermissions: vi.fn(async () => appliedResponse),
+    startProviderLogin: vi.fn(async () => ({
+      session_id: "google-login", provider: "agy", intent: "login",
+      method: "google", mode: "browser", state: "WAITING_FOR_USER",
+      message: "브라우저에서 Google 로그인을 완료하세요.",
+      started_at: "2026-09-13T00:00:00Z", completed_at: null, can_cancel: true,
+    })),
+    submitProviderLoginCode: vi.fn(async () => ({
+      session_id: "google-login", provider: "agy", intent: "login",
+      method: "google", mode: "browser", state: "WAITING_FOR_USER",
+      message: "인증 코드를 확인하고 있습니다.", needs_authorization_code: false,
+      started_at: "2026-09-13T00:00:00Z", completed_at: null, can_cancel: true,
+    })),
+    providerLoginStatus: vi.fn(async () => ({
+      session_id: "google-login", provider: "agy", intent: "login",
+      method: "google", mode: "browser", state: "SUCCEEDED",
+      message: "로그인이 완료되었습니다.", needs_authorization_code: false,
+      started_at: "2026-09-13T00:00:00Z", completed_at: "2026-09-13T00:01:00Z", can_cancel: false,
+    })),
   },
 }));
 
@@ -157,6 +175,51 @@ async function renderPage() {
 }
 
 describe("대용량 인용발명 전달 방식", () => {
+  it("브라우저 인증 코드를 제출하고 확인 후 로그인 완료를 표시한다", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.listProviders).mockResolvedValueOnce([
+      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN", experimental: true, risks: [] },
+    ] as Awaited<ReturnType<typeof api.listProviders>>);
+    vi.mocked(api.startProviderLogin).mockResolvedValueOnce({
+      session_id: "google-login", provider: "agy", intent: "login",
+      method: "google", mode: "browser", state: "WAITING_FOR_USER",
+      message: "인증 코드를 붙여넣어 주세요.", needs_authorization_code: true,
+      started_at: "2026-09-13T00:00:00Z", completed_at: null, can_cancel: true,
+    });
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /^로그인$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Google로 로그인" }));
+    const input = await screen.findByLabelText("Google 인증 코드") as HTMLInputElement;
+    const code = "4/prism-fake-code-for-tests";
+    expect(input.type).toBe("password");
+    fireEvent.change(input, { target: { value: code } });
+    fireEvent.click(screen.getByRole("button", { name: "로그인 완료" }));
+    await waitFor(() => {
+      expect(api.submitProviderLoginCode).toHaveBeenCalledWith("agy", "google-login", code);
+      expect(screen.getByLabelText("Google 인증 코드")).toBeTruthy();
+      expect((screen.getByRole("button", { name: "로그인 완료" }) as HTMLButtonElement).disabled).toBe(true);
+    });
+    expect(document.body.textContent).not.toContain(code);
+    await waitFor(() => expect(screen.getByText("로그인 완료")).toBeTruthy(), { timeout: 2500 });
+  });
+
+  it("agy에서 Google 브라우저 로그인을 시작한다", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.listProviders).mockResolvedValueOnce([
+      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN", experimental: true, risks: [] },
+    ] as Awaited<ReturnType<typeof api.listProviders>>);
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /^로그인$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Google로 로그인" }));
+    await waitFor(() => {
+      expect(api.startProviderLogin).toHaveBeenCalledWith("agy", "google");
+      expect(screen.getByRole("button", { name: "로그인 취소" })).toBeTruthy();
+      expect(screen.getByLabelText("Google 인증 코드")).toBeTruthy();
+    });
+    expect(screen.queryByRole("button", { name: "창 닫고 로그인 확인" })).toBeNull();
+    expect(screen.queryByText("agy 로그인 도우미 열기")).toBeNull();
+  });
+
   it("Codex 모델별 추론강도를 드롭다운으로 표시한다", async () => {
     await renderPage();
     fireEvent.change(screen.getByLabelText("AI 실행 도구 (Provider)"), {

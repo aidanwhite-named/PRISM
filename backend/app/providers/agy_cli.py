@@ -49,6 +49,7 @@ from ..enums import AuthState
 from ..execution import process as proc
 from . import agy_permissions
 from .agy_stream import AgyStreamParser, build_stdin_message
+from .agy_login import run_agy_models
 from .base import (
     AGY_WEB_SEARCH,
     EmitFn,
@@ -359,8 +360,8 @@ class AgyCliProvider(Provider):
             )
 
         # 인증 확인. 모델 추론을 돌리지 않으므로 토큰 사용량이 발생하지 않는다.
-        models_run = await proc.run_capture(
-            resolved.command(["models"]), env=env, timeout_seconds=60
+        models_run = await run_agy_models(
+            resolved, cwd=Path.cwd(), env=env, timeout_seconds=60
         )
         if models_run.exit_code == 0 and models_run.stdout.strip():
             result.auth_state = AuthState.OK

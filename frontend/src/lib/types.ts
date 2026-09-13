@@ -420,6 +420,7 @@ export interface ProviderLoginSession {
   started_at: string;
   completed_at: string | null;
   can_cancel: boolean;
+  needs_authorization_code?: boolean;
 }
 
 /** CLI가 실제 자격증명을 지운 뒤 다시 확인한 로그아웃 결과. */

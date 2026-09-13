@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+import json
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from .. import search_channels, settings_service
@@ -112,6 +114,26 @@ async def cancel_login(provider_id: str, session_id: str) -> dict:
     if result is None:
         raise HTTPException(404, "로그인 세션을 찾을 수 없습니다.")
     return result
+
+
+@router.post("/{provider_id}/login/{session_id}/code")
+async def submit_login_code(provider_id: str, session_id: str, request: Request) -> dict:
+    """Forward a one-time OAuth code without reflecting it in validation errors."""
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 4096:
+            raise HTTPException(400, "인증 코드 요청 형식이 올바르지 않습니다.")
+    try:
+        payload = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, "인증 코드 요청 형식이 올바르지 않습니다.") from None
+    if not isinstance(payload, dict) or set(payload) != {"code"}:
+        raise HTTPException(400, "인증 코드 요청에는 code만 사용할 수 있습니다.")
+    try:
+        return await LOGIN_MANAGER.submit_authorization_code(provider_id, session_id, payload["code"])
+    except LoginError as exc:
+        raise HTTPException(400, str(exc)) from None
 
 
 @router.post("/{provider_id}/logout")
