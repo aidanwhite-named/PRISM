@@ -1,6 +1,7 @@
 """Read-only search tools. No candidate selection, ranking or classification."""
 from __future__ import annotations
 import json
+import copy
 import os
 import sys
 import uuid
@@ -48,13 +49,14 @@ class ToolLimitExceeded(RuntimeError):
     pass
 
 class SearchTools:
-    def __init__(self, *, values=None, work_dir=None, max_calls=None, cutoff=None):
+    def __init__(self, *, values=None, work_dir=None, max_calls=None, cutoff=None, provider=None):
         self.work_dir = Path(work_dir or os.environ["PRISM_SEARCH_WORK_DIR"])
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_path = self.work_dir / LEDGER_NAME
         self.max_calls = max(1, int(max_calls or os.environ.get("PRISM_SEARCH_MAX_TOOL_CALLS", 40)))
         self.calls = sum(row.get("state") == "started" for row in search_manifest.read_tool_journal(self.work_dir))
         self.cutoff = search_dates.normalize_cutoff(cutoff if cutoff is not None else os.environ.get("PRISM_SEARCH_CUTOFF", ""))
+        self.provider = provider or os.environ.get("PRISM_SEARCH_PROVIDER", "claude")
         if values is None:
             with session_scope() as session:
                 values = settings_service.get_all(session)
@@ -71,7 +73,7 @@ class SearchTools:
             os.fsync(handle.fileno())
 
     def statuses(self):
-        return search_channels.availability(self.values)
+        return search_channels.availability(self.values, self.provider)
 
     def tool_definitions(self):
         statuses = self.statuses()
@@ -80,8 +82,10 @@ class SearchTools:
             if statuses[tool["name"].split("_")[0]]["status"] == "available"
         ]
 
-    def call(self, name: str, arguments: dict) -> dict:
+    def call(self, name: str, arguments: dict, *, _vocabulary_probe=False) -> dict:
         row = {"id": str(uuid.uuid4()), "tool": name, "arguments": arguments, "sequence": self.calls}
+        if _vocabulary_probe:
+            row["query_origin"] = "vocabulary_probe"
         if self.calls >= self.max_calls:
             self._record({**row, "state": "rejected", "ok": False, "error_code": "tool_call_limit_exceeded"})
             raise ToolLimitExceeded("tool_call_limit_exceeded")
@@ -107,6 +111,22 @@ class SearchTools:
                         raise PatentSearchError("quota_persistence_failed")
             else:
                 result = self._execute(name, arguments)
+            # Release the OPS lock before a bounded, separately journalled supplementary query.
+            # Reuse only aliases supplied by the model; never insert domain-specific vocabulary.
+            if (name == "epo_search" and not _vocabulary_probe and not result.get("duplicate_query")
+                    and (result.get("total_found") or 0) > 1000 and self.calls < self.max_calls):
+                previous = [entry.get("arguments", {}).get("query", {})
+                            for entry in search_manifest.read_tool_journal(self.work_dir)
+                            if entry.get("tool") == "epo_search" and entry.get("ok") is True]
+                variant = _distinct_alias_query(arguments["query"], previous)
+                if variant:
+                    try:
+                        result["vocabulary_probe"] = self.call("epo_search", {
+                            "query": variant, "max_results": min(arguments.get("max_results", 10), 5),
+                        }, _vocabulary_probe=True)
+                    except Exception as exc:
+                        # A failed supplement must not discard the original successful search.
+                        result["vocabulary_probe_error"] = scrub(str(exc), *self.secrets)[:300]
         except Exception as exc:
             detail = scrub(str(exc), *self.secrets)[:500]
             code = getattr(exc, "fault_code", "") or type(exc).__name__
@@ -140,8 +160,50 @@ class SearchTools:
         normalized = []
         # Do not silently hide unknown publication dates with a DB-side cutoff.
         cql = epo_cql.build(node, normalized=normalized)
-        response = self._backend("epo").search_structured(node, max_results=arguments.get("max_results", 10))
-        return {**_response(response, scope="bibliographic_search"), "cql": cql,
+        start = arguments.get("start", 1)
+        size = arguments.get("max_results", 10)
+        previous = [row for row in search_manifest.read_tool_journal(self.work_dir)
+                    if row.get("tool") == "epo_search" and row.get("ok") is True
+                    and not (row.get("result") or {}).get("duplicate_query")]
+        for row in previous:
+            result = row.get("result") or {}
+            if result.get("cql") == cql and result.get("start", 1) == start and result.get("page_size", 10) == size:
+                return {"duplicate_query": True, "previous_call_id": row["id"], "cql": cql,
+                        "total_found": result.get("total_found"), "next_start": result.get("next_start"),
+                        "records": [], "note": "Identical query/page already delivered; reuse its records and evidence_refs."}
+        response = self._backend("epo").search_structured(node, max_results=size, start=start)
+        result = _response(response, scope="bibliographic_search")
+        seen = {record["document_number"] for row in previous
+                for record in (row.get("result") or {}).get("records", [])}
+        repeated = [record["document_number"] for record in result["records"] if record["document_number"] in seen]
+        result["records"] = [record for record in result["records"] if record["document_number"] not in seen]
+        for record in result["records"]:
+            # One title/abstract language, only screening metadata. Full source stays in the artifact.
+            fields = record["fields"]
+            keep = {"applicants", "publication_date", "ipc", "cpc"}
+            for prefix in ("title", "abstract"):
+                names = [name for name in fields if name == prefix or name.startswith(prefix + ":")]
+                preferred = prefix + ":en"
+                if names:
+                    keep.add(preferred if preferred in names else names[0])
+            record["fields"] = {name: value for name, value in fields.items() if name in keep}
+            record["evidence_refs"] = {name: ref for name, ref in record["evidence_refs"].items()
+                                       if name in keep and name not in ("ipc", "cpc")}
+            record["truncated_fields"] = [name for name in record["truncated_fields"] if name in keep]
+            for name, value in record["fields"].items():
+                if name.startswith("abstract") and len(value) > 700:
+                    record["fields"][name] = value[:700]
+                    if name not in record["truncated_fields"]:
+                        record["truncated_fields"].append(name)
+        end = start + len(response.records) - 1
+        more = bool(response.records) and end < response.total_found
+        return {**result, "cql": cql, "start": start, "page_size": size,
+                "returned_count": len(response.records), "previously_seen": repeated,
+                "next_start": end + 1 if more and end < 2000 else None,
+                "has_more": more, "summary_only": True,
+                "coverage_note": ("Partial results: vary vocabulary, refine core concepts/classification or request next_start; do not infer absence."
+                                  if more else "No matches: replace literal claim terms with alternative vocabulary and reduce required concepts."
+                                  if not response.records else ""),
                 "normalized_classifications": normalized, "publication_cutoff": self.cutoff or None}
 
     def _plain_search(self, backend_id, arguments):
@@ -184,6 +246,62 @@ def _validate(value, schema, depth=0):
             raise ValueError("invalid_integer")
     if "enum" in schema and value not in schema["enum"]:
         raise ValueError("invalid_enum")
+
+
+def _distinct_alias_query(query: dict, previous: list[dict]) -> dict | None:
+    """Separate novel alternatives from previously searched vocabulary, at most once.
+
+    Only OR-word lists change. Required/all concepts stay intact, and an entire
+    concept is never removed. This supplements the original query, never replaces it.
+    """
+    from .search_recall import query_kind
+    if query_kind(query) != "keyword":
+        return None
+    def terms(node):
+        if not isinstance(node, dict):
+            return
+        if node.get("type", "term") == "group":
+            if node.get("op") == "not":
+                return
+            for child in node.get("items", []):
+                yield from terms(child)
+        elif node.get("field") in ("ti", "ab", "ta", "txt"):
+            yield node
+    previous = [node for node in previous if query_kind(node) == "keyword"]
+    seen = {word.casefold() for node in previous for term in terms(node)
+            for word in term.get("value", "").split()}
+    if not seen:
+        return None
+    variant = copy.deepcopy(query)
+    changed = False
+    for term in terms(variant):
+        if term.get("match") != "any":
+            continue
+        words = term.get("value", "").split()
+        fresh = [word for word in words if word.casefold() not in seen]
+        if fresh and len(fresh) < len(words):
+            term["value"] = " ".join(fresh)
+            changed = True
+    if not changed:
+        return None
+    # Carry at most one previously required core concept into the supplementary query.
+    # Otherwise a novel alias alone can drift into an unrelated, very broad field.
+    current_words = {word.casefold() for term in terms(variant) for word in term.get("value", "").split()}
+    for prior in reversed(previous):
+        anchors = [term for term in terms(prior) if term.get("match", "all") == "all"
+                   and not current_words.intersection(word.casefold() for word in term.get("value", "").split())]
+        if anchors:
+            anchor = copy.deepcopy(anchors[-1])
+            if variant.get("type") == "group" and variant.get("op") == "and":
+                variant["items"].append(anchor)
+            else:
+                variant = {"type": "group", "op": "and", "items": [variant, anchor]}
+            break
+    try:
+        epo_cql.build(_query_node(variant))
+    except ValueError:
+        return None
+    return variant
 
 def _query_node(raw: Any, depth=0):
     if depth > epo_cql.MAX_DEPTH or not isinstance(raw, dict):
@@ -266,8 +384,9 @@ _QUERY_SCHEMA = {
 }
 _EPO_SEARCH = _tool(
     "epo_search",
-    "Search EPO OPS with a validated structured CQL expression. Returns the actual CQL and artifact references.",
-    {"query": _QUERY_SCHEMA, "max_results": {"type": "integer", "minimum": 1, "maximum": 20}},
+    "Search EPO OPS. Compact screening records, total_found and next_start. Broad queries may include one separately journalled vocabulary_probe using only your new OR aliases, within the shared call budget. Duplicate records are referenced in previously_seen. Fetch selected publications for full evidence.",
+    {"query": _QUERY_SCHEMA, "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
+     "start": {"type": "integer", "minimum": 1, "maximum": 2000}},
     ["query"],
 )
 _EPO_FETCH = _tool(

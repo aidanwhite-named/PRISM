@@ -24,7 +24,7 @@ from ..config import PATHS
 from ..enums import AuthState
 from ..execution import process as proc
 from ..execution.process import kill_process_tree
-from .agy_cli import resolve_agy
+from .agy_cli import build_agy_env, resolve_agy
 from .env import build_child_env
 from .registry import probe_one
 from .resolver import ResolvedExecutable, resolve_claude, resolve_simple
@@ -486,7 +486,7 @@ class ProviderLoginManager:
         session.process = await asyncio.create_subprocess_exec(
             *resolved.command(["--sandbox"]),
             cwd=str(self._login_dir()),
-            env=build_child_env(),
+            env=build_agy_env(),
             creationflags=flags,
         )
         try:
@@ -541,7 +541,7 @@ class ProviderLoginManager:
         session.process = await asyncio.create_subprocess_exec(
             *resolved.command(["--sandbox"]),
             cwd=str(self._login_dir()),
-            env=build_child_env(),
+            env=build_agy_env(),
             creationflags=flags,
         )
         try:

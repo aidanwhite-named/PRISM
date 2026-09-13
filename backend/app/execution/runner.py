@@ -66,7 +66,7 @@ _SEARCH_CONTEXT_BY_POLICY = job_assembly.SEARCH_CONTEXT_BY_POLICY
 search_spec = job_assembly.search_spec
 
 
-def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int) -> dict:
+def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int, provider: str = "claude") -> dict:
     """Per-run MCP config.  No credentials are placed in CLI arguments."""
     backend_root = Path(__file__).resolve().parents[2]
     return {
@@ -78,6 +78,7 @@ def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int) -> dict:
                 "PRISM_SEARCH_WORK_DIR": str(work_dir.resolve()),
                 "PRISM_DATA_DIR": str(PATHS.data_dir.resolve()),
                 "PRISM_SEARCH_CUTOFF": cutoff or "",
+                "PRISM_SEARCH_PROVIDER": provider,
                 "PRISM_SEARCH_MAX_TOOL_CALLS": str(max(1, int(max_calls))),
             },
         }
@@ -848,7 +849,7 @@ class JobRunner:
                     )
                     return
                 if provider_id in ("claude", "codex"):
-                    mcp_servers = _search_mcp_servers(work_dir, search_cutoff, search_budget)
+                    mcp_servers = _search_mcp_servers(work_dir, search_cutoff, search_budget, provider_id)
                 available_names = search_channels.available_mcp_names(tool_availability) if mcp_servers else ()
                 tool_policy = replace(
                     tool_policy, mcp_tools=tuple(available_names),

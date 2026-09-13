@@ -141,13 +141,12 @@ def model_input_gate(
 
 @dataclass
 class AssemblyResult:
-    """조립 결과. 레인이 하나든 둘이든 같은 모양으로 돌려준다."""
+    """조립 결과. 분석·검색 모두 레인 하나(LANE_SINGLE)를 같은 모양으로 돌려준다."""
 
     lanes: dict[str, AssembledPrompt]
     spec_document: dict | None = None
-    # 명세서 본문. 웹 레인은 이미 렌더된 프롬프트 안에 들고 있지만, EPO 레인은
-    # 자기 프롬프트를 따로 만들므로 본문 자체가 필요하다. 없으면 빈 문자열이고,
-    # 그때 EPO 는 청구항 단독 레인만 돈다.
+    # 명세서 본문(조립에 쓴 스냅샷). 없으면 빈 문자열. 따로 프롬프트를 만들던
+    # EPO 레인이 쓰던 필드로, 단일 실행이 된 뒤로는 읽는 곳이 없다.
     spec_text: str = ""
     search_prompt_sha: str = ""
     # 검색 전략 프롬프트의 신원. 예약 프롬프트 하나로 고정되어 있던 시절에는
@@ -586,7 +585,7 @@ def assemble_job(
 ) -> AssemblyResult:
     """이 작업이 Provider 에게 실제로 보낼 본문을 만든다.
 
-    검색이면 청구항 단독 / 명세서 보조 두 레인을, 분석이면 하나를 돌려준다.
+    분석이든 검색이든 레인 하나를 돌려준다. 명세서가 있어도 레인을 나누지 않는다.
     InputTooLarge 와 SearchPromptError 는 그대로 올린다 — 호출부가 실행 실패로
     기록할지(runner) 화면에 안내할지(preflight) 정한다.
 
@@ -770,6 +769,9 @@ def assemble_job(
         "attachment_id": spec.attachment_id, "filename": spec.original_filename,
         "sha256": spec.sha256, "page_count": spec.page_count, "char_count": len(spec_text),
     }
+    if spec_document is not None:
+        from .search_recall import reference_publication
+        spec_document["publication_number"] = reference_publication(spec_text)
     return AssemblyResult(
         lanes=lanes,
         spec_document=spec_document,

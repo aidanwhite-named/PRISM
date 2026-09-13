@@ -388,7 +388,7 @@ class EpoOpsBackend(PatentSearchBackend):
         return replace(response, notes=response.notes + notes) if notes else response
 
     def search_structured(
-        self, node, *, max_results: int = epo_client.MAX_RESULTS_PER_QUERY
+        self, node, *, max_results: int = epo_client.MAX_RESULTS_PER_QUERY, start: int = 1
     ) -> PatentSearchResponse:
         """구조화된 질의로 검색한다. 2단계에서 LLM 도구가 부르는 입구다.
 
@@ -397,8 +397,11 @@ class EpoOpsBackend(PatentSearchBackend):
         """
         client = self._require_client()
         cql = epo_cql.build(node)
-        end = max(1, min(int(max_results or 0) or 1, epo_client.MAX_RESULTS_PER_QUERY))
-        call = client.search(cql, begin=1, end=end)
+        if type(start) is not int or not 1 <= start <= 2000:
+            raise ValueError("EPO start must be between 1 and 2000")
+        size = max(1, min(int(max_results or 0) or 1, epo_client.MAX_RESULTS_PER_QUERY))
+        end = min(start + size - 1, 2000)
+        call = client.search(cql, begin=start, end=end)
         return self._materialize(call, cql=cql)
 
     def fetch_document(

@@ -67,6 +67,15 @@ def web_status(record, *, cli_version: str = "", now: datetime | None = None) ->
     죽었다"를 구분할 수 있다.
     """
     if not isinstance(record, dict) or record.get("ok") is None:
+        if isinstance(record, dict) and record.get("completed_calls"):
+            seen = _parse_moment(record.get("at"))
+            fresh = seen and timedelta(0) <= (now or datetime.now(timezone.utc)) - seen <= WEB_HEALTH_TTL
+            same_cli = not cli_version or not record.get("cli_version") or cli_version == record["cli_version"]
+            if not fresh or not same_cli:
+                return {"status": "unverified", "detail": f"이전 호출 완료 기록은 만료되었거나 CLI가 바뀌었습니다. {_CHECK_HINT}"}
+            return {"status": "unverified", "detail": (
+                f"{record['completed_calls']}회 호출 완료를 관측했습니다. "
+                "Provider가 성공 여부를 제공하지 않아 결과 성공은 미확인입니다. 웹 검색은 시도할 수 있습니다.")}
         return {"status": "unverified", "detail": f"확인 기록이 없습니다. {_CHECK_HINT}"}
     observed = _parse_moment(record.get("at"))
     if observed is None:
@@ -109,7 +118,12 @@ def web_evidence(tool_calls, tool_names, *, cli_version: str = "",
         failed = next(call for call in calls if call.get("ok") is False)
         ok, detail = False, _failure_text(failed.get("error"))
     else:
-        return None
+        completed = sum(call.get("completed") is True for call in calls)
+        if not completed:
+            return None
+        return {"ok": None, "completed_calls": completed, "detail": "Completion observed; result success unknown",
+                "source": source, "cli_version": str(cli_version or ""), "calls": len(calls),
+                "at": (now or datetime.now(timezone.utc)).isoformat()}
     return {"ok": ok, "detail": detail, "source": source,
             "cli_version": str(cli_version or ""), "calls": len(calls),
             "at": (now or datetime.now(timezone.utc)).isoformat()}

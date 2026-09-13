@@ -70,6 +70,8 @@ def _matching_sources(candidate: dict, journal: list[dict], store) -> list[dict]
                 check = verify_excerpt(excerpt=text, field=FieldValue(text, evidence), store=store)
                 if check.verified:
                     verified_fields[name] = {"text": text, "evidence_ref": ref}
+                    if name in record.get("truncated_fields", []):
+                        verified_fields[name]["truncated"] = True
             if verified_fields:
                 found.append({"tool": call.get("tool"), "call_id": call.get("id"),
                               "url": record.get("url", ""), "document_number": record.get("document_number"),
@@ -110,6 +112,7 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
         scope = {name: "not_requested" for name in SCOPES}
         delivered = {}
         values_by_field = {}
+        truncated_values = set()
         for source in sources:
             for name, field in source["fields"].items():
                 kind = _scope(name)
@@ -117,6 +120,8 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
                     scope[kind] = "verified"
                 delivered[_ref_key(field["evidence_ref"])] = field
                 values_by_field.setdefault(name, set()).add(field["text"])
+                if field.get("truncated"):
+                    truncated_values.add((name, field["text"]))
         # Fetch attempts are independent from the returned content. Failed or
         # missing constituents must not become document-wide 'verified'.
         for call in journal:
@@ -165,7 +170,12 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
             issues.append("publication_date_conflict")
         elif not dates:
             issues.append("publication_date_unverified")
-        if any(len(values) > 1 for field, values in values_by_field.items() if field != "publication_date"):
+        # A screening excerpt and its full fetched field are compatible. Only explicitly
+        # marked excerpts can be subsumed; differing full sources remain a conflict.
+        comparable = {name: {text for text in texts if not (
+            (name, text) in truncated_values and any(other != text and other.startswith(text) for other in texts))}
+            for name, texts in values_by_field.items()}
+        if any(len(values) > 1 for field, values in comparable.items() if field != "publication_date"):
             issues.append("source_conflict")
         titles = {text for name, values in values_by_field.items()
                   if name.split(":")[0] == "title" for text in values}

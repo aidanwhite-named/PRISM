@@ -66,9 +66,10 @@ class JobKind(StrEnum):
 
       PATENT_ANALYSIS   : 첨부한 PDF 를 인라인으로 넣고 도구를 전부 끈 채
                           청구항과 인용발명을 구성별로 대비한다.
-      SIMILARITY_SEARCH : 청구항을 기준으로 WebSearch/WebFetch 만 허용해서
-                          유사 문헌 검토 후보를 탐색한다. 선택 명세서는 격리된
-                          보조 검색에만 사용한다.
+      SIMILARITY_SEARCH : 청구항을 기준으로 검색 도구(웹·EPO·논문)만 허용해서
+                          유사 문헌 검토 후보를 탐색한다. 선택 명세서는 같은
+                          실행 안에서 청구항 용어를 해석하고 검색어를 넓히는
+                          참고 자료로만 쓴다.
 
     값이 비어 있는 과거 실행은 PATENT_ANALYSIS 로 읽는다.
     """

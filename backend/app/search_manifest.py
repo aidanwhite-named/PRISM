@@ -225,6 +225,7 @@ def build(*, claim_text, provider="", model="", prompt_id="", prompt_name="",
           focus_boundary_neutralized=False, template_mode="", strategy_boundary_neutralized=False,
           tool_policy_name="", allowed_tools=(), mcp_tools=(), advertised_tools_enforced=False,
           quality=None, verification_followup=None) -> dict:
+    from .search_recall import assess as assess_recall
     try:
         llm_output = parse_payload(raw_output) if raw_output else None
     except SearchLogError:
@@ -233,6 +234,7 @@ def build(*, claim_text, provider="", model="", prompt_id="", prompt_name="",
         "version": MANIFEST_VERSION, "status": "incomplete" if error else (
             "verification_incomplete" if quality and quality.get("verification_status") != "complete" else "complete"),
         "quality": quality, "verification_followup": verification_followup,
+        "reference_retrieval": assess_recall((spec_document or {}).get("publication_number"), tool_journal or []),
         "provider": provider, "model": model, "group_definitions": dict(GROUP_DEFINITIONS),
         "input": {"claim_text": claim_text, "spec_document": spec_document, "search_focus": search_focus,
                   "claim_boundary_neutralized": claim_boundary_neutralized,

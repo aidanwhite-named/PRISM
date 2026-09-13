@@ -449,6 +449,46 @@ async def test_agy_logout_helper_passes_no_prompt_to_the_model(
     assert finished["message"] == "로그아웃했습니다."
 
 
+@pytest.mark.parametrize("intent", [LOGIN_INTENT, LOGOUT_INTENT])
+async def test_agy_helper_windows_launch_with_auto_update_disabled(
+    intent, monkeypatch, tmp_path
+) -> None:
+    """도우미 창도 agy 를 띄운다. 거기서 업데이터가 돌면 고정해 둔 버전이 바뀐다."""
+    from app.providers import login as login_module
+
+    resolved = ResolvedExecutable(str(tmp_path / "agy.exe"), ExecutableKind.NATIVE_EXE)
+    captured: dict = {}
+
+    async def fake_exec(*argv, **kwargs):
+        del argv
+        captured["env"] = kwargs["env"]
+        return _FakeConsoleProcess()
+
+    async def fake_probe(provider, overrides=None):
+        del overrides
+        return ProbeResult(
+            provider=provider,
+            display_name="agy",
+            installed=True,
+            executable_ok=True,
+            auth_state=AuthState.OK,
+        )
+
+    manager = ProviderLoginManager()
+    monkeypatch.setattr(login_module.sys, "platform", "win32")
+    monkeypatch.setattr(manager, "_resolve", lambda provider, override: resolved)
+    monkeypatch.setattr(login_module.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(login_module, "probe_one", fake_probe)
+
+    start = manager.start if intent == LOGIN_INTENT else manager.start_logout
+    started = await start("agy")
+    task = manager._sessions[started["session_id"]].task
+    assert task is not None
+    await task
+
+    assert captured["env"]["AGY_CLI_DISABLE_AUTO_UPDATE"] == "true"
+
+
 async def test_agy_logout_fails_when_credentials_survive(monkeypatch, tmp_path) -> None:
     """창이 닫혀도 여전히 로그인 상태면 성공으로 보고하지 않는다."""
     from app.providers import login as login_module

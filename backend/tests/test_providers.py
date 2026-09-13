@@ -84,6 +84,60 @@ def test_unrelated_vars_are_dropped(monkeypatch) -> None:
     assert "SOME_RANDOM_SECRET" not in build_child_env()
 
 
+def test_agy_env_disables_auto_update(monkeypatch) -> None:
+    """agy 는 실행될 때 백그라운드 업데이터를 띄워 자기 실행 파일을 바꿔 끼운다.
+
+    실측(2026-09-12): 1.1.27 이 실행 사이에 1.2.2 로 교체됐다. 사용자 환경변수로
+    막아 두어도 allowlist 가 걷어내므로 agy 전용 환경에서 명시적으로 얹어야 한다.
+    """
+    from app.providers.agy_cli import build_agy_env
+
+    monkeypatch.setenv("AGY_CLI_DISABLE_AUTO_UPDATE", "true")
+    assert "AGY_CLI_DISABLE_AUTO_UPDATE" not in build_child_env()
+    assert build_agy_env()["AGY_CLI_DISABLE_AUTO_UPDATE"] == "true"
+
+
+async def test_agy_probe_and_execute_launch_with_auto_update_disabled(
+    monkeypatch, tmp_path
+) -> None:
+    """환경을 만드는 함수가 맞아도 호출부가 build_child_env 로 돌아가면 업데이터가 돈다."""
+    fake = tmp_path / "agy.exe"
+    fake.write_bytes(b"stub")
+    envs: list[dict[str, str]] = []
+
+    async def fake_capture(argv, cwd=None, env=None, stdin_data=None, timeout_seconds=60):
+        del cwd, stdin_data, timeout_seconds
+        envs.append(env or {})
+        if argv[-1] == "--version":
+            return proc.ProcessResult(exit_code=0, stdout="1.1.27\n")
+        return proc.ProcessResult(exit_code=0, stdout="gemini-test\tGemini Test\n")
+
+    class Launched(Exception):
+        pass
+
+    async def fake_streaming(**kwargs):
+        envs.append(kwargs["env"])
+        raise Launched
+
+    async def emit(event_type, payload) -> None:
+        del event_type, payload
+
+    monkeypatch.setattr(proc, "run_capture", fake_capture)
+    monkeypatch.setattr(proc, "run_streaming", fake_streaming)
+
+    provider = AgyCliProvider(executable_override=str(fake))
+    await provider.probe()
+    request = ExecutionRequest(
+        job_id="j", work_dir=tmp_path, system_prompt="", user_message="MESSAGE"
+    )
+    with pytest.raises(Launched):
+        await provider.execute(request, emit)
+
+    # probe 의 --version·models, execute 의 --version·본 실행
+    assert len(envs) == 4
+    assert all(env.get("AGY_CLI_DISABLE_AUTO_UPDATE") == "true" for env in envs)
+
+
 def test_describe_filtering_shape() -> None:
     info = describe_filtering()
     assert "allowlist" in info

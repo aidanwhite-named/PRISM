@@ -60,6 +60,26 @@ from .base import (
 from .env import build_child_env
 from .resolver import ExecutableKind, ResolvedExecutable, resolve_simple
 
+# agy 는 실행될 때마다 마지막 확인에서 15분이 지났으면 백그라운드 업데이터를
+# 띄워 자기 실행 파일을 최신판으로 바꿔 끼운다(auto_updater.go). 실측
+# (2026-09-12): 14:52 실행이 업데이터를 띄웠고 14:53 에 1.1.27 이 1.2.2 로
+# 교체됐다. 확인한 적 없는 버전이 실행 사이에 조용히 들어오면 결과가 달라져도
+# 원인을 버전에서 찾을 수 없다. 업데이트는 사용자가 `agy update` 로 직접 한다.
+#
+# 실측(1.1.27, 2026-09-13): 확인 주기가 지난 상태에서 이 값을 넣고 `agy models`
+# 를 실행하면 로그에 "Auto-update disabled via environment variable" 이 남고
+# last_check.timestamp 가 갱신되지 않으며 업데이터 프로세스도 뜨지 않는다.
+#
+# 사용자 환경변수로 넣어 두는 것만으로는 막히지 않는다. build_child_env 가
+# allowlist 로 환경을 새로 만들면서 걷어내기 때문에 여기서 명시적으로 얹는다.
+_CHILD_ENV_EXTRA = {"AGY_CLI_DISABLE_AUTO_UPDATE": "true"}
+
+
+def build_agy_env() -> dict[str, str]:
+    """agy 자식 프로세스용 환경. probe·실행·로그인 도우미가 모두 이것을 쓴다."""
+    return build_child_env(_CHILD_ENV_EXTRA)
+
+
 # 이 Provider 를 켜기 전에 사용자가 알아야 할 것. Settings 에 그대로 표시된다.
 RISKS = (
     "도구를 끄는 플래그가 없습니다. run_command, write_to_file 을 포함해 수십 개 "
@@ -297,7 +317,7 @@ class AgyCliProvider(Provider):
         result.executable_kind = resolved.kind
         result.notes.append(f"발견 위치: {resolved.source}")
 
-        env = build_child_env()
+        env = build_agy_env()
         version_run = await proc.run_capture(
             resolved.command(["--version"]), env=env, timeout_seconds=45
         )
@@ -423,7 +443,7 @@ class AgyCliProvider(Provider):
         outcome.cli_path = resolved.path
         outcome.cli_args = list(args)
 
-        env = build_child_env()
+        env = build_agy_env()
         version_run = await proc.run_capture(
             resolved.command(["--version"]), env=env, timeout_seconds=45
         )

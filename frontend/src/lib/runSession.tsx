@@ -122,7 +122,8 @@ export interface RunSession {
   setCitationFiles: Dispatch<SetStateAction<File[]>>;
   upload: UploadResponse | null;
   setUpload: Dispatch<SetStateAction<UploadResponse | null>>;
-  /** 검색 실행에 곁들이는 출원발명 문서(명세서). 격리된 확장 검색용 자료다.
+  /** 검색 실행에 곁들이는 출원발명 문서(명세서). 같은 실행 안에서 청구항 용어를
+   *  해석하고 검색어를 넓히는 참고 자료다.
    *
    *  분석용 첨부와 상태를 나누는 이유는 searchClaimText 와 같다. 두 축은 받는
    *  자료가 다르고, 축을 오갈 때 한쪽에서 고른 파일이 다른 쪽 실행에 딸려

@@ -543,8 +543,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   /** 검색에 곁들인 명세서에서 뽑아낸 본문. 실행 전에 확인해 둔 경우에만 있다. */
   const searchSpec = searchUpload?.files?.[0] ?? null;
   const searchSpecChars = searchSpec?.read_ok ? searchSpec.char_count : 0;
-  // 명세서가 청구항보다 압도적으로 길면 보조 실행의 주의가 실시예로 쏠릴 수
-  // 있다. 청구항 단독 실행은 격리되어 영향을 받지 않지만 확장 품질은 보여 준다.
+  // 명세서가 청구항보다 압도적으로 길면 모델의 주의가 실시예로 쏠려 검색어도
+  // 그쪽으로 넓어질 수 있다. 명세서는 청구항과 같은 실행에 들어가 격리할 수
+  // 없으므로, 확장 내역을 직접 확인하도록 안내한다.
   const specOutweighsClaim =
     searchSpecChars > 0 &&
     searchSpecChars > Math.max(searchClaimText.trim().length, 1) * 20;
@@ -866,7 +867,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         <span className="input-step">2</span>
         <div>
           <strong>출원발명 문서 (선택)</strong>
-          <div className="hint">PDF를 더하면 검색어를 넓혀 결과를 합칩니다.</div>
+          <div className="hint">PDF를 넣으면 명세서를 참고해 청구항 용어를 해석하고 검색어를 넓힙니다.</div>
         </div>
       </div>
       <input
@@ -923,8 +924,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               {searchClaimText.trim().length.toLocaleString()}자
               {specOutweighsClaim && (
                 <div style={{ marginTop: 4 }}>
-                  명세서가 길어 용어 확장이 실시예에 쏠릴 수 있습니다. 결과의 보조
-                  검색 절을 확인하세요.
+                  명세서가 청구항보다 훨씬 길어 검색어 확장이 실시예 쪽으로 쏠릴 수
+                  있습니다. 결과의 「검색 감사 기록 → LLM 원출력 (미검증)」에서
+                  term_expansions 를 확인하세요.
                 </div>
               )}
             </>

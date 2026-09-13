@@ -5,7 +5,8 @@ from dataclasses import replace
 
 import pytest
 
-from app import search_followup, search_manifest as sm, search_quality, search_verification as sv
+from app import search_followup, search_manifest as sm, search_quality, search_report, search_verification as sv
+from app.search_channels import cell
 from app.providers.base import ExecutionOutcome, ExecutionRequest, WEB_SEARCH
 
 
@@ -119,3 +120,50 @@ async def test_read_web_page_without_provenance_does_not_repeat_impossible_check
     assert result is initial
     assert not audit["attempted"]
     assert "반복 조회 생략" in audit["reason"]
+
+
+def _epo_fetch_failure(number):
+    arguments = {"publication_number": number, "constituent": "claims"}
+    journal = [{"id": number, "tool": "epo_fetch", "arguments": arguments, "state": "started"},
+               {"id": number, "tool": "epo_fetch", "arguments": arguments, "state": "completed",
+                "ok": False, "error_code": "CLIENT.InvalidCountryCode", "detail": "EPO OPS 오류(HTTP 404)"}]
+    stream = {"id": f"item_{number}", "name": "mcp__prism-search__epo_fetch", "ok": False, "error": "failed",
+              "input": {"server": "prism-search", "tool": "epo_fetch", "arguments": dict(arguments)}}
+    return journal, stream
+
+
+def test_mcp_failure_in_journal_and_stream_is_counted_once():
+    journal, calls = [], []
+    for number in ("US6369822B1", "US9798514B2", "US10062415B2", "CN122156413A"):
+        rows, call = _epo_fetch_failure(number)
+        journal += rows
+        calls.append(call)
+    observed = sm.observed(calls)
+    quality = search_quality.assess({"candidates": []}, observed, journal, {})
+    assert [item["detail"] for item in quality["constraints"]] == ["CLIENT.InvalidCountryCode"] * 4
+    report = search_report.render(sm.build(claim_text="", tool_journal=journal,
+                                           observed_section=observed, quality=quality))
+    assert report.count("- " + cell("epo_fetch") + ": ") == 4
+    assert cell("mcp__prism-search__epo_fetch") not in report
+
+
+def test_failures_only_in_stream_are_kept():
+    rows, mcp_call = _epo_fetch_failure("EP1000000A1")
+    web_call = {"id": "w1", "name": "web_search", "ok": False, "error": "boom", "input": {"query": "q"}}
+    observed = sm.observed([web_call, mcp_call])
+    assert search_quality.stream_only_failures([], observed) == [web_call, mcp_call]
+    assert search_quality.stream_only_failures(rows, observed) == [web_call]
+
+
+def test_claude_shape_and_truncated_arguments_still_pair_with_journal():
+    query = {"type": "term", "field": "ta", "value": "audio video generation", "match": "all"}
+    journal = [{"tool": "epo_search", "arguments": {"query": query, "max_results": 10},
+                "state": "completed", "ok": False, "error_code": "quota_exceeded"}]
+    claude = {"name": "mcp__prism-search__epo_search", "ok": False, "error": "failed",
+              "input": {"query": json.dumps(query), "max_results": 10}}
+    assert search_quality.stream_only_failures(journal, {"tool_failures": [claude]}) == []
+    truncated = {"name": "mcp__prism-search__epo_search", "ok": False, "error": "failed",
+                 "input": {"server": "prism-search", "tool": "epo_search",
+                           "arguments": {"query": json.dumps(query)[:20], "max_results": "10"}}}
+    leftover = search_quality.stream_only_failures(journal, {"tool_failures": [truncated, dict(truncated)]})
+    assert len(leftover) == 1

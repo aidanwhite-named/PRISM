@@ -5,7 +5,7 @@ from .search_channels import cell, STATUS_LABELS
 from .search_legacy import view
 from .search_manifest import GROUP_DEFINITIONS, is_linkable_url
 from .search_verification import ISSUE_LABELS, LEVEL_LABELS
-from .search_quality import REASON_LABELS
+from .search_quality import REASON_LABELS, stream_only_failures
 
 def _link(raw) -> str:
     if not is_linkable_url(raw):
@@ -32,6 +32,19 @@ def render(manifest: dict) -> str:
         followup = data.get("verification_followup") or {}
         lines += ["", "추가 확인: " + cell(followup.get("reason", "기록 없음")), ""]
     lines += ["A/B/C는 LLM의 기술적 판단이며, 증거 확보 수준과 독립적입니다.", ""]
+    recall = data.get("reference_retrieval") or {}
+    if recall.get("publication_number"):
+        label = {"keyword_hit": "키워드 검색 응답에서 발견",
+                 "classification_only": "분류 검색에서만 발견 — 키워드 검색 발견 미확인",
+                 "identifier_only": "번호·인명 검색에서만 발견 — 키워드 검색 발견 미확인",
+                 "not_observed": "키워드 검색 응답에서 발견 확인 안 됨"}.get(recall.get("status"), "미확인")
+        lines += ["## 입력 공개문헌 검색 점검", "",
+                  f"{cell(recall['publication_number'])}: **{label}**", "",
+                  "EPO 실제 도구 응답 기준입니다. 웹 검색 결과 본문은 자동 대조할 수 없습니다. "
+                  "번호 직접 조회·최종 후보 포함 여부와 구분하며, 한 문헌의 발견이 전체 검색의 누락 없음을 보증하지는 않습니다.", ""]
+        for hit in recall.get("hits", []):
+            origin = "자동 동의어 보완" if hit.get("origin") == "vocabulary_probe" else "모델 검색"
+            lines.append("- " + origin + " (" + cell(hit.get("kind")) + "): " + cell(hit.get("cql")))
     definitions = data.get("group_definitions") or GROUP_DEFINITIONS
     for group, meaning in definitions.items():
         lines.append(f"- {cell(group)}: {cell(meaning)}")
@@ -43,8 +56,9 @@ def render(manifest: dict) -> str:
         label = STATUS_LABELS.get(status.get("status"), status.get("status"))
         detail = str(status.get("detail") or "").strip()
         lines.append(f"- {cell(name)}: {cell(label)}" + (f" — {cell(detail)}" if detail else ""))
-    failures = [row for row in data.get("tool_journal", []) if row.get("ok") is False]
-    failures += (data.get("observed") or {}).get("tool_failures", [])
+    journal = data.get("tool_journal", [])
+    failures = [row for row in journal if row.get("ok") is False]
+    failures += stream_only_failures(journal, data.get("observed") or {})
     if failures:
         lines += ["", "도구 호출 실패 (문헌 부재를 뜻하지 않음):", ""]
         for row in failures:
