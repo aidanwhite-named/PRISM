@@ -69,12 +69,15 @@ _TOOL_INPUT_KEYS = {
     # 길밖에 없다. 어떤 파일을 읽었는지 남기지 않으면 그 호출이 가져온 페이지를
     # 확인한 것인지 임의의 로컬 파일을 읽은 것인지 사후에 구분할 수 없다.
     "view_file": ("path", "start_line", "end_line"),
+    # 1.2.2 실측: {"DirectoryPath": "...\\mcp\\prism-search"}. 어느 폴더를 봤는지
+    # 남기지 않으면 스키마 폴더 확인인지 임의 폴더 탐색인지 가를 수 없다.
+    "list_dir": ("path",),
 }
 
 # 같은 뜻의 인수를 CLI 가 도구마다 다른 표기로 내보낸다. 감사 필드는 canonical
 # 이름으로 통일해 남긴다 — 표기가 바뀌어도 대조 코드가 흔들리지 않아야 한다.
 _INPUT_ALIASES = {
-    "path": ("absolutepath", "path"),
+    "path": ("absolutepath", "directorypath", "path"),
     "start_line": ("startline", "start_line"),
     "end_line": ("endline", "end_line"),
 }

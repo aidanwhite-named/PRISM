@@ -117,8 +117,8 @@ def test_setting_toggle_and_coerce(client) -> None:
         "/api/settings", json={"values": {"kiwee_integration_enabled": True}}
     ).json()
     assert updated["values"]["kiwee_integration_enabled"] is True
-    # 켜면 아직 실제 검색이 안 된다는 경고가 뜬다.
-    assert any("Kiwee" in w for w in updated["warnings"])
+    # 미구현 안내 경고는 2026-09-15 걷어냈다. 켜도 설정 경고에 나오지 않는다.
+    assert not any("Kiwee" in w for w in updated["warnings"])
     # 원복
     restored = client.put(
         "/api/settings", json={"values": {"kiwee_integration_enabled": False}}

@@ -54,6 +54,9 @@ def error_response(exc, name, arguments, secrets=()):
     value = {"error_code": getattr(exc, "fault_code", "") or type(exc).__name__,
              "detail": scrub(str(exc), *secrets)[:500]}
     args = arguments if isinstance(arguments, dict) else {}
+    if name == "gpatents_fetch":
+        value["requested_identifier"] = args.get("publication_number", "")
+        value["not_evidence_of_absence"] = True
     if name == "epo_fetch":
         value["requested_identifier"] = args.get("publication_number", "")
         value["requested_constituent"] = args.get("constituent", "claims")
@@ -123,7 +126,8 @@ class SearchTools:
     def tool_definitions(self):
         statuses = self.statuses()
         return [_CAPABILITIES] + [
-            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIWEE_SEARCH, _KIWEE_FETCH)
+            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIWEE_SEARCH, _KIWEE_FETCH,
+                              _GPATENTS_FETCH)
             if statuses[tool["name"].split("_")[0]]["status"] == "available"
         ]
 
@@ -178,6 +182,8 @@ class SearchTools:
     def _execute(self, name, arguments):
         if name == "epo_search":
             return self._epo_search(arguments)
+        if name == "gpatents_fetch":
+            return self._gpatents_fetch(arguments)
         backend_id = name.split("_")[0]
         if name.endswith("_fetch"):
             return self._fetch(backend_id, arguments, "doi" if backend_id == "literature" else "publication_number")
@@ -225,6 +231,50 @@ class SearchTools:
             response = backend.search(PatentSearchQuery(query, arguments.get("max_results", 10)))
         return {**_response(response, scope="bibliographic_search"), "query": query,
                 "publication_cutoff": self.cutoff or None}
+
+    def _gpatents_fetch(self, arguments):
+        """원문 페이지 조회. 같은 문헌은 받은 페이지를 다시 읽고, 새 페이지 수는 센다.
+
+        상한은 **새로 받은 페이지**에만 건다. 이미 받은 문헌의 다른 구역(명세서·인용)을
+        읽는 것은 요청을 만들지 않으므로 막을 이유가 없다. 404·429 같은 실패도 요청을
+        보낸 것이므로 센다.
+        """
+        from .patent_search import gpatents_backend
+
+        backend = self._backend("gpatents")
+        number = arguments["publication_number"]
+        constituent = arguments.get("constituent", "claims")
+        key = search_manifest.identity_key(number)
+        cached, fetched = "", 0
+        for row in search_manifest.read_tool_journal(self.work_dir):
+            if row.get("tool") != "gpatents_fetch" or row.get("state") != "completed":
+                continue
+            result = row.get("result") or {}
+            if row.get("ok") is True:
+                if result.get("network_fetch"):
+                    fetched += 1
+                if (not cached and result.get("raw_artifact_id")
+                        and search_manifest.identity_key(result.get("requested_identifier", "")) == key):
+                    cached = result["raw_artifact_id"]
+            elif str(row.get("error_code") or "") in _GPATENTS_REQUEST_ERRORS:
+                fetched += 1
+        if not cached and fetched >= backend.max_fetches_per_run:
+            raise gpatents_backend.GooglePatentsFetchLimit(
+                f"gpatents_fetch_limit: 이 실행에서 새로 받을 수 있는 페이지 "
+                f"{backend.max_fetches_per_run}건을 다 썼습니다. 이미 받은 문헌은 계속 조회할 수 있습니다."
+            )
+        response = backend.fetch_document(number, constituent, cached_artifact_id=cached)
+        result = _response(response, scope=constituent)
+        result["requested_identifier"] = number
+        result["identifier_matched"] = any(
+            search_manifest.identity_key(record["document_number"]) == key for record in result["records"]
+        )
+        result["network_fetch"] = not cached
+        result["source_notice"] = (
+            "Google Patents 원문 페이지(비공식 출처). 특허청 공식 문서가 아닙니다. "
+            "[claim N]·[NNNN]은 청구항·문단 번호 표시입니다."
+        )
+        return result
 
     def _fetch(self, backend_id, arguments, identifier_key):
         identifier = arguments[identifier_key]
@@ -381,19 +431,19 @@ def _tool(name: str, description: str, properties: dict, required: list[str]) ->
 
 _QUERY_SCHEMA = {
     "type": "object",
-    "description": 'Term: {type:"term",field:"ta",value:"image matching",match:"all"}. Group: {type:"group",op:"and"|"or"|"not",items:[nodes]}. Term fields: ti,ab,ta,txt,pa,in,pn,ap,pr,ipc,cpc,cl. Match: all/any/exact. Publication-date node: {type:"date_range",field:"pd",begin:"19000101",end:"20240131"}. A date-limited query may omit unknown dates; choose whether an additional unrestricted query is needed. Maximum nesting: 3.',
+    "description": 'Term: {type:"term",field:"ta",value:"image matching",match:"all"}. Group: {type:"group",op:"and"|"or"|"not",items:[nodes]}. Term fields: ti,ab,ta,txt,pa,in,pn,ap,pr,ct,ipc,cpc,cl. ct finds documents that cite a publication number (forward citations), e.g. {type:"term",field:"ct",value:"JP2009070340"}. Match: all/any/exact. Publication-date node: {type:"date_range",field:"pd",begin:"19000101",end:"20240131"}. A date-limited query may omit unknown dates; choose whether an additional unrestricted query is needed. Maximum nesting: 3.',
     "additionalProperties": True,
 }
 _EPO_SEARCH = _tool(
     "epo_search",
-    "Search EPO OPS with structured CQL. Provider-default order is not relevance ranking. Inspect coverage/date range and broad_query_sample warnings. Use observed ipc/cpc plus technical terms, date_range partitions, or begin for subsequent pages. Keep each OR branch technically specific; match=any splits words with OR. Returns actual CQL and artifact references.",
+    "Search EPO OPS with structured CQL. Provider-default order is not relevance ranking. Inspect coverage/date range and broad_query_sample warnings. Use observed ipc/cpc or applicant (pa) plus technical terms, date_range partitions, or begin for subsequent pages. From a strong candidate, field ct lists later documents citing it. Keep each OR branch technically specific; match=any splits words with OR. Returns actual CQL and artifact references.",
     {"query": _QUERY_SCHEMA, "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
      "begin": {"type": "integer", "minimum": 1, "maximum": 2000}},
     ["query"],
 )
 _EPO_FETCH = _tool(
     "epo_fetch",
-    "Fetch an EPO publication constituent: abstract, claims, description, biblio or family. US claims/description are not supplied by OPS; use biblio/abstract and a source page or identified family for full text. Scope failure is not publication absence. EntityNotFound may require number-format verification; never silently drop a fetched candidate.",
+    "Fetch an EPO publication constituent: abstract, claims, description, biblio or family. biblio includes references_cited (backward citations with cited-by/phase/category) when OPS has them; they are often absent for JP. US claims/description are not supplied by OPS; use biblio/abstract and a source page or identified family for full text. Scope failure is not publication absence. EntityNotFound may require number-format verification; never silently drop a fetched candidate.",
     {"publication_number": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "claims", "description", "biblio", "family"]}},
     ["publication_number"],
 )
@@ -417,6 +467,15 @@ _LITERATURE_FETCH = _tool(
 )
 _KIWEE_SEARCH = _tool("kiwee_search", "Search the configured Kiwee patent backend.", {"query": {"type": "string"}, "max_results": {"type": "integer"}}, ["query"])
 _KIWEE_FETCH = _tool("kiwee_fetch", "Fetch a document from the configured Kiwee backend.", {"publication_number": {"type": "string"}, "constituent": {"type": "string"}}, ["publication_number"])
+_GPATENTS_FETCH = _tool(
+    "gpatents_fetch",
+    "Fetch and preserve the Google Patents page (UNOFFICIAL source, not a patent office document) for one publication number with kind code, e.g. JP2009070340A. PRISM builds the URL from the number (original-language page) and paces requests at human speed, so each new page takes several seconds and a run has a small page cap; fetch only promising candidates. Another constituent of an already fetched number reuses the preserved page. constituent: claims (default), description (up to 40000 chars), abstract, citations (patent citations and cited-by with * = examiner cited). Text is the original-language text; [claim N] and [NNNN] mark claim and paragraph numbers. Use exact continuous text from page_claims/page_description/page_abstract as support_text/verbatim_excerpt with the returned evidence_refs. 404 means the page is unavailable, not that the publication does not exist.",
+    {"publication_number": {"type": "string", "minLength": 6, "maxLength": 40},
+     "constituent": {"type": "string", "enum": ["claims", "description", "abstract", "citations"]}},
+    ["publication_number"],
+)
+# 요청을 실제로 보낸 뒤 실패한 경우. 실행당 새 페이지 상한에 센다.
+_GPATENTS_REQUEST_ERRORS = frozenset({"GooglePatentsNotFound", "GooglePatentsRateLimited", "GooglePatentsHttpError"})
 _CAPABILITIES = _tool("search_capabilities", "Report which PRISM search tools are enabled and configured without making a network request.", {}, [])
 
 

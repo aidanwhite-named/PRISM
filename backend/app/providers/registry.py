@@ -13,17 +13,6 @@ from .codex_cli import CodexCliProvider
 
 PROVIDER_ORDER = ["agy", "claude", "codex"]
 
-# 도구를 끄는 수단이 없는 Provider. PRISM 은 도구 호출을 탐지해서 실패로
-# 기록할 뿐 호출 자체를 막지 못한다.
-#
-# 이 목록은 실행을 막지 않는다. Settings 의 위험 고지와 경고 문구를 어디에
-# 붙일지 정하는 데만 쓴다. 각 Provider 는 probe 에서 스스로 experimental=True
-# 를 단다 — 여기는 화면 문구용 단일 출처다.
-#
-# Codex 는 설정으로 web_search 만 끄고 켤 수 있고 셸·파일 도구는 끄지 못한다.
-# 그 하나를 끌 수 있다는 이유로 등급을 올리지 않는다 — 남는 도구가 더 위험하다.
-TOOL_UNCONTROLLABLE_PROVIDERS = frozenset({"agy", "codex"})
-
 # 캐시 수명. probe 는 Provider 하나당 CLI 를 두 번(버전·인증) 띄우므로 화면을
 # 열 때마다 돌릴 수는 없다. 그렇다고 무기한 들고 있으면 사용자가 PRISM 밖에서
 # 로그아웃하거나 토큰이 만료됐을 때 화면이 계속 "로그인됨" 으로 거짓말한다.
@@ -74,7 +63,6 @@ async def probe_all(
                         ProbeResult(
                             provider=provider.id,
                             display_name=provider.display_name,
-                            install_hint=provider.install_hint,
                             notes=[f"probe 중 오류: {type(result).__name__}: {result}"],
                         )
                     )

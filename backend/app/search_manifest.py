@@ -158,7 +158,7 @@ def has_retrieval_attempt(calls, tool_uses=None, journal=None) -> bool:
     eligible = SEARCH_TOOL_NAMES | FETCH_TOOL_NAMES | {
         f"mcp__prism-search__{source}_{action}"
         for source in ("epo", "literature", "kiwee") for action in ("search", "fetch")
-    }
+    } | {"mcp__prism-search__gpatents_fetch"}
     return bool(names & eligible)
 
 

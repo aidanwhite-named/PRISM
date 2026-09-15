@@ -18,7 +18,6 @@ const settingsResponse = {
     max_total_upload_bytes: 104857600,
     max_files_per_job: 20,
     max_inline_chars: 0,
-    default_timeout_seconds: 900,
     max_concurrency_per_provider: 1,
     runtime_context: "런타임",
     runtime_context_enabled: true,
@@ -29,7 +28,6 @@ const settingsResponse = {
     reasoning_effort: {},
     keep_raw_output: true,
     fail_on_tool_use: true,
-    max_search_tool_calls: 40,
     retrieval_mode: "auto",
     retrieval_max_rounds: 10,
     retrieval_max_page_reads: 80,
@@ -94,7 +92,6 @@ const providersResponse = [
     auth_state: "OK",
     capabilities: { models: ["agy-default"] },
     notes: [],
-    install_hint: "",
     execution_supported: true,
     usable: true,
     runnable: true,
@@ -123,7 +120,6 @@ const providersResponse = [
       },
     },
     notes: [],
-    install_hint: "",
     execution_supported: true,
     usable: true,
     runnable: true,
@@ -181,7 +177,7 @@ describe("대용량 인용발명 전달 방식", () => {
   it("브라우저 인증 코드를 제출하고 확인 후 로그인 완료를 표시한다", async () => {
     const { api } = await import("../lib/api");
     vi.mocked(api.listProviders).mockResolvedValueOnce([
-      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN", experimental: true, risks: [] },
+      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN" },
     ] as Awaited<ReturnType<typeof api.listProviders>>);
     vi.mocked(api.startProviderLogin).mockResolvedValueOnce({
       session_id: "google-login", provider: "agy", intent: "login",
@@ -209,7 +205,7 @@ describe("대용량 인용발명 전달 방식", () => {
   it("agy에서 Google 브라우저 로그인을 시작한다", async () => {
     const { api } = await import("../lib/api");
     vi.mocked(api.listProviders).mockResolvedValueOnce([
-      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN", experimental: true, risks: [] },
+      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN" },
     ] as Awaited<ReturnType<typeof api.listProviders>>);
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: /^로그인$/ }));
@@ -221,6 +217,22 @@ describe("대용량 인용발명 전달 방식", () => {
     });
     expect(screen.queryByRole("button", { name: "창 닫고 로그인 확인" })).toBeNull();
     expect(screen.queryByText("agy 로그인 도우미 열기")).toBeNull();
+  });
+
+  it("걷어낸 안내 문구와 설정 카드를 그리지 않는다", async () => {
+    await renderPage();
+    const text = document.body.textContent ?? "";
+    for (const removed of [
+      "전체 실행 상한",
+      "EPO 사용량 안전 한도",
+      "시간당 사용량 상한",
+      "상세 및 설치/로그인 안내",
+      "안전 제한",
+    ]) {
+      expect(text).not.toContain(removed);
+    }
+    // 실행 파일 경로 지정과 점검 버튼은 남는다.
+    expect(screen.getAllByRole("button", { name: "경로 저장" }).length).toBe(2);
   });
 
   it("유사문헌 검색 도구를 구성대비 분석과 따로 저장한다", async () => {

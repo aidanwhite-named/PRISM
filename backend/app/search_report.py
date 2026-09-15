@@ -110,14 +110,29 @@ def render(manifest: dict) -> str:
         if rows:
             lines += ["", "| 청구항 구성 | LLM 대응 판단 | 유사점 / 차이점 | 근거 대조 |",
                       "| --- | --- | --- | --- |"]
+            excerpts = []
             for row in rows:
-                evidence = "보존 응답과 일치" if row.get("support_verified") else "모델 설명 / 미검증"
+                if not row.get("support_verified"):
+                    evidence = "모델 설명 / 미검증"
+                elif row.get("support_origin") == "google_patents_page":
+                    evidence = "원문 페이지 대조 확인 (Google Patents, 비공식)"
+                    if row.get("support_location"):
+                        evidence += " · " + str(row["support_location"])
+                else:
+                    evidence = "보존 응답과 일치"
                 lines.append("| " + " | ".join(cell(x) for x in (
                     row.get("feature"), row.get("counterpart") or row.get("degree"),
                     str(row.get("similar") or "") + " / " + str(row.get("different") or ""),
                     evidence + ": " + str(row.get("support_text") or ""))) + " |")
-                if row.get("quote_verified") and row.get("verbatim_excerpt"):
-                    lines += ["", "확인된 원문: " + cell(row["verbatim_excerpt"])]
+                if (row.get("quote_verified") or row.get("page_quote_verified")) and row.get("verbatim_excerpt"):
+                    excerpts.append(row)
+            # 표 안에 넣으면 행이 끊긴다. 발췌는 표 뒤에 모은다.
+            for row in excerpts:
+                label = "확인된 원문" if row.get("quote_verified") else "원문 페이지 발췌 (비공식 출처)"
+                where = f" [{row['source_location']}]" if row.get("source_location") else ""
+                lines += ["", f"{label}{cell(where)} · {cell(row.get('feature'))}: " + cell(row["verbatim_excerpt"])]
+                if row.get("translation"):
+                    lines += ["", "번역 (LLM 작성, 원문 대조 대상 아님): " + cell(row["translation"])]
     dates = data.get("date_filter") or {}
     excluded = dates.get("excluded") or []
     if excluded:

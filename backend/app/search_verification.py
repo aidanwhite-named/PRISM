@@ -5,9 +5,13 @@ import copy
 import re
 from . import search_manifest as manifest
 from .config import PATHS
+from .patent_search import gpatents_parser
 from .patent_search.artifacts import ArtifactStore
 from .patent_search.base import EvidenceRef, FieldValue
-from .patent_search.provenance import verify_excerpt
+from .patent_search.provenance import MATCH_EXACT, verify_excerpt
+
+# Google Patents 원문 페이지 조회 도구. 여기서 온 근거는 공식 등급으로 세지 않는다.
+PAGE_TOOL = "gpatents_fetch"
 
 ISSUE_LABELS = {
     "identifier_unverified": "식별 미확인",
@@ -30,10 +34,13 @@ LEVEL_LABELS = {
     "source_page_reviewed": "페이지 열람 확인 / 원문 인용 미검증",
     "official_bibliographic": "공식 서지 확보",
     "official_abstract": "공식 초록 확보",
+    # Google Patents 페이지를 PRISM 이 보존하고 발췌를 글자 그대로 대조한 경우.
+    # 특허청 문서가 아니므로 공식 청구항보다 아래, 공식 서지·초록보다는 위다.
+    "source_page_text_verified": "원문 페이지 대조 확인 (비공식 출처)",
     "official_claims": "공식 청구항 확보",
     "official_full_text": "공식 전문 확보",
 }
-SCOPES = ("bibliographic", "abstract", "claims", "description", "family")
+SCOPES = ("bibliographic", "abstract", "claims", "description", "family", "page_text")
 
 def _key(candidate: dict) -> str:
     return manifest.identity_key(candidate.get("doc_number", ""), candidate.get("doi", ""))
@@ -112,13 +119,22 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
         scope = {name: "not_requested" for name in SCOPES}
         delivered = {}
         values_by_field = {}
+        # 출처 간 차이 판정은 공식 응답끼리만 한다. 페이지의 원어 제목·표기와 OPS 의
+        # 영문 표기가 다른 것은 충돌이 아니다.
+        official_values = {}
+        official = False
         for source in sources:
+            page = source.get("tool") == PAGE_TOOL
+            official = official or not page
             for name, field in source["fields"].items():
-                kind = _scope(name)
-                if kind in scope:
+                kind = "page_text" if page and name in gpatents_parser.PAGE_TEXT_FIELDS else _scope(name)
+                # 비공식 페이지의 서지는 식별 대조에만 쓰고 공식 확보 범위로 세지 않는다.
+                if kind in scope and (not page or kind == "page_text"):
                     scope[kind] = "verified"
                 delivered[_ref_key(field["evidence_ref"])] = field
                 values_by_field.setdefault(name, set()).add(field["text"])
+                if not page:
+                    official_values.setdefault(name, set()).add(field["text"])
         # Fetch attempts are independent from the returned content. Failed or
         # missing constituents must not become document-wide 'verified'.
         for call in journal:
@@ -129,8 +145,11 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
             request_key = manifest.identity_key(doi=requested) if args.get("doi") else manifest.identity_key(requested)
             if request_key != _key(candidate):
                 continue
-            requested_scope = args.get("constituent", "abstract" if args.get("doi") else "claims")
-            requested_scope = "bibliographic" if requested_scope == "biblio" else requested_scope
+            if call.get("tool") == PAGE_TOOL:
+                requested_scope = None if args.get("constituent") == "citations" else "page_text"
+            else:
+                requested_scope = args.get("constituent", "abstract" if args.get("doi") else "claims")
+                requested_scope = "bibliographic" if requested_scope == "biblio" else requested_scope
             if requested_scope in scope and scope[requested_scope] != "verified":
                 scope[requested_scope] = "unavailable"
             response = call.get("result") or {}
@@ -149,25 +168,33 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
         elif url and not sources:
             issues.append("source_not_read")
         if sources:
-            level = "official_bibliographic"
-            if scope["abstract"] == "verified":
-                level = "official_abstract"
-            if scope["claims"] == "verified":
-                level = "official_claims"
-            if "full_text" in values_by_field:
-                level = "official_full_text"
+            if official:
+                level = "official_bibliographic"
+                if scope["abstract"] == "verified":
+                    level = "official_abstract"
+                if scope["claims"] == "verified":
+                    level = "official_claims"
+                if "full_text" in values_by_field:
+                    level = "official_full_text"
+            elif level == "search_snippet_only":
+                # 페이지는 PRISM 이 받았지만 본문 필드는 아직 대조되지 않았다(인용 목록만 등).
+                level = "source_page_reviewed"
         else:
             issues.append("identifier_unverified")
         candidate["verification_scope"] = scope
         candidate["evidence_level"] = level
         candidate["reported_publication_date"] = candidate.get("publication_date", "")
-        dates = values_by_field.get("publication_date", set())
-        candidate["publication_date"] = next(iter(dates)) if len(dates) == 1 else ""
+        # 같은 날짜의 표기 차이(2024-04-30 / 20240430)는 충돌이 아니다. 숫자로 맞춘 뒤
+        # 처음 받은 표기를 그대로 둔다.
+        dates = {}
+        for text in sorted(values_by_field.get("publication_date", set())):
+            dates.setdefault(re.sub(r"\D", "", text), text)
+        candidate["publication_date"] = next(iter(dates.values())) if len(dates) == 1 else ""
         if len(dates) > 1:
             issues.append("publication_date_conflict")
         elif not dates:
             issues.append("publication_date_unverified")
-        if any(len(values) > 1 for field, values in values_by_field.items() if field != "publication_date"):
+        if any(len(values) > 1 for field, values in official_values.items() if field != "publication_date"):
             issues.append("source_conflict")
         titles = {text for name, values in values_by_field.items()
                   if name.split(":")[0] == "title" for text in values}
@@ -192,17 +219,31 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
             issues.append("quote_unverified")
         candidate["verbatim_excerpt"] = ""
         candidate["source_location"] = ""
+        page_excerpt_verified = False
         for row in candidate["mapping"]:
             ref = row.get("evidence_ref")
             field = delivered.get(_ref_key(ref)) if isinstance(ref, dict) else None
+            page_field = bool(
+                field
+                and ref.get("profile_id") == gpatents_parser.PROFILE_GOOGLE_PATENTS_PAGE
+                and ref.get("field_path") in gpatents_parser.PAGE_TEXT_FIELDS
+            )
             support = row.get("support_text") or ""
             row["support_verified"] = False
             row["quote_verified"] = False
+            row["page_quote_verified"] = False
+            row["support_origin"] = "google_patents_page" if page_field else ("preserved_response" if field else "")
+            row["support_location"] = ""
             if field and support and support in field["text"]:
                 check = verify_excerpt(
                     excerpt=support, field=FieldValue(field["text"], EvidenceRef(*_ref_key(ref))), store=store
                 )
                 row["support_verified"] = check.verified
+                if page_field and check.match_kind == MATCH_EXACT:
+                    page_excerpt_verified = True
+                if check.verified and page_field:
+                    row["support_location"] = gpatents_parser.location_of(
+                        ref["field_path"], field["text"], field["text"].find(support))
             if support and not row["support_verified"]:
                 issues.append("support_unverified")
             excerpt = row.get("verbatim_excerpt") or ""
@@ -211,7 +252,15 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
                     excerpt=excerpt, field=FieldValue(field["text"], EvidenceRef(*_ref_key(ref))), store=store
                 )
                 row["quote_verified"] = check.original_verified
-            if not row["quote_verified"]:
+                # 공식 원문은 아니지만 보존한 페이지에서 글자 그대로 확인됐다.
+                row["page_quote_verified"] = page_field and check.match_kind == MATCH_EXACT
+            if row["page_quote_verified"]:
+                page_excerpt_verified = True
+                # 위치는 모델이 적은 값을 쓰지 않고 페이지의 번호 표시에서 계산한다.
+                # translation 은 모델의 번역이다. 대조 대상이 아니라 표시에서 구분한다.
+                row["source_location"] = gpatents_parser.location_of(
+                    ref["field_path"], field["text"], field["text"].find(excerpt))
+            elif not row["quote_verified"]:
                 if excerpt:
                     issues.append("quote_unverified")
                 row["verbatim_excerpt"] = ""
@@ -219,5 +268,9 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
                 row["source_location"] = ""
             # Technical degree/counterpart/similar/different are model judgments.
             # They are intentionally never changed by these checks.
+        # Scope records preservation of a field, not validation of a model's
+        # excerpt. Only promote after an actual mapping passage matched.
+        if page_excerpt_verified and level not in ("official_claims", "official_full_text"):
+            candidate["evidence_level"] = "source_page_text_verified"
         candidate["verification_issues"] = list(dict.fromkeys(issues))
     return result

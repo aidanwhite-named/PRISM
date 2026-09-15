@@ -715,8 +715,6 @@ async def test_codex_probe_reports_logged_in(monkeypatch) -> None:
     assert result.runnable is True
     assert result.execution_supported is True
     assert result.capabilities["browser_login"] is True
-    # 다만 도구를 끄지 못하므로 opt-in 없이는 쓸 수 없다.
-    assert result.experimental is True
 
 
 async def test_codex_probe_reports_logged_out(monkeypatch) -> None:

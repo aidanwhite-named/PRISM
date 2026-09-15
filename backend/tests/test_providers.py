@@ -277,7 +277,6 @@ async def test_probe_cache_expires_so_external_logout_is_noticed(monkeypatch) ->
     class FakeProvider:
         id = "agy"
         display_name = "agy"
-        install_hint = ""
 
         async def probe(self):
             calls["n"] += 1

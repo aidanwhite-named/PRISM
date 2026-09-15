@@ -204,7 +204,7 @@ def test_provider_list_reports_usability(client) -> None:
     assert "mock" not in by_id
     for pid in ("agy", "claude", "codex"):
         assert pid in by_id
-        assert "install_hint" in by_id[pid]
+        assert "usable" in by_id[pid]
 
 
 def test_unknown_provider_404(client) -> None:
@@ -710,16 +710,32 @@ def test_settings_roundtrip(client) -> None:
     assert "runtime_context" in original["values"]
     assert original["env_filtering"]["blocked_prefixes"]
 
+    before = original["values"]["max_files_per_job"]
     updated = client.put(
-        "/api/settings", json={"values": {"default_timeout_seconds": 123}}
+        "/api/settings", json={"values": {"max_files_per_job": 123}}
     ).json()
-    assert updated["values"]["default_timeout_seconds"] == 123
-    client.put("/api/settings", json={"values": {"default_timeout_seconds": 900}})
+    assert updated["values"]["max_files_per_job"] == 123
+    client.put("/api/settings", json={"values": {"max_files_per_job": before}})
 
 
 def test_settings_reject_unknown_key(client) -> None:
     response = client.put("/api/settings", json={"values": {"secret_api_key": "abc"}})
     assert response.status_code == 400
+
+
+def test_run_limits_and_epo_hourly_cap_are_not_editable(client) -> None:
+    """설정 화면에서 걷어낸 값이다(2026-09-15). 실행 한도는 기본값으로 고정된다."""
+    for key, value in (
+        ("default_timeout_seconds", 123),
+        ("max_search_tool_calls", 3),
+        ("epo_hourly_quota_bytes", 5_000_000),
+    ):
+        response = client.put("/api/settings", json={"values": {key: value}})
+        assert response.status_code == 400, key
+    values = client.get("/api/settings").json()["values"]
+    assert values["default_timeout_seconds"] == 900
+    assert values["max_search_tool_calls"] == 40
+    assert "epo_hourly_quota_bytes" not in values
 
 
 def test_settings_reject_out_of_range(client) -> None:

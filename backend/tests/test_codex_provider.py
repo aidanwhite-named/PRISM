@@ -59,6 +59,8 @@ def test_search_run_turns_web_search_on(tmp_path: Path) -> None:
     )
     assert "tools.web_search=true" in args
     assert "tools.web_search=false" not in args
+    # 캐시 색인에 없는 특허 페이지도 열리게 live 로 켠다(2026-09-15 실측).
+    assert 'web_search="live"' in args
 
 
 def test_no_tools_policy_does_not_enable_search(tmp_path: Path) -> None:

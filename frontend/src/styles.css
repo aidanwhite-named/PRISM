@@ -766,7 +766,6 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .page-settings > .settings-side { display: flex; flex-direction: column; }
 .settings-side > .settings-prompt-defaults { flex: 1 1 auto; }
 .page-settings > .settings-limits { grid-column: 1 / -1; }
-.page-settings > .settings-run-limits,
 .page-settings > .settings-kiwee,
 .page-settings > .settings-epo,
 .page-settings > .settings-literature,
@@ -1458,32 +1457,15 @@ tbody tr:hover { background: rgba(230, 237, 238, 0.43); }
   border-radius: 50%; animation: spin 0.7s linear infinite; border-color: var(--border-strong); border-top-color: var(--accent); }
 details > summary { color: var(--text-muted); font-size: 12px; }
 
-/* Provider 상세. 이 앱에서 가장 중요한 안전 스위치가 이 안에 들어 있다.
-   12px 회색 한 줄로 두면 똑같이 생긴 줄 셋이 카드 밑에 붙어 각주로 보인다.
-   실제로 사용자가 세 번 물어보고서야 못 찾은 자리다. */
-.provider-details {
+/* 실행 도구별 실행 파일 경로와 점검 버튼. */
+.provider-tools-row {
   margin-bottom: 8px;
-  overflow: hidden;
+  padding: 11px 14px 10px;
   border: 1px solid var(--border);
   border-radius: 13px 13px 13px 4px;
   background: rgba(255, 254, 250, 0.5);
 }
-.provider-details > summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 14px;
-  color: var(--text);
-  font-size: 12px;
-  cursor: pointer;
-  list-style-position: inside;
-  transition: background 160ms ease;
-}
-.provider-details > summary:hover { background: var(--surface-2); }
-.provider-details > summary b { font-size: 12.5px; font-weight: 700; }
-.provider-details > summary .faint { font-size: 11px; }
-.provider-details[open] > summary { border-bottom: 1px solid var(--border); }
-.provider-details-body { padding: 13px 14px 10px; }
+.provider-tools-row > b { display: block; margin-bottom: 8px; font-size: 12.5px; font-weight: 700; }
 
 .modal-backdrop {
   position: fixed; inset: 0;
@@ -1599,8 +1581,7 @@ details > summary { color: var(--text-muted); font-size: 12px; }
   .input-panel, .input-panel.claim-panel { background: rgba(38, 47, 47, 0.82); }
   .input-panel.application { background: rgba(34, 49, 53, 0.82); }
   .input-panel.citation { background: rgba(52, 46, 36, 0.78); }
-  .provider-details { background: rgba(34, 42, 43, 0.55); }
-  .provider-details > summary:hover { background: rgba(45, 55, 56, 0.9); }
+  .provider-tools-row { background: rgba(34, 42, 43, 0.55); }
   input[type="text"], input[type="number"], select, textarea, .btn { background: rgba(34, 42, 43, 0.92); }
   .event-log, .result-raw, .result pre, .result code { background: #222a2b; }
   .table-scroll, .result { background: rgba(30, 38, 39, 0.62); }

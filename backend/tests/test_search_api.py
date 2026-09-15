@@ -237,12 +237,12 @@ def test_missing_audit_block_fails_instead_of_shipping_unverified_prose(client) 
     assert client.get(f"/api/jobs/{job['id']}/raw?which=model").text.strip()
 
 
-def test_tool_call_budget_stops_the_run(client) -> None:
-    client.put("/api/settings", json={"values": {"max_search_tool_calls": 3}})
-    try:
-        job = wait_for_job(client, _start(client, claim=f"{CLAIM}\nSEARCH_BUDGET")["id"])
-    finally:
-        client.put("/api/settings", json={"values": {"max_search_tool_calls": 40}})
+def test_tool_call_budget_stops_the_run(client, monkeypatch) -> None:
+    # 화면에서 바꿀 수 없는 고정값이므로 기본값 자체를 줄여서 확인한다.
+    from app.config import DEFAULTS
+
+    monkeypatch.setitem(DEFAULTS, "max_search_tool_calls", 3)
+    job = wait_for_job(client, _start(client, claim=f"{CLAIM}\nSEARCH_BUDGET")["id"])
     assert job["status"] == JobStatus.FAILED
     assert job["error_code"] == ErrorCode.SEARCH_BUDGET_EXCEEDED
 

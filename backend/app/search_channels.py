@@ -26,6 +26,16 @@ WEB_HEALTH_KEY = "web_search_health"
 WEB_HEALTH_TTL = timedelta(hours=6)
 
 _SOURCE_LABELS = {"run": "검색 실행 중 관측", "check": "검색 도구 확인"}
+
+# prism-search MCP 가 여는 채널과 채널별 도구. gpatents 는 검색하지 않고 문헌번호로
+# 원문 페이지를 조회만 한다.
+MCP_CHANNELS = ("epo", "kiwee", "literature", "gpatents")
+CHANNEL_ACTIONS = {
+    "epo": ("search", "fetch"),
+    "kiwee": ("search", "fetch"),
+    "literature": ("search", "fetch"),
+    "gpatents": ("fetch",),
+}
 _CHECK_HINT = "설정 화면에서 「검색 도구 확인」을 누르면 실제로 한 번 불러 확인합니다."
 
 
@@ -133,7 +143,7 @@ def web_evidence(tool_calls, tool_names, *, cli_version: str = "",
 def availability(values: dict, provider: str = "claude") -> dict:
     result = {"web": {"status": "available", "detail": "Provider 기본 웹 도구"}}
     registration = None
-    for name in ("epo", "kiwee", "literature"):
+    for name in MCP_CHANNELS:
         status = describe(values, name)
         code = "available"
         if not status.enabled:
@@ -205,9 +215,9 @@ def unusable_channel_message(statuses: dict) -> str:
 
 def available_mcp_names(statuses: dict) -> tuple[str, ...]:
     names = ["mcp__prism-search__search_capabilities"]
-    for name in ("epo", "kiwee", "literature"):
+    for name in MCP_CHANNELS:
         if statuses.get(name, {}).get("status") == "available":
-            names += [f"mcp__prism-search__{name}_search", f"mcp__prism-search__{name}_fetch"]
+            names += [f"mcp__prism-search__{name}_{action}" for action in CHANNEL_ACTIONS[name]]
     return tuple(names)
 
 def cell(value) -> str:

@@ -132,6 +132,12 @@ EPO·논문 MCP를 우선 고려하되 검색 전략과 후보 판단은 직접 
 논문 도구는 source를 생략하면 Crossref·Europe PMC·OpenAlex를 함께 검색합니다. source=openalex는
 OpenAlex만(IEEE·Elsevier 초록과 arXiv 포함), source=arxiv는 arXiv 사전공개 논문만 검색합니다.
 가까운 논문을 찾았으면 cites_doi로 그 논문을 인용한 문헌을 탐색할 수 있습니다.
+유력 특허를 찾으면 epo_search의 ct 필드(그 공개번호를 인용한 문헌)로 피인용 문헌을,
+epo_fetch biblio의 references_cited 또는 gpatents_fetch citations로 인용 문헌을 확인해 확장하십시오.
+특허 후보의 청구항·명세서 원문은 gpatents_fetch(Google Patents 원문 페이지, 비공식 출처)로 받을 수
+있습니다. PRISM이 문헌번호로 주소를 만들고 사람 속도로 간격을 두어 한 번에 몇 초가 걸리며
+실행당 새 페이지 수에 상한이 있으므로 유력 후보만 조회하십시오. 반환 텍스트의 [claim N]과
+[NNNN]은 청구항·문단 번호 표시입니다. 404는 페이지 부재이지 문헌 부재가 아닙니다.
 OpenAlex의 HTTP 429는 일일 한도 소진이지 문헌이 없다는 뜻이 아닙니다.
 A/B 후보가 없거나 청구항의 핵심 구성에 대응 근거가 남아 있지 않으면 웹 보완을 고려하십시오.
 MCP 오류·0건·분야 편중도 웹 검색/다른 소스로 전환할 근거입니다. 같은 실패 질의를 반복하지 마십시오.
@@ -173,6 +179,9 @@ A/B/C/null은 기술적 판단입니다. 초록만 확보했거나 원문이 미
 PRISM은 문헌번호/DOI·응답·보존 아티팩트의 일치만 대조합니다.
 도구가 준 evidence_refs를 대응 행의 evidence_ref에 그대로 넣으십시오.
 support_text는 실제로 읽은 해당 필드의 근거 문장이어야 합니다.
+gpatents_fetch로 받은 page_claims·page_description·page_abstract를 근거로 쓸 때는
+verbatim_excerpt에 그 필드의 연속된 원어 문자열을 그대로, translation에 한국어 번역을 쓰고
+evidence_ref를 넣으십시오. source_location은 PRISM이 번호 표시로 계산합니다.
 원문 확인이 불가능하면 verbatim_excerpt·translation·source_location은 빈 문자열로
 두고 counterpart/similar/different/note에 모델의 설명을 쓰십시오.
 증거 수준이나 검증 성공 여부를 모델이 만들어 출력하지 마십시오.
@@ -181,8 +190,8 @@ support_text는 실제로 읽은 해당 필드의 근거 문장이어야 합니�
 종료 전에 조회를 시도한 모든 문헌을 candidates 또는 candidate_dispositions에
 남기십시오. 조회 실패는 기술적 제외 사유가 아닙니다. 대체 constituent/웹/패밀리를
 확인하거나 판단 유보 후보로 남기십시오. 다른 문헌의 근거를 원 문헌에 옮기지 마십시오.
-US의 OPS claims/description 미지원은 문헌 부재가 아닙니다. biblio/abstract를
-조회하고, 청구항은 웹 원문 또는 확인된 패밀리 문헌에서 별도로 검토하십시오.
+US·CN·JP 등의 OPS claims/description 미지원은 문헌 부재가 아닙니다. biblio/abstract를
+조회하고, 청구항·명세서는 gpatents_fetch 원문 페이지 또는 확인된 패밀리 문헌에서 검토하십시오.
 넓은 첫 페이지 결과를 보완했는지, 핵심 관계의 미해결 부분에 대해 추가 탐색했는지
 점검한 뒤 search_review에 종료 근거와 남은 과제를 기록하십시오. 호출 수만으로
 충분성을 주장하지 마십시오. 예산·시간 한도에 도달하면 남은 과제를 보존하고 종료하십시오.
@@ -232,13 +241,16 @@ read_url_content는 content.md 경로를 반환합니다. 가져오기만 하고
 
 prism-search MCP 도구는 call_mcp_tool로 부르십시오. ServerName은 "prism-search",
 ToolName은 도구 이름(예: epo_search), Arguments는 그 도구의 인자 객체입니다.
-agy가 풀어 둔 prism-search 도구 스키마 파일을 view_file로 읽는 것은 허용됩니다.
+agy가 풀어 둔 prism-search 도구 스키마 폴더를 list_dir로 보거나 그 안의
+스키마 파일을 view_file로 읽는 것은 허용됩니다. 다른 폴더에는 list_dir를 쓰지 마십시오.
 다른 MCP 서버의 도구는 부르지 마십시오. 아래 도구 상태에서 available이 아닌
 채널은 이 실행에서 쓸 수 없습니다.
 """
 CODEX_SEARCH_RUNTIME_CONTEXT = SEARCH_RUNTIME_CONTEXT.replace("WebSearch/WebFetch", "web_search") + """
 Codex의 web_search URL 조회는 PRISM이 본문 열람 성공을 검증할 수 없습니다.
 MCP로 전달받은 보존 응답 외에는 직접 인용을 확인된 사실로 표시하지 마십시오.
+특허 원문 페이지는 web_search로 열지 말고 gpatents_fetch로 받으십시오.
+patents.google.com 은 web_search에서 "not safe to open"으로 막힐 수 있습니다.
 """
 
 _AGY_ALLOWLIST_HEAD = """
@@ -363,6 +375,7 @@ DEFAULTS: dict[str, object] = {
     # 유사 문헌 검색 한 건에서 허용하는 도구 호출 총 횟수. 넘으면 PRISM 이
     # 프로세스를 끊고 SEARCH_BUDGET_EXCEEDED 로 실패시킨다. 프롬프트의
     # 검색 라운드 수는 LLM이 결정하며 PRISM은 전체 호출 수만 제한한다.
+    # 설정 화면에서 바꾸지 않는 고정값이다. default_timeout_seconds 도 같다.
     "max_search_tool_calls": 40,
     # 인용발명 문헌을 최종 분석 모델에게 어떻게 전달할 것인가.
     #
@@ -443,7 +456,6 @@ DEFAULTS: dict[str, object] = {
     "epo_consumer_key": "",
     "epo_consumer_secret": "",
     "epo_http_budget_seconds": 120,
-    "epo_hourly_quota_bytes": 0,
     "epo_max_detail_fetches": 40,
     "epo_quota_state": {},
     # Provider 웹 검색 도구의 실측 도달성. epo_quota_state 와 같은 이유로
@@ -457,4 +469,9 @@ DEFAULTS: dict[str, object] = {
     "literature_openalex_api_key": "",
     "literature_max_results_per_query": 20,
     "literature_http_budget_seconds": 60,
+    # Google Patents 원문 페이지 조회(비공식 출처). 2026-09-15 사용자 결정으로 기본
+    # 켜짐. 사람 속도로만 조회한다 — 요청 사이 최소 간격과 실행당 새 페이지 상한.
+    "gpatents_page_enabled": True,
+    "gpatents_min_interval_seconds": 6,
+    "gpatents_max_fetches_per_run": 12,
 }

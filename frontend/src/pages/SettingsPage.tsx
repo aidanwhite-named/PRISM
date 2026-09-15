@@ -52,9 +52,9 @@ function blockedDetail(p: ProviderInfo): string {
   if (!p.execution_supported)
     return "PRISM 이 이 도구의 실행 경로를 아직 지원하지 않습니다. 설치나 로그인으로 해결되지 않습니다.";
   if (!p.installed)
-    return "CLI 를 찾지 못했습니다. 아래 상세의 설치 안내를 따르거나 실행 파일 경로를 지정하십시오.";
+    return "CLI 를 찾지 못했습니다. CLI 를 설치하거나 아래 실행 파일 경로 칸에 경로를 지정하십시오.";
   if (!p.executable_ok)
-    return "실행 파일은 있으나 호출할 수 없습니다. 아래 상세에서 절대 경로를 지정하고 다시 검사하십시오.";
+    return "실행 파일은 있으나 호출할 수 없습니다. 아래 실행 파일 경로 칸에 절대 경로를 지정하고 다시 검사하십시오.";
   if (p.auth_state === "NOT_LOGGED_IN")
     return "로그인이 필요합니다. 아래 표의 로그인 버튼을 사용하십시오.";
   if (p.auth_state === "UNKNOWN")
@@ -292,7 +292,6 @@ export default function SettingsPage() {
     message: string;
   } | null>(null);
   // 사용자가 직접 접거나 편 Provider. 여기에 없으면 아래 기본값을 쓴다.
-  const [detailsOpen, setDetailsOpen] = useState<Record<string, boolean>>({});
   // EPO OPS 자격증명 입력 초안. Secret 은 서버가 되돌려주지 않으므로 저장된
   // 값에서 채우지 않고, 저장에 성공하면 비운다.
   const [epoKey, setEpoKey] = useState("");
@@ -955,9 +954,6 @@ export default function SettingsPage() {
                   <th>시간당 사용량</th>
                   <td>
                     {formatBytes(epoQuota.ops_hourly_bytes)}
-                    {epoQuota.hourly_limit_bytes
-                      ? ` / ${formatBytes(epoQuota.hourly_limit_bytes)}`
-                      : " (관측만, 차단 안 함)"}
                   </td>
                 </tr>
                 <tr>
@@ -990,34 +986,8 @@ export default function SettingsPage() {
               </tbody>
             </table>
             </div>
-
-            <h3 style={{ margin: "18px 0 4px", fontSize: 13 }}>EPO 사용량 안전 한도</h3>
-            <div className="hint" style={{ marginBottom: 8 }}>
-              검색 전략과 별개로 OPS 응답 데이터 사용량을 제한합니다.
-            </div>
-            <div className="settings-limit-options">
-              <NumberField
-                label="시간당 사용량 상한 (bytes, 0 = 관측만)"
-                value={v.epo_hourly_quota_bytes}
-                hint={
-                  "주간 4GB 한도는 항상 적용됩니다. 값을 입력하면 시간당 한도도 추가로 적용합니다."
-                }
-                onSave={(n) => saveValue("epo_hourly_quota_bytes", n)}
-              />
-            </div>
           </div>
         )}
-      </div>
-
-      <div className="card settings-run-limits">
-        <h2>전체 실행 상한</h2>
-        <p className="hint">검색 깊이 프리셋도 이 상한을 넘지 않습니다. 시간 상한은 분석 작업에도 적용됩니다.</p>
-        <NumberField label="검색 도구 호출 총 상한" value={v.max_search_tool_calls}
-          hint="1–200. 후보 수나 출처별 슬롯을 정하지 않습니다."
-          onSave={(n) => saveValue("max_search_tool_calls", n)} />
-        <NumberField label="실행 제한시간 (초)" value={v.default_timeout_seconds}
-          hint="전체 실행의 제한시간입니다."
-          onSave={(n) => saveValue("default_timeout_seconds", n)} />
       </div>
 
       <div className="card settings-literature">
@@ -1136,6 +1106,35 @@ export default function SettingsPage() {
                 {openalexCheck.detail}
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      <div className="card settings-gpatents">
+        <h2>특허 원문 페이지 조회 (Google Patents · 비공식 출처)</h2>
+        <p className="muted settings-integration-copy">
+          EPO OPS 가 주지 않는 US·CN·JP 등의 청구항·명세서를 LLM 이 필요할 때 문헌번호로
+          조회합니다. 주소는 PRISM 이 문헌번호로 만들고, 받은 페이지를 보존해 발췌를 글자
+          그대로 대조합니다. 확인된 발췌는 <b>원문 페이지 대조 확인 (비공식 출처)</b>로
+          표시되며 특허청 공식 문서 등급이 되지 않습니다. 요청은 사람이 읽는 속도로
+          간격을 두고, 거절(429·503)을 받으면 10분 동안 멈춥니다.
+        </p>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={v.gpatents_page_enabled}
+            onChange={(e) => saveValue("gpatents_page_enabled", e.target.checked)}
+          />
+          원문 페이지 조회 사용
+        </label>
+        {v.gpatents_page_enabled && (
+          <div style={{ marginTop: 14 }}>
+            <NumberField label="요청 사이 최소 간격 (초)" value={v.gpatents_min_interval_seconds}
+              hint="3–60. 여기에 0~2초의 흔들림이 더해집니다."
+              onSave={(n) => saveValue("gpatents_min_interval_seconds", n)} />
+            <NumberField label="실행당 새 페이지 상한" value={v.gpatents_max_fetches_per_run}
+              hint="1–40. 이미 받은 문헌의 다른 구역을 읽는 것은 세지 않습니다."
+              onSave={(n) => saveValue("gpatents_max_fetches_per_run", n)} />
           </div>
         )}
       </div>
@@ -1376,7 +1375,7 @@ export default function SettingsPage() {
                     <td>
                       {p.usable ? (
                         <span className="pill ok">
-                          {p.experimental ? "사용 가능 · 안전 제한" : "사용 가능"}
+                          사용 가능
                         </span>
                       ) : (
                         <span className="pill danger">{blockedReason(p)}</span>
@@ -1390,98 +1389,49 @@ export default function SettingsPage() {
         </div>
 
         <div style={{ marginTop: 16 }}>
-          {providers.map((p) => {
-            // 결정이 필요한 Provider 는 접어 두지 않는다. 이 앱에서 가장 중요한
-            // 안전 스위치가 각주처럼 보이면 사용자는 그것을 찾지 못한다.
-            const isOpen = detailsOpen[p.provider] ?? false;
-            return (
-            <details
-              key={p.provider}
-              className="provider-details"
-              open={isOpen}
-            >
-              <summary
-                onClick={(e) => {
-                  e.preventDefault();
-                  setDetailsOpen((current) => ({
-                    ...current,
-                    [p.provider]: !isOpen,
-                  }));
-                }}
-              >
-                <b>{p.display_name}</b>
-                {p.experimental && <span className="pill warn">안전 제한</span>}
-                <span className="faint">상세 및 설치/로그인 안내</span>
-              </summary>
-              <div className="provider-details-body">
-                {p.experimental && (
-                  <div className="notice warn">
-                    <strong>
-                      이 실행 도구는 PRISM 의 안전 원칙(도구 없는 실행)을 충족하지
-                      못합니다
-                    </strong>
-                    <ul>
-                      {p.risks.map((risk, i) => (
-                        <li key={i}>{risk}</li>
-                      ))}
-                    </ul>
-                    <div className="faint" style={{ marginTop: 8 }}>
-                      실행을 막지는 않습니다. 다만 도구 호출이 감지되면 그 실행은
-                      설정과 무관하게 실패로 기록됩니다.
-                    </div>
-                  </div>
-                )}
-                {p.notes.length > 0 && (
-                  <ul style={{ margin: "0 0 10px", paddingLeft: 18 }}>
-                    {p.notes.map((n, i) => (
-                      <li key={i} className="muted">
-                        {n}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="faint" style={{ marginTop: 0 }}>
-                  {p.install_hint}
-                </p>
-                <div className="field" style={{ maxWidth: 560 }}>
-                  <label>실행 파일 경로 직접 지정 (비우면 자동 탐색)</label>
-                  <input
-                    type="text"
-                    value={paths[p.provider] ?? ""}
-                    placeholder="예: C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"
-                    onChange={(e) =>
-                      setPaths((prev) => ({ ...prev, [p.provider]: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="btn-row">
-                  <button
-                    className="btn small"
-                    onClick={() => saveValue("provider_paths", paths)}
-                  >
-                    경로 저장
-                  </button>
-                  <button
-                    className="btn small"
-                    onClick={() => runSmoke(p.provider)}
-                    disabled={!p.executable_ok}
-                  >
-                    실제 호출 테스트 (사용량 발생)
-                  </button>
-                  <button
-                    className="btn small"
-                    onClick={() => runSearchCheck(p.provider)}
-                    disabled={!p.executable_ok || searchChecking === p.provider}
-                  >
-                    {searchChecking === p.provider
-                      ? "검색 도구 확인 중…"
-                      : "검색 도구 확인 (사용량 발생)"}
-                  </button>
-                </div>
+          {providers.map((p) => (
+            <div key={p.provider} className="provider-tools-row">
+              <b>{p.display_name}</b>
+              <div className="field" style={{ maxWidth: 560 }}>
+                <label htmlFor={`provider-path-${p.provider}`}>
+                  실행 파일 경로 직접 지정 (비우면 자동 탐색)
+                </label>
+                <input
+                  id={`provider-path-${p.provider}`}
+                  type="text"
+                  value={paths[p.provider] ?? ""}
+                  placeholder="예: C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"
+                  onChange={(e) =>
+                    setPaths((prev) => ({ ...prev, [p.provider]: e.target.value }))
+                  }
+                />
               </div>
-            </details>
-            );
-          })}
+              <div className="btn-row">
+                <button
+                  className="btn small"
+                  onClick={() => saveValue("provider_paths", paths)}
+                >
+                  경로 저장
+                </button>
+                <button
+                  className="btn small"
+                  onClick={() => runSmoke(p.provider)}
+                  disabled={!p.executable_ok}
+                >
+                  실제 호출 테스트 (사용량 발생)
+                </button>
+                <button
+                  className="btn small"
+                  onClick={() => runSearchCheck(p.provider)}
+                  disabled={!p.executable_ok || searchChecking === p.provider}
+                >
+                  {searchChecking === p.provider
+                    ? "검색 도구 확인 중…"
+                    : "검색 도구 확인 (사용량 발생)"}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         {smoke && (

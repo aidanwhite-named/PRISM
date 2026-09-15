@@ -17,10 +17,8 @@ OPS 는 요청 수가 아니라 **데이터량**으로 과금된다. 그래서 "
 무엇을 막고 무엇을 관측만 하는가
 --------------------------------
     주간 4GB      계약값이다. 하드 차단한다.
-    시간당        OPS 가 헤더로 사용량을 주지만 계약 상한값이 우리 쪽에
-                  확정되어 있지 않다. 그래서 기본은 **관측·표시만** 하고,
-                  사용자가 상한을 넣으면 그때부터 차단한다. 모르는 숫자를
-                  기본값으로 박아 두면 "왜 멈췄지"에 답할 수 없다.
+    시간당        OPS 가 헤더로 주는 사용량을 관측·표시만 한다. 계약 상한값이
+                  우리 쪽에 확정되어 있지 않아 차단하지 않는다.
     스로틀링 상태  OPS 응답 시점의 60초 요청 창을 설명하는 관측값이다. 주간
                   사용량과 달리 저장된 과거 값으로 다음 실행을 막지 않는다.
                   실제 단기 차단은 요청 클라이언트가 ``black`` 만 보고 맡는다.
@@ -70,7 +68,7 @@ class QuotaError(Exception):
 
 
 class QuotaExceeded(QuotaError):
-    """주간(또는 설정된 시간당) 한도를 넘었다."""
+    """주간 한도를 넘었다."""
 
 
 class Throttled(QuotaError):
@@ -251,7 +249,6 @@ class QuotaLedger:
 
     state: QuotaState = field(default_factory=QuotaState)
     weekly_limit: int = WEEKLY_QUOTA_BYTES
-    hourly_limit: int = 0            # 0 = 관측만, 차단하지 않음
     on_change: object = None         # Callable[[QuotaState], None] | None
 
     # 마지막으로 **저장에 성공한** 시점의 눈금. 증분 계산의 기준이다.
@@ -300,13 +297,6 @@ class QuotaLedger:
                 f"({used:,} + 이번 요청 최대 {headroom:,} / "
                 f"{self.weekly_limit:,} bytes). 다음 주까지 EPO 채널을 사용할 "
                 "수 없습니다."
-            )
-        hourly = self.state.ops_hourly_bytes or 0
-        if self.hourly_limit and hourly + headroom >= self.hourly_limit:
-            raise QuotaExceeded(
-                f"시간당 EPO OPS 사용량이 설정한 한도에 도달했습니다"
-                f"({hourly:,} + 이번 요청 최대 {headroom:,} / "
-                f"{self.hourly_limit:,} bytes)."
             )
 
     @property
@@ -494,7 +484,6 @@ class QuotaLedger:
         return {
             "week": self.state.week,
             "weekly_limit_bytes": self.weekly_limit,
-            "hourly_limit_bytes": self.hourly_limit,
             "local_bytes": self.state.local_bytes,
             "ops_weekly_bytes": self.state.ops_weekly_bytes,
             "ops_hourly_bytes": self.state.ops_hourly_bytes,

@@ -13,8 +13,14 @@ const LEVELS: Record<string, string> = {
   search_snippet_only: "검색 스니펫·모델 판단 / 미검증",
   source_page_reviewed: "페이지 열람 확인 / 인용 미검증",
   official_bibliographic: "공식 서지 확보", official_abstract: "공식 초록 확보",
+  source_page_text_verified: "원문 페이지 대조 확인 (비공식 출처)",
   official_claims: "공식 청구항 확보", official_full_text: "공식 전문 확보",
 };
+function supportLabel(row: { support_verified: boolean; support_origin?: string; support_location?: string }): string {
+  if (!row.support_verified) return "근거 문장 자동 대조 미완료";
+  if (row.support_origin !== "google_patents_page") return "보존 응답과 일치";
+  return "원문 페이지 대조 확인 (Google Patents, 비공식)" + (row.support_location ? ` · ${row.support_location}` : "");
+}
 const ISSUES: Record<string, string> = {
   identifier_unverified: "식별 미확인", identifier_invalid: "식별자 형식 오류",
   identifier_mismatch: "문헌 식별자 불일치", source_not_read: "본문 열람 미확인",
@@ -86,15 +92,22 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
         {item.verified_titles?.length ? <p>보존 원문 명칭: {item.verified_titles.join(" / ")}</p> : null}
         {item.verified_applicants?.length ? <p>보존 원문 저자·출원인: {item.verified_applicants.join(" / ")}</p> : null}
         {url ? <a href={url} target="_blank" rel="noreferrer">문헌 보기</a> : <span>링크 미확인</span>}
-        <p>{LEVELS[item.evidence_level]}</p><p>{item.note}</p>
+        <p>{LEVELS[item.evidence_level]}</p>
+        {item.evidence_level === "source_page_text_verified" &&
+          <p className="faint">일부 근거 문장의 페이지 대조가 확인됐습니다. 구성별 확인 상태는 아래에서 확인하십시오. 기술적 대응의 정확성을 보증하는 등급은 아닙니다.</p>}
+        <p>{item.note}</p>
         {item.verification_issues.length > 0 && <p>{item.verification_issues.map(x => ISSUES[x]).join(" / ")}</p>}
         <div className="table-scroll"><table className="search-result-mapping">
           <thead><tr><th>청구항 구성</th><th>대응 판단</th><th>유사점 / 차이점</th><th>근거 확인</th></tr></thead>
           <tbody>{item.mapping.map((row, index) => <tr key={index}>
             <td>{row.feature}</td><td>{row.counterpart || row.degree}</td>
             <td><p>{row.similar}</p><p>차이: {row.different || "미기재"}</p></td>
-            <td><strong>{row.support_verified ? "보존 응답과 일치" : "근거 문장 자동 대조 미완료"}</strong><p>{row.support_text}</p>
-              {row.quote_verified && row.verbatim_excerpt && <blockquote>{row.verbatim_excerpt}<p>{row.translation}</p><small>{row.source_location}</small></blockquote>}
+            <td><strong>{supportLabel(row)}</strong><p>{row.support_text}</p>
+              {(row.quote_verified || row.page_quote_verified) && row.verbatim_excerpt && <blockquote>
+                <small>{row.quote_verified ? "확인된 원문" : "원문 페이지 발췌 (비공식 출처)"}{row.source_location ? ` · ${row.source_location}` : ""}</small>
+                <p>{row.verbatim_excerpt}</p>
+                {row.translation && <p><small>번역 (LLM 작성, 원문 대조 대상 아님)</small><br />{row.translation}</p>}
+              </blockquote>}
             </td>
           </tr>)}</tbody>
         </table></div>

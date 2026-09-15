@@ -14,7 +14,6 @@ from . import patent_search, search_channels
 from .config import DEFAULTS
 from .models import AppSetting
 from .providers.base import REASONING_EFFORTS
-from .providers.registry import TOOL_UNCONTROLLABLE_PROVIDERS
 
 # 사용자가 UI 에서 바꿀 수 있는 키. 이 목록에 없는 키는 PUT 으로 못 바꾼다.
 EDITABLE_KEYS = frozenset(
@@ -23,7 +22,6 @@ EDITABLE_KEYS = frozenset(
         "max_total_upload_bytes",
         "max_files_per_job",
         "max_inline_chars",
-        "default_timeout_seconds",
         "max_concurrency_per_provider",
         "runtime_context",
         "runtime_context_enabled",
@@ -38,7 +36,6 @@ EDITABLE_KEYS = frozenset(
         "search_reasoning_effort",
         "keep_raw_output",
         "fail_on_tool_use",
-        "max_search_tool_calls",
         "retrieval_mode",
         "retrieval_max_rounds",
         "retrieval_max_page_reads",
@@ -50,13 +47,15 @@ EDITABLE_KEYS = frozenset(
         "epo_consumer_key",
         "epo_consumer_secret",
         "epo_http_budget_seconds",
-        "epo_hourly_quota_bytes",
         "epo_max_detail_fetches",
         "literature_integration_enabled",
         "literature_contact_email",
         "literature_openalex_api_key",
         "literature_max_results_per_query",
         "literature_http_budget_seconds",
+        "gpatents_page_enabled",
+        "gpatents_min_interval_seconds",
+        "gpatents_max_fetches_per_run",
         # epo_quota_state 는 일부러 없다. PRISM 이 관측해 적는 값이라
         # 사용자가 PUT 으로 고칠 수 있으면 사용량을 0 으로 되돌릴 수 있다.
             # 근거 패키지의 페이지 확장.
@@ -133,9 +132,7 @@ _INT_KEYS = frozenset(
         "max_total_upload_bytes",
         "max_files_per_job",
         "max_inline_chars",
-        "default_timeout_seconds",
         "max_concurrency_per_provider",
-        "max_search_tool_calls",
         "retrieval_max_rounds",
         "retrieval_max_page_reads",
         "retrieval_evidence_chars",
@@ -148,10 +145,11 @@ _INT_KEYS = frozenset(
         "delivery_scale_pages",
         "delivery_scale_claim_elements",
         "epo_http_budget_seconds",
-        "epo_hourly_quota_bytes",
         "epo_max_detail_fetches",
         "literature_max_results_per_query",
         "literature_http_budget_seconds",
+        "gpatents_min_interval_seconds",
+        "gpatents_max_fetches_per_run",
     }
 )
 
@@ -160,9 +158,7 @@ _LIMITS = {
     "max_total_upload_bytes": (1024, 2 * 1024 * 1024 * 1024),
     "max_files_per_job": (1, 200),
     "max_inline_chars": (1000, 5_000_000),
-    "default_timeout_seconds": (10, 86_400),
     "max_concurrency_per_provider": (1, 8),
-    "max_search_tool_calls": (1, 200),
     "retrieval_max_rounds": (1, 30),
     "retrieval_max_page_reads": (1, 500),
     "retrieval_evidence_chars": (2_000, 400_000),
@@ -177,15 +173,13 @@ _LIMITS = {
     # OPS HTTP 대기 시간의 총합. 600초를 넘겨 잡을 이유가 없다 — 그보다 오래
     # 걸리는 것은 느린 것이 아니라 고장난 것이다.
     "epo_http_budget_seconds": (10, 600),
-    # 0 = 관측만. 켤 때의 하한을 1MB 로 둔다. 그보다 작으면 첫 검색에서 바로
-    # 막혀서 "설정했더니 아무것도 안 된다"가 된다.
-    # 상한은 주간 계약량과 같은 값으로 맞춘다. 시간당 상한이 주간 한도보다
-    # 클 수 있으면 그 설정은 아무것도 막지 못한다.
-    "epo_hourly_quota_bytes": (1000 * 1000, patent_search.WEEKLY_QUOTA_BYTES),
     "epo_max_detail_fetches": (1, 50),
     # 응답 크기와 네트워크 대기 시간의 하드 상한. 후보 선정과 무관하다.
     "literature_max_results_per_query": (1, 20),
     "literature_http_budget_seconds": (10, 600),
+    # 사람 속도 계약. 3초보다 짧게 두면 사람이 읽는 속도가 아니다.
+    "gpatents_min_interval_seconds": (3, 60),
+    "gpatents_max_fetches_per_run": (1, 40),
 }
 
 # 인용발명 문헌 전달 방식. enums.RetrievalMode 와 같은 값이며, 여기서 import
@@ -215,9 +209,6 @@ _UNLIMITED_KEYS = frozenset(
         "delivery_scale_claim_elements",
         # 캐시 정리도 끌 수 있어야 한다. 0 = 정리하지 않음.
         "embedding_cache_max_mb",
-        # 0 = 시간당 사용량을 관측·표시만 하고 차단하지 않음(기본값). 주간
-        # 한도는 계약값이라 여기 없다 — 사용자가 끌 수 있으면 안 된다.
-        "epo_hourly_quota_bytes",
     }
 )
 
@@ -423,7 +414,6 @@ def epo_ledger(session: Session):
     global _EPO_LEDGER
     values = get_all(session)
     stored = patent_search.QuotaState.from_dict(values.get(EPO_QUOTA_KEY))
-    hourly = int(values.get("epo_hourly_quota_bytes") or 0)
 
     with _EPO_QUOTA_LOCK:
         ledger = _EPO_LEDGER
@@ -431,7 +421,7 @@ def epo_ledger(session: Session):
     if ledger is None:
         # 생성도 잠금 밖에서 한다. 생성자가 원장 잠금을 건드리므로, 저장소
         # 잠금을 쥔 채 만들면 그 자체가 역전 경로가 된다.
-        candidate = patent_search.QuotaLedger(state=stored, hourly_limit=hourly)
+        candidate = patent_search.QuotaLedger(state=stored)
         candidate.on_change = lambda _state: persist_epo_quota(candidate)
         with _EPO_QUOTA_LOCK:
             if _EPO_LEDGER is None:
@@ -439,7 +429,6 @@ def epo_ledger(session: Session):
             ledger = _EPO_LEDGER
 
     # 여기서부터는 저장소 잠금을 쥐고 있지 않다. 원장이 스스로 잠근다.
-    ledger.hourly_limit = hourly
     ledger.sync_from_stored(stored)
     return ledger
 
@@ -715,6 +704,7 @@ def _coerce(key: str, value: Any) -> Any:
         "retrieval_semantic_enabled",
         "kiwee_integration_enabled",
         "epo_integration_enabled",
+        "gpatents_page_enabled",
     ):
         return bool(value)
     if key in _CREDENTIAL_KEYS:
@@ -861,22 +851,6 @@ def warnings_for(values: dict[str, Any]) -> list[str]:
             "Provider 동시 실행이 2 이상입니다. 메모리 사용량이 늘고 계정 사용량 "
             "제한에 더 빨리 도달할 수 있습니다."
         )
-    # 예전에는 "켜 둔 Provider 가 있는가"를 물었다. 사전 동의 관문을 걷어낸
-    # 뒤로는 그 질문이 성립하지 않으므로, 지금 실제로 실행에 쓰이는 도구를 본다.
-    analysis_tool = execution_defaults(values, "patent_analysis")[0]
-    search_tool = execution_defaults(values, "similarity_search")[0]
-    labelled = (
-        [("기본", analysis_tool)]
-        if analysis_tool == search_tool
-        else [("구성대비 분석", analysis_tool), ("유사문헌 검색", search_tool)]
-    )
-    for label, selected in labelled:
-        if selected in TOOL_UNCONTROLLABLE_PROVIDERS:
-            notes.append(
-                f"{label} 실행 도구({selected})는 셸·파일 도구를 끄는 수단이 없습니다. "
-                "PRISM 은 도구 호출을 탐지해 실패로 기록할 뿐 호출 자체를 막지 못하므로, "
-                "신뢰할 수 없는 출처의 문서 분석에는 권장하지 않습니다."
-            )
     if not values.get("runtime_context_enabled", True):
         notes.append(
             "런타임 컨텍스트가 비활성화되어 있습니다. 첨부 문서 안의 지시문이 "
@@ -895,17 +869,10 @@ def warnings_for(values: dict[str, Any]) -> list[str]:
             "본문 대신 근거 패키지만 전달되므로, 검색어에 걸리지 않은 구간은 "
             "최종 분석 모델이 보지 못합니다."
         )
-    if values.get("retrieval_semantic_enabled"):
-        notes.append(
-            "의미 검색이 켜져 있습니다. sentence-transformers 와 모델 캐시가 "
-            "없으면 키워드 검색만으로 진행하며, 그 사실이 보고서와 실행 기록에 "
-            "남습니다."
-        )
-    # 연동을 켜도 지금은 실제 검색이 안 된다는 사실을 화면에 정직하게 남긴다.
-    # "URL 이 보인다"와 "공식 API 다"는 다른 문제이므로, 접속 구현은 공급자
-    # 승인 뒤로 미뤄져 있다.
+    # 연동을 켰는데 쓸 수 없는 상태(예: EPO 자격증명 미입력)는 알린다. Kiwee 는
+    # 접속 자체가 미구현이라 켤 때마다 같은 문구만 반복되므로 알리지 않는다.
     for status in patent_search.describe_all(values):
-        if status.enabled and not status.configured:
+        if status.enabled and not status.configured and status.backend_id != "kiwee":
             notes.append(f"{status.display_name} 연동: {status.detail}")
     notes.extend(_epo_quota_notes(values))
     return notes
@@ -920,7 +887,6 @@ def epo_quota_snapshot(values: dict[str, Any]) -> dict:
     """
     ledger = patent_search.QuotaLedger(
         state=patent_search.QuotaState.from_dict(values.get("epo_quota_state")),
-        hourly_limit=int(values.get("epo_hourly_quota_bytes") or 0),
     )
     snapshot = ledger.snapshot()
     # 살아 있는 전역 원장이 있으면 그쪽이 최신이다. 저장에 실패해 아직 DB 에
@@ -942,7 +908,6 @@ def _epo_quota_notes(values: dict[str, Any]) -> list[str]:
         return []
     ledger = patent_search.QuotaLedger(
         state=patent_search.QuotaState.from_dict(values.get("epo_quota_state")),
-        hourly_limit=int(values.get("epo_hourly_quota_bytes") or 0),
     )
     notes: list[str] = []
     if _EPO_PERSIST_ERROR:

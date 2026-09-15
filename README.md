@@ -204,7 +204,7 @@ npm run dev
 ## CLI 준비
 
 PRISM 은 CLI 를 **자동으로 설치하지 않습니다.** CLI를 설치한 뒤 Settings의
-**AI 실행 도구 상태 → 상세 및 설치/로그인 안내**에서 로그인할 수 있습니다.
+**AI 실행 도구 상태** 표의 로그인 버튼으로 로그인할 수 있습니다.
 
 ### Claude (Claude Code CLI)
 
