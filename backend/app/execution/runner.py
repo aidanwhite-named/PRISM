@@ -51,6 +51,7 @@ from ..providers.base import (
     ExecutionRequest,
     ToolPolicy,
 )
+from ..providers import agy_mcp
 from ..providers.registry import build_provider
 from . import process as proc
 from .bus import BUS
@@ -66,7 +67,7 @@ _SEARCH_CONTEXT_BY_POLICY = job_assembly.SEARCH_CONTEXT_BY_POLICY
 search_spec = job_assembly.search_spec
 
 
-def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int, provider: str = "claude") -> dict:
+def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int) -> dict:
     """Per-run MCP config.  No credentials are placed in CLI arguments."""
     backend_root = Path(__file__).resolve().parents[2]
     return {
@@ -78,7 +79,6 @@ def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int, provider: s
                 "PRISM_SEARCH_WORK_DIR": str(work_dir.resolve()),
                 "PRISM_DATA_DIR": str(PATHS.data_dir.resolve()),
                 "PRISM_SEARCH_CUTOFF": cutoff or "",
-                "PRISM_SEARCH_PROVIDER": provider,
                 "PRISM_SEARCH_MAX_TOOL_CALLS": str(max(1, int(max_calls))),
             },
         }
@@ -376,9 +376,9 @@ class JobRunner:
             values = settings_service.get_all(session)
             # 고르지 않았으면 빈 문자열이고, 그때는 Provider 가 CLI 에 아무
             # 것도 넘기지 않는다. 여기서 기본값을 채우지 않는 것이 요점이다.
-            reasoning_effort = str(
-                (values.get("reasoning_effort") or {}).get(provider_id or "", "")
-            ).strip()
+            # 검색과 분석은 추론강도도 따로 둔다.
+            _, _, efforts = settings_service.execution_defaults(values, job_kind)
+            reasoning_effort = str(efforts.get(provider_id or "", "")).strip()
 
         limit = int(values.get("max_concurrency_per_provider", 1))
         timeout = int(values.get("default_timeout_seconds", 900))
@@ -466,6 +466,15 @@ class JobRunner:
             await self._emit(
                 job_id, "stage", {"stage": "preprocessing", "message": "프롬프트 조립 중"}
             )
+
+            if job_kind is JobKind.SIMILARITY_SEARCH and provider_id == "agy":
+                # agy 는 실행별 MCP 인자가 없다. 도구 상태를 프롬프트에 넣기 전에
+                # 전역 설정 등록을 맞춰 둔다. 실패하면 채널이 not_registered 로
+                # 표시되고 웹 검색만으로 진행한다.
+                registration = agy_mcp.ensure_registered()
+                if not registration.ok:
+                    await self._emit(job_id, "search_channel_warning", {
+                        "provider": provider_id, "message": registration.detail()[:500]})
 
             # --- 프롬프트 조립 -------------------------------------------
             search_prompt_sha = ""
@@ -832,24 +841,8 @@ class JobRunner:
             tool_availability = {}
             if job_kind is JobKind.SIMILARITY_SEARCH:
                 tool_availability = search_channels.availability(values, provider_id)
-                # 채널이 하나도 없는 실행은 시작할 이유가 없다.
-                #
-                # 실측(2026-09-12): web 이 죽고 나머지가 모두 닫힌 상태에서도
-                # 실행은 끝까지 갔다. 모델이 Google Patents 주소를 스스로 만들어
-                # 열었고(그중 하나는 존재하지 않는 번호라 404), 후보 1건짜리
-                # 보고서가 나왔다. 그것은 검색 결과가 아니라 모델의 기억이다.
-                #
-                # 막는 조건은 좁게 잡는다 — web 이 "확인 안 됨"이 아니라 실측으로
-                # 죽었을 때만이다. 모르는 것을 이유로 실행을 막지는 않는다.
-                if search_channels.no_usable_channel(tool_availability):
-                    await self._fail(
-                        job_id,
-                        ErrorCode.SEARCH_CHANNELS_UNAVAILABLE,
-                        search_channels.unusable_channel_message(tool_availability),
-                    )
-                    return
-                if provider_id in ("claude", "codex"):
-                    mcp_servers = _search_mcp_servers(work_dir, search_cutoff, search_budget, provider_id)
+                if search_channels.mcp_transport_ready(provider_id):
+                    mcp_servers = _search_mcp_servers(work_dir, search_cutoff, search_budget)
                 available_names = search_channels.available_mcp_names(tool_availability) if mcp_servers else ()
                 tool_policy = replace(
                     tool_policy, mcp_tools=tuple(available_names),
@@ -872,6 +865,28 @@ class JobRunner:
             verdict = evaluate(outcome, attachments, fail_on_tool_use=fail_on_tool_use)
             verification_followup = None
             if job_kind is JobKind.SIMILARITY_SEARCH and verdict.status == JobStatus.SUCCEEDED:
+                # Publish the completed first pass before optional field completion.
+                try:
+                    preview_observed = search_manifest.observed(outcome.tool_calls, outcome.tool_uses)
+                    preview_journal = search_manifest.read_tool_journal(work_dir)
+                    preview_reported, _ = search_manifest.parse(outcome.result_text, preview_observed)
+                    if not search_manifest.has_retrieval_attempt(outcome.tool_calls, outcome.tool_uses, preview_journal):
+                        raise search_manifest.SearchLogError("실제 검색 기록 없음")
+                    preview_reported = search_verification.verify(preview_reported, preview_observed, preview_journal)
+                    preview_dates = search_dates.filter_candidates(preview_reported, search_cutoff)
+                    preview = search_manifest.build(claim_text=claim_text, provider=provider_id, model=model,
+                        reported=preview_reported, observed_section=preview_observed, date_filter=preview_dates,
+                        quality=search_quality.assess(preview_reported, preview_observed, preview_journal, tool_availability, date_filter=preview_dates),
+                        usage=outcome.usage, error="최초 검색 결과입니다. 필요한 항목을 추가 확인하고 있습니다.")
+                    with session_scope() as session:
+                        preview_job = session.get(ExecutionJob, job_id)
+                        if preview_job:
+                            preview_job.search_manifest = preview
+                            preview_job.result_text = search_report.render(preview)
+                            preview_job.usage = outcome.usage
+                    await self._emit(job_id, "search_preview_ready", {"candidate_count": len(preview_reported["candidates"])})
+                except search_manifest.SearchLogError:
+                    pass
                 outcome, verification_followup = await search_followup.run(
                     provider, request, outcome, emit, attachments=attachments,
                     fail_on_tool_use=fail_on_tool_use, deadline=search_deadline,
@@ -893,54 +908,32 @@ class JobRunner:
             model_narrative = ""
             if job_kind is JobKind.SIMILARITY_SEARCH:
                 model_narrative = outcome.result_text
-                # 이 실행이 실제로 부른 웹 검색 호출이 web 채널 도달성의 유일한
-                # 증거다. 실행 전 상태는 지난 기록에 기반한 예상이므로, 감사
-                # 기록에는 이번 실행이 본 사실을 적는다 — 네 번 다 죽은 실행이
-                # "web: 사용 가능"이라고 적힌 보고서를 남기지 않게.
-                policy_for_web = getattr(provider, "search_tool_policy", None)
-                web_record = None
-                if policy_for_web is not None:
-                    web_record = search_channels.web_evidence(
-                        outcome.tool_calls,
-                        policy_for_web.required_tools or policy_for_web.allowed_tools,
-                        cli_version=outcome.cli_version or "",
-                    )
-                if web_record is not None:
-                    settings_service.record_web_health(provider_id, web_record)
-                    tool_availability = dict(tool_availability)
-                    tool_availability["web"] = search_channels.web_status(
-                        web_record, cli_version=outcome.cli_version or ""
-                    )
                 reported = None
                 notes = []
                 journal = search_manifest.read_tool_journal(work_dir)
                 observed = search_manifest.observed(outcome.tool_calls, outcome.tool_uses)
                 try:
-                    if verdict.status != JobStatus.SUCCEEDED:
+                    partial_search = (
+                        (verdict.status == JobStatus.CANCELLED or verdict.error_code == ErrorCode.TIMED_OUT)
+                        and verification_followup
+                        and verification_followup.get("initial_output_preserved")
+                    )
+                    if verdict.status != JobStatus.SUCCEEDED and not partial_search:
                         raise search_manifest.SearchLogError(
                             "실행이 정상 완료되지 않아 최종 후보로 확정하지 않았습니다."
                         )
                     if not search_manifest.has_retrieval_attempt(outcome.tool_calls, outcome.tool_uses, journal):
                         verdict = Verdict(JobStatus.FAILED, ErrorCode.SEARCH_NOT_PERFORMED, ["실제 검색 도구 호출이 없습니다."])
                         raise search_manifest.SearchLogError("실제 검색 도구 호출이 없습니다.")
-                    # 질의가 전멸한 실행은 검색이 아니다. 도구가 죽어도 모델은
-                    # 계속 진행해서 기억하던 주소를 직접 열고 후보를 만들어 낸다.
-                    # 그것을 결과로 내보내면 "검색해 보니 이것뿐"과 구분되지
-                    # 않는다 — 정작 채널은 하나도 돌지 않았는데.
-                    if not search_manifest.has_successful_query(outcome.tool_calls, journal):
-                        verdict = Verdict(JobStatus.FAILED, ErrorCode.SEARCH_NOT_PERFORMED,
-                                          ["검색 질의가 한 건도 응답하지 않았습니다."])
-                        raise search_manifest.SearchLogError(
-                            "검색 질의가 한 건도 응답하지 않았습니다. 열람한 문헌이 있어도 "
-                            "검색으로 찾은 것이 아니라 모델이 스스로 만든 주소입니다."
-                        )
                     reported, notes = search_manifest.parse(outcome.result_text, observed)
                     reported = search_verification.verify(reported, observed, journal)
+                    if partial_search:
+                        manifest_error = "검색이 중단되어 최초 완료 단계의 후보를 부분 결과로 보존했습니다."
                 except search_manifest.SearchLogError as exc:
                     manifest_error = str(exc)
                 date_filter = search_dates.filter_candidates(reported, search_cutoff)
                 quality = search_quality.assess(reported, observed, journal, tool_availability,
-                                               execution_error=manifest_error, outcome=outcome)
+                                               execution_error=manifest_error, outcome=outcome, date_filter=date_filter)
                 manifest = search_manifest.build(
                     claim_text=claim_text, provider=provider_id, model=model,
                     prompt_id=prompt_id, prompt_name=prompt_name,

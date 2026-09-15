@@ -33,6 +33,9 @@ EDITABLE_KEYS = frozenset(
         "provider_paths",
         "default_models",
         "reasoning_effort",
+        "search_provider",
+        "search_models",
+        "search_reasoning_effort",
         "keep_raw_output",
         "fail_on_tool_use",
         "max_search_tool_calls",
@@ -51,6 +54,7 @@ EDITABLE_KEYS = frozenset(
         "epo_max_detail_fetches",
         "literature_integration_enabled",
         "literature_contact_email",
+        "literature_openalex_api_key",
         "literature_max_results_per_query",
         "literature_http_budget_seconds",
         # epo_quota_state 는 일부러 없다. PRISM 이 관측해 적는 값이라
@@ -71,6 +75,42 @@ EDITABLE_KEYS = frozenset(
 )
 
 _PROVIDER_IDS = frozenset({"agy", "claude", "codex"})
+
+# Provider 한 개를 담는 키와, provider -> 값 맵을 담는 키.
+_PROVIDER_KEYS = ("default_provider", "search_provider")
+_PROVIDER_MAP_KEYS = (
+    "provider_paths",
+    "default_models",
+    "reasoning_effort",
+    "search_models",
+    "search_reasoning_effort",
+)
+_EFFORT_KEYS = ("reasoning_effort", "search_reasoning_effort")
+
+
+def execution_defaults(
+    values: dict[str, Any], job_kind: Any
+) -> tuple[str, dict[str, str], dict[str, str]]:
+    """작업 종류별 (기본 Provider, provider->모델, provider->추론강도).
+
+    유사문헌 검색은 search_provider 를 지정했을 때만 검색 전용 값을 쓴다.
+    비어 있으면 구성대비 분석의 세 값을 통째로 따른다. 모델·강도만 따로
+    폴백하지 않는 이유: 검색에서 「CLI 기본 모델」을 고른 것과 「안 고른 것」을
+    구별할 수 없게 되기 때문이다.
+    """
+    kind = getattr(job_kind, "value", job_kind)
+    search_provider = str(values.get("search_provider") or "").strip()
+    if kind == "similarity_search" and search_provider:
+        return (
+            search_provider,
+            dict(values.get("search_models") or {}),
+            dict(values.get("search_reasoning_effort") or {}),
+        )
+    return (
+        str(values.get("default_provider") or "").strip(),
+        dict(values.get("default_models") or {}),
+        dict(values.get("reasoning_effort") or {}),
+    )
 
 
 def _normalize_provider_id(value: str) -> str:
@@ -185,14 +225,17 @@ _UNLIMITED_KEYS = frozenset(
 # 외부 데이터 소스의 자격증명. Provider(AI 실행 도구)의 API Key 와는 다른
 # 축이다 — 그쪽은 각 CLI 의 로그인 세션을 쓰므로 PRISM 이 받지 않는다. EPO OPS
 # 는 CLI 가 없고 OAuth client_credentials 뿐이라 저장 외에 방법이 없다.
-_CREDENTIAL_KEYS = frozenset({"epo_consumer_key", "epo_consumer_secret"})
+# OpenAlex 도 같다 — 2026-02 부터 키가 필수인 HTTP API 다.
+_CREDENTIAL_KEYS = frozenset(
+    {"epo_consumer_key", "epo_consumer_secret", "literature_openalex_api_key"}
+)
 
 # 사용량 경고를 띄우는 비율. epo_quota.WARN_RATIO 와 같은 값을 화면 문구에
 # 쓰기 위한 백분율 표현이다.
 WARN_PERCENT = int(patent_search.QUOTA_WARN_RATIO * 100)
 
 # 응답에서 값 자체를 내보내지 않는 키. 화면에는 "설정됨/미설정"만 준다.
-SECRET_KEYS = frozenset({"epo_consumer_secret"})
+SECRET_KEYS = frozenset({"epo_consumer_secret", "literature_openalex_api_key"})
 
 # OPS 자격증명은 base64 로 안전하게 실릴 수 있는 짧은 문자열이다. 상한을 두는
 # 이유는 실수로 파일 내용이나 로그를 통째로 붙여 넣는 것을 막기 위해서다.
@@ -623,15 +666,11 @@ def get_all(session: Session) -> dict[str, Any]:
         values[row.key] = row.value
     # 빈 값을 특정 Provider 로 채우지 않는다. 제한된 안전성 Provider 가 자동으로
     # 선택되면 사용자가 위험을 확인하지 않은 채 실행하게 된다.
-    raw_default = str(values.get("default_provider") or "").strip()
-    values["default_provider"] = (
-        _normalize_provider_id(raw_default) if raw_default else ""
-    )
-    values["provider_paths"] = _normalize_provider_map(values.get("provider_paths"))
-    values["default_models"] = _normalize_provider_map(values.get("default_models"))
-    values["reasoning_effort"] = _normalize_provider_map(
-        values.get("reasoning_effort")
-    )
+    for key in _PROVIDER_KEYS:
+        raw = str(values.get(key) or "").strip()
+        values[key] = _normalize_provider_id(raw) if raw else ""
+    for key in _PROVIDER_MAP_KEYS:
+        values[key] = _normalize_provider_map(values.get(key))
     return values
 
 
@@ -640,10 +679,10 @@ def get(session: Session, key: str) -> Any:
     if row is None:
         return DEFAULTS.get(key)
     value = row.value
-    if key == "default_provider":
+    if key in _PROVIDER_KEYS:
         text = str(value).strip()
         return _normalize_provider_id(text) if text else ""
-    if key in ("provider_paths", "default_models", "reasoning_effort"):
+    if key in _PROVIDER_MAP_KEYS:
         return _normalize_provider_map(value)
     return value
 
@@ -722,19 +761,20 @@ def _coerce(key: str, value: Any) -> Any:
         return str(value)
     if key == "default_prompt_id":
         return str(value).strip()
-    if key == "default_provider":
+    if key in _PROVIDER_KEYS:
         text = str(value).strip()
         if not text:
-            # 빈 값 = 기본 Provider 지정 안 함. 실행 시 직접 선택해야 한다.
+            # default_provider: 지정 안 함. 실행 시 직접 선택해야 한다.
+            # search_provider: 구성대비 분석과 같은 도구를 쓴다.
             return ""
         provider_id = _normalize_provider_id(text)
         if provider_id not in _PROVIDER_IDS:
             raise ValueError(
-                "default_provider 는 agy, claude, codex 중 하나이거나 "
+                f"{key} 는 agy, claude, codex 중 하나이거나 "
                 "빈 값이어야 합니다."
             )
         return provider_id
-    if key in ("provider_paths", "default_models", "reasoning_effort"):
+    if key in _PROVIDER_MAP_KEYS:
         if not isinstance(value, dict):
             raise ValueError(f"{key} 는 객체여야 합니다.")
         cleaned = {
@@ -742,7 +782,7 @@ def _coerce(key: str, value: Any) -> Any:
             for k, v in value.items()
             if str(v).strip()
         }
-        if key == "reasoning_effort":
+        if key in _EFFORT_KEYS:
             # 빈 값은 위에서 이미 걸러졌다 — 그것이 "모델 기본값"이며 키 자체가
             # 없는 상태로 저장된다. 남은 값은 아는 레벨이어야 한다. 모르는 문자열을
             # 그대로 CLI 에 넘기면 실행이 통째로 실패한다.
@@ -823,13 +863,20 @@ def warnings_for(values: dict[str, Any]) -> list[str]:
         )
     # 예전에는 "켜 둔 Provider 가 있는가"를 물었다. 사전 동의 관문을 걷어낸
     # 뒤로는 그 질문이 성립하지 않으므로, 지금 실제로 실행에 쓰이는 도구를 본다.
-    selected = str(values.get("default_provider") or "")
-    if selected in TOOL_UNCONTROLLABLE_PROVIDERS:
-        notes.append(
-            f"기본 실행 도구({selected})는 셸·파일 도구를 끄는 수단이 없습니다. "
-            "PRISM 은 도구 호출을 탐지해 실패로 기록할 뿐 호출 자체를 막지 못하므로, "
-            "신뢰할 수 없는 출처의 문서 분석에는 권장하지 않습니다."
-        )
+    analysis_tool = execution_defaults(values, "patent_analysis")[0]
+    search_tool = execution_defaults(values, "similarity_search")[0]
+    labelled = (
+        [("기본", analysis_tool)]
+        if analysis_tool == search_tool
+        else [("구성대비 분석", analysis_tool), ("유사문헌 검색", search_tool)]
+    )
+    for label, selected in labelled:
+        if selected in TOOL_UNCONTROLLABLE_PROVIDERS:
+            notes.append(
+                f"{label} 실행 도구({selected})는 셸·파일 도구를 끄는 수단이 없습니다. "
+                "PRISM 은 도구 호출을 탐지해 실패로 기록할 뿐 호출 자체를 막지 못하므로, "
+                "신뢰할 수 없는 출처의 문서 분석에는 권장하지 않습니다."
+            )
     if not values.get("runtime_context_enabled", True):
         notes.append(
             "런타임 컨텍스트가 비활성화되어 있습니다. 첨부 문서 안의 지시문이 "

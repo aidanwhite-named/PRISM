@@ -426,7 +426,6 @@ class CodexStreamParser:
 
         if envelope == "item.completed":
             status = str(item.get("status") or "").lower()
-            call["completed"] = True
             failed = status in _FAILURE_STATUSES or bool(item.get("error"))
             if failed:
                 detail = str(item.get("error") or status or "실패")[:300]

@@ -9,7 +9,7 @@
  *   - 화면이 안내하는 「0 = 사용 안 함」이 실제로 있는 값에만 붙는다
  *   - 두 한도(전송 하드 / 모델 컨텍스트)가 각자 자기 절에서 설명된다
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const settingsResponse = {
@@ -138,6 +138,9 @@ vi.mock("../lib/api", () => ({
     updateSettings: vi.fn(async () => settingsResponse),
     probeProviders: vi.fn(async () => []),
     applyAgyPermissions: vi.fn(async () => appliedResponse),
+    checkOpenAlex: vi.fn(async () => ({
+      ok: true, detail: "OpenAlex 에 키 없이 연결했습니다.", http_status: 200, expires_in: null,
+    })),
     startProviderLogin: vi.fn(async () => ({
       session_id: "google-login", provider: "agy", intent: "login",
       method: "google", mode: "browser", state: "WAITING_FOR_USER",
@@ -220,17 +223,78 @@ describe("대용량 인용발명 전달 방식", () => {
     expect(screen.queryByText("agy 로그인 도우미 열기")).toBeNull();
   });
 
+  it("유사문헌 검색 도구를 구성대비 분석과 따로 저장한다", async () => {
+    const { api } = await import("../lib/api");
+    await renderPage();
+    // 기본은 분석을 따른다 — 검색 쪽에는 모델을 고르는 칸이 없다.
+    expect(screen.queryByLabelText("유사문헌 검색 모델")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("유사문헌 검색 실행 도구"), {
+      target: { value: "codex" },
+    });
+    fireEvent.change(screen.getByLabelText("유사문헌 검색 모델"), {
+      target: { value: "gpt-5.6-sol" },
+    });
+    fireEvent.change(screen.getByLabelText("유사문헌 검색 추론강도"), {
+      target: { value: "high" },
+    });
+    // 분석 쪽은 그대로다.
+    expect(
+      (screen.getByLabelText("구성대비 분석 실행 도구") as HTMLSelectElement).value,
+    ).toBe("agy");
+    // codex 는 웹 검색 도구를 선언하지 않았다.
+    expect(document.body.textContent).toContain(
+      "Codex는 PRISM이 확인한 웹 검색 도구를 제공하지",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "실행 도구 저장" }));
+    await waitFor(() =>
+      expect(api.updateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          default_provider: "agy",
+          default_models: {},
+          search_provider: "codex",
+          search_models: { codex: "gpt-5.6-sol" },
+          search_reasoning_effort: { codex: "high" },
+        }),
+      ),
+    );
+    // 프롬프트는 다른 카드의 값이라 함께 보내지 않는다.
+    const sent = vi.mocked(api.updateSettings).mock.calls.at(-1)?.[0] ?? {};
+    expect(sent).not.toHaveProperty("default_prompt_id");
+    expect(sent).not.toHaveProperty("default_search_prompt_id");
+  });
+
+  it("기본 프롬프트는 별도 카드에서 프롬프트 값만 저장한다", async () => {
+    const { api } = await import("../lib/api");
+    const { container } = await renderPage();
+    const card = container.querySelector(".settings-prompt-defaults") as HTMLElement;
+    expect(card).toBeTruthy();
+    // 실행 도구 선택은 이 카드에 없다.
+    expect(within(card).queryByLabelText("구성대비 분석 실행 도구")).toBeNull();
+
+    fireEvent.click(within(card).getByRole("button", { name: "기본 프롬프트 저장" }));
+    // 앞선 테스트의 호출이 mock 에 남아 있으므로 마지막 호출이 바뀔 때까지 기다린다.
+    await waitFor(() => {
+      const sent = vi.mocked(api.updateSettings).mock.calls.at(-1)?.[0] ?? {};
+      expect(Object.keys(sent).sort()).toEqual([
+        "default_prompt_id",
+        "default_search_prompt_id",
+      ]);
+    });
+  });
+
   it("Codex 모델별 추론강도를 드롭다운으로 표시한다", async () => {
     await renderPage();
-    fireEvent.change(screen.getByLabelText("AI 실행 도구 (Provider)"), {
+    fireEvent.change(screen.getByLabelText("구성대비 분석 실행 도구"), {
       target: { value: "codex" },
     });
 
-    const modelSelect = screen.getByLabelText("모델") as HTMLSelectElement;
+    const modelSelect = screen.getByLabelText("구성대비 분석 모델") as HTMLSelectElement;
     fireEvent.change(modelSelect, { target: { value: "gpt-5.6-luna" } });
 
     await waitFor(() => {
-      const effort = screen.getByLabelText("추론강도") as HTMLSelectElement;
+      const effort = screen.getByLabelText("구성대비 분석 추론강도") as HTMLSelectElement;
       expect([...effort.options].map((option) => option.value)).toEqual([
         "",
         "low",
@@ -244,7 +308,7 @@ describe("대용량 인용발명 전달 방식", () => {
 
     fireEvent.change(modelSelect, { target: { value: "gpt-5.6-sol" } });
     await waitFor(() => {
-      const effort = screen.getByLabelText("추론강도") as HTMLSelectElement;
+      const effort = screen.getByLabelText("구성대비 분석 추론강도") as HTMLSelectElement;
       expect([...effort.options].map((option) => option.value)).toContain("ultra");
     });
     expect(screen.getByText(/모델 기본값\(low\)/)).toBeTruthy();
@@ -397,6 +461,43 @@ describe("대용량 인용발명 전달 방식", () => {
     );
     expect(container.textContent).toContain(
       "EPO OPS API로 특허를 검색하고 받은 XML과 결과를 대조합니다.",
+    );
+  });
+
+  it("OpenAlex 키를 비밀 값으로 저장하고 연결 테스트를 부른다", async () => {
+    const { api } = await import("../lib/api");
+    const enabled = {
+      ...settingsResponse,
+      values: { ...settingsResponse.values, literature_integration_enabled: true },
+      secrets_set: { literature_openalex_api_key: false },
+    };
+    const saved = { ...enabled, secrets_set: { literature_openalex_api_key: true } };
+    vi.mocked(api.settings).mockResolvedValueOnce(
+      enabled as unknown as Awaited<ReturnType<typeof api.settings>>,
+    );
+    vi.mocked(api.updateSettings).mockResolvedValueOnce(
+      saved as unknown as Awaited<ReturnType<typeof api.updateSettings>>,
+    );
+    const { container } = await renderPage();
+    const card = container.querySelector(".settings-literature") as HTMLElement;
+    const input = within(card).getByLabelText(/OpenAlex API Key/) as HTMLInputElement;
+    expect(input.type).toBe("password");
+
+    const key = "oa-test-key-123";
+    fireEvent.change(input, { target: { value: key } });
+    fireEvent.click(within(card).getAllByRole("button", { name: "저장" })[0]);
+    await waitFor(() =>
+      expect(api.updateSettings).toHaveBeenCalledWith({ literature_openalex_api_key: key }),
+    );
+    // 저장한 키는 초안에서 지우고 "저장됨"만 보인다.
+    await waitFor(() => expect(within(card).getByText("저장됨")).toBeTruthy());
+    expect(input.value).toBe("");
+    expect(document.body.textContent).not.toContain(key);
+
+    fireEvent.click(within(card).getByRole("button", { name: "OpenAlex 연결 테스트" }));
+    await waitFor(() => expect(api.checkOpenAlex).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(card.textContent).toContain("OpenAlex 에 키 없이 연결했습니다."),
     );
   });
 });

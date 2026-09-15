@@ -39,11 +39,19 @@ PARSER_VERSION = "1"
 
 PROFILE_CROSSREF_JSON = "crossref_work_json"
 PROFILE_EUROPEPMC_JSON = "europepmc_result_json"
+PROFILE_OPENALEX_JSON = "openalex_work_json"
+
+# OpenAlex 는 초록을 문장이 아니라 단어 위치 색인으로 준다. 복원 규칙이 기존
+# literature_json v1 에 없던 것이므로, 이미 내려진 판정의 재현성을 건드리지 않게
+# 파서를 따로 등록한다(parsers.register_parser 의 원칙).
+OPENALEX_PARSER_ID = "openalex_json"
+OPENALEX_PARSER_VERSION = "1"
 
 # 프로필이 붙는 응답 형식. 감사 기록에서 "어느 API 의 응답인가"를 가른다.
 PROFILE_BY_SOURCE = {
     "crossref": PROFILE_CROSSREF_JSON,
     "europepmc": PROFILE_EUROPEPMC_JSON,
+    "openalex": PROFILE_OPENALEX_JSON,
 }
 
 # 값 하나의 상한. 넘으면 자르지 않고 통째로 뺀다 — 잘린 문장을 근거로 주면
@@ -113,6 +121,10 @@ def _extract(data: bytes, field_path: str) -> str:
             f"아티팩트를 JSON 으로 읽을 수 없습니다: {exc}"
         ) from exc
 
+    if field_path.endswith("/@authors"):
+        return _crossref_authors(_walk(document, field_path[:-9]))
+    if field_path.endswith("/@issued"):
+        return _crossref_date(_walk(document, field_path[:-8]))
     node = _walk(document, field_path)
     if isinstance(node, str):
         return _strip_markup(node)
@@ -159,6 +171,38 @@ def _clip(value: str) -> str:
     return "" if len(text) > MAX_FIELD_CHARS else text
 
 
+def _crossref_authors(message: dict) -> str:
+    names = []
+    authors = message.get("author") if isinstance(message, dict) else None
+    if not isinstance(authors, list):
+        return ""
+    for author in authors:
+        if not isinstance(author, dict):
+            continue
+        name = " ".join(str(author.get(k) or "").strip() for k in ("given", "family")).strip()
+        name = name or str(author.get("name") or "").strip()
+        if name:
+            names.append(name)
+    return _clip("; ".join(names))
+
+
+def _crossref_date(message: dict) -> str:
+    from datetime import date
+    if not isinstance(message, dict):
+        return ""
+    issued = message.get("issued") or {}
+    parts_list = issued.get("date-parts") if isinstance(issued, dict) else None
+    parts = parts_list[0] if isinstance(parts_list, list) and parts_list else []
+    if not isinstance(parts, list) or not 1 <= len(parts) <= 3 or any(type(p) is not int for p in parts):
+        return ""
+    try:
+        date(parts[0], parts[1] if len(parts) > 1 else 1, parts[2] if len(parts) > 2 else 1)
+    except ValueError:
+        return ""
+    # Preserve supplied precision; never invent a month or day.
+    return "-".join(str(p).zfill(4 if i == 0 else 2) for i, p in enumerate(parts))
+
+
 def _crossref_work(message: dict, prefix: str) -> LiteratureWork | None:
     """Crossref 레코드 하나를 읽는다. ``prefix`` 는 아티팩트 안의 경로 앞부분."""
     if not isinstance(message, dict):
@@ -187,37 +231,12 @@ def _crossref_work(message: dict, prefix: str) -> LiteratureWork | None:
         values["container"] = _clip(containers[0])
         paths["container"] = f"{prefix}/container-title/0"
 
-    # 저자는 given/family 로 쪼개져 있어 한 경로로 뽑을 수 없다. 경로를 만들 수
-    # 없는 값은 **근거가 아니다** — paths 에 넣지 않으므로 text_fields 에서
-    # 빠지고, 표시용으로만 쓴다.
-    authors = message.get("author")
-    display_authors = ""
-    if isinstance(authors, list):
-        names = []
-        for item in authors:
-            if not isinstance(item, dict):
-                continue
-            name = " ".join(
-                part
-                for part in (
-                    str(item.get("given") or "").strip(),
-                    str(item.get("family") or "").strip(),
-                )
-                if part
-            ) or str(item.get("name") or "").strip()
-            if name:
-                names.append(name)
-        display_authors = ", ".join(names[:12])
-
-    issued = message.get("issued")
-    published = ""
-    if isinstance(issued, dict):
-        parts = (issued.get("date-parts") or [[]])[0]
-        if isinstance(parts, list) and parts:
-            published = "-".join(str(int(p)).zfill(2 if i else 4)
-                                 for i, p in enumerate(parts[:3])
-                                 if isinstance(p, int))
-
+    display_authors = _crossref_authors(message)
+    published = _crossref_date(message)
+    if display_authors:
+        paths["authors"] = f"{prefix}/@authors"
+    if published:
+        paths["publication_date"] = f"{prefix}/@issued"
     url = str(message.get("URL") or "").strip()
     return LiteratureWork(
         doi=doi,
@@ -331,6 +350,119 @@ def read_europepmc_results(body: bytes) -> list:
     return works
 
 
+def _openalex_abstract(node) -> str:
+    """단어 위치 색인을 문장으로 되돌린다. 복원은 pyalex 의 규칙을 그대로 쓴다."""
+    from pyalex.api import invert_abstract
+
+    index = node.get("abstract_inverted_index") if isinstance(node, dict) else None
+    if not isinstance(index, dict) or not index:
+        return ""
+    return _clip(invert_abstract(index) or "")
+
+
+def _openalex_authors(node) -> str:
+    authorships = node.get("authorships") if isinstance(node, dict) else None
+    if not isinstance(authorships, list):
+        return ""
+    names = []
+    for item in authorships:
+        author = item.get("author") if isinstance(item, dict) else None
+        name = author.get("display_name") if isinstance(author, dict) else None
+        if isinstance(name, str) and name.strip():
+            names.append(name.strip())
+    return _clip("; ".join(names))
+
+
+def _extract_openalex(data: bytes, field_path: str) -> str:
+    """OpenAlex 파서. 계산 필드(@oa_abstract, @oa_authors)와 일반 문자열 경로를 읽는다."""
+    try:
+        document = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise LiteratureParseError(f"아티팩트를 JSON 으로 읽을 수 없습니다: {exc}") from exc
+    for suffix, reader in (("/@oa_abstract", _openalex_abstract), ("/@oa_authors", _openalex_authors)):
+        if field_path.endswith(suffix):
+            text = reader(_walk(document, field_path[: -len(suffix)]))
+            if not text:
+                raise parsers.FieldPathMissing(f"경로에 값이 없습니다: {field_path}")
+            return text
+    node = _walk(document, field_path)
+    if isinstance(node, str):
+        return _strip_markup(node)
+    raise parsers.FieldPathMissing(
+        f"경로가 문자열이 아닙니다: {field_path} ({type(node).__name__})"
+    )
+
+
+def _openalex_work(item, prefix: str) -> LiteratureWork | None:
+    """OpenAlex 작업 하나. ``prefix`` 는 아티팩트 안의 경로 앞부분(단건은 빈 문자열)."""
+    if not isinstance(item, dict):
+        return None
+    raw_doi = str(item.get("doi") or "").strip()
+    if not raw_doi:
+        # DOI 가 없으면 다른 채널의 후보와 맞출 키가 없다(Europe PMC 와 같은 규칙).
+        return None
+    from .literature_client import LiteratureError, normalize_doi
+
+    try:
+        doi = normalize_doi(raw_doi)
+    except LiteratureError:
+        return None
+
+    paths: dict = {}
+    values: dict = {}
+    title = item.get("display_name")
+    if isinstance(title, str) and title.strip():
+        values["title"] = _clip(title)
+        paths["title"] = f"{prefix}/display_name"
+    abstract = _openalex_abstract(item)
+    if abstract:
+        values["abstract"] = abstract
+        paths["abstract"] = f"{prefix}/@oa_abstract"
+    authors = _openalex_authors(item)
+    if authors:
+        values["authors"] = authors
+        paths["authors"] = f"{prefix}/@oa_authors"
+    location = item.get("primary_location")
+    source = location.get("source") if isinstance(location, dict) else None
+    container = source.get("display_name") if isinstance(source, dict) else None
+    if isinstance(container, str) and container.strip():
+        values["container"] = _clip(container)
+        paths["container"] = f"{prefix}/primary_location/source/display_name"
+    published = item.get("publication_date")
+    if isinstance(published, str) and published.strip():
+        values["publication_date"] = published.strip()
+        paths["publication_date"] = f"{prefix}/publication_date"
+    return LiteratureWork(
+        doi=doi,
+        source="openalex",
+        title=values.get("title", ""),
+        abstract=values.get("abstract", ""),
+        authors=values.get("authors", ""),
+        container=values.get("container", ""),
+        publication_date=values.get("publication_date", ""),
+        url=f"https://doi.org/{doi}",
+        paths=paths,
+    )
+
+
+def read_openalex_work(body: bytes) -> LiteratureWork | None:
+    """단건 조회 응답(``/works/<doi>``)을 읽는다."""
+    return _openalex_work(_load(body), "")
+
+
+def read_openalex_results(body: bytes) -> list:
+    """검색 응답(``/works?search=...``)의 결과 목록을 읽는다."""
+    results = _load(body).get("results")
+    if not isinstance(results, list):
+        return []
+    works = []
+    for position, item in enumerate(results):
+        work = _openalex_work(item, f"results/{position}")
+        if work is not None:
+            works.append(work)
+    return works
+
+
 def _load(body: bytes) -> dict:
     try:
         document = json.loads((body or b"").decode("utf-8"))
@@ -349,7 +481,28 @@ def register() -> None:
     global _REGISTERED
     if _REGISTERED:
         return
+    # 등록은 프로세스당 한 번이다. 이 확인보다 앞에서 부르면 두 번째 백엔드
+    # 생성(MCP 서버의 도구 상태 확인)부터 "이미 등록된 파서" 오류로 채널이 멈춘다.
+    from .arxiv_backend import register as register_arxiv
+    register_arxiv()
     parsers.register_parser(PARSER_ID, PARSER_VERSION, _extract)
+    parsers.register_parser(OPENALEX_PARSER_ID, OPENALEX_PARSER_VERSION, _extract_openalex)
+    parsers.register_profile(
+        parsers.SourceProfile(
+            profile_id=PROFILE_OPENALEX_JSON,
+            parser_id=OPENALEX_PARSER_ID,
+            parser_version=OPENALEX_PARSER_VERSION,
+            source_kind=SOURCE_NORMALIZED,
+            translation_state=TRANSLATION_UNKNOWN,
+            language="",
+            raw_capable=False,
+            note=(
+                "OpenAlex 집계 레코드. 초록은 단어 위치 색인에서 복원한 문장이라 "
+                "구두점·줄바꿈이 원문과 다를 수 있고, 논문 원문(PDF)의 발췌라는 "
+                "보증은 없다."
+            ),
+        )
+    )
     for profile_id, note in (
         (
             PROFILE_CROSSREF_JSON,

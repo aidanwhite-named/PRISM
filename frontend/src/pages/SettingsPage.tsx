@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
 import { api } from "../lib/api";
 import { isLogoutSession } from "../lib/types";
@@ -61,6 +62,193 @@ function blockedDetail(p: ProviderInfo): string {
   return "사용할 수 없습니다. 아래 상세를 확인하십시오.";
 }
 
+type ProviderMap = Record<string, string>;
+
+/** 실행 도구 · 모델 · 추론강도 한 벌. 구성대비 분석과 유사문헌 검색이 각자 쓴다.
+ *
+ *  inheritLabel 이 있으면 빈 도구 = 「다른 쪽 설정을 따른다」이고, 그때는 모델과
+ *  추론강도를 고르지 않는다 — 따르는 쪽의 값이 그대로 쓰이기 때문이다.
+ */
+function ToolFields({
+  idPrefix,
+  title,
+  providers,
+  provider,
+  onProviderChange,
+  models,
+  setModels,
+  efforts,
+  setEfforts,
+  inheritLabel,
+  searchProvider,
+}: {
+  idPrefix: string;
+  title: string;
+  providers: ProviderInfo[];
+  provider: string;
+  onProviderChange: (next: string) => void;
+  models: ProviderMap;
+  setModels: Dispatch<SetStateAction<ProviderMap>>;
+  efforts: ProviderMap;
+  setEfforts: Dispatch<SetStateAction<ProviderMap>>;
+  inheritLabel?: string;
+  /** 검색에 실제로 쓰일 도구. 웹 검색 도구가 없으면 경고한다. */
+  searchProvider?: string;
+}) {
+  const inherits = Boolean(inheritLabel) && !provider;
+  const selectedProvider = providers.find((p) => p.provider === provider);
+  const modelOptions = Array.isArray(selectedProvider?.capabilities.models)
+    ? (selectedProvider.capabilities.models as string[])
+    : [];
+  const selectedModel = modelOptions.includes(models[provider])
+    ? models[provider]
+    : "";
+  const providerEffortOptions = Array.isArray(
+    selectedProvider?.capabilities.reasoning_efforts,
+  )
+    ? (selectedProvider.capabilities.reasoning_efforts as string[])
+    : [];
+  const effortsByModelValue =
+    selectedProvider?.capabilities.reasoning_efforts_by_model;
+  const effortsByModel =
+    effortsByModelValue &&
+    typeof effortsByModelValue === "object" &&
+    !Array.isArray(effortsByModelValue)
+      ? (effortsByModelValue as Record<string, string[]>)
+      : {};
+  const defaultsByModelValue =
+    selectedProvider?.capabilities.reasoning_defaults_by_model;
+  const defaultsByModel =
+    defaultsByModelValue &&
+    typeof defaultsByModelValue === "object" &&
+    !Array.isArray(defaultsByModelValue)
+      ? (defaultsByModelValue as Record<string, string>)
+      : {};
+  const effortOptionsForModel = (model: string) => {
+    const options = effortsByModel[model];
+    return Array.isArray(options) ? options : providerEffortOptions;
+  };
+  const effortOptions = effortOptionsForModel(selectedModel);
+  const selectedEffort = effortOptions.includes(efforts[provider])
+    ? efforts[provider]
+    : "";
+  const modelDefaultEffort = defaultsByModel[selectedModel] ?? "";
+  const searchTool =
+    searchProvider !== undefined
+      ? providers.find((p) => p.provider === searchProvider)
+      : undefined;
+
+  return (
+    <>
+      <div className="field">
+        <label htmlFor={`${idPrefix}-provider`}>AI 실행 도구 (Provider)</label>
+        <select
+          id={`${idPrefix}-provider`}
+          aria-label={`${title} 실행 도구`}
+          value={provider}
+          onChange={(e) => onProviderChange(e.target.value)}
+        >
+          <option value="">{inheritLabel ?? "지정 안 함 (실행 불가)"}</option>
+          {providers.map((p) => (
+            <option key={p.provider} value={p.provider}>
+              {p.display_name}
+              {p.usable ? "" : ` · ${blockedReason(p)}`}
+            </option>
+          ))}
+        </select>
+        {!provider && !inheritLabel && (
+          <span className="hint" style={{ color: "var(--danger)" }}>
+            AI 실행 도구를 지정하지 않으면 {title}을 시작할 수 없습니다. 실행
+            화면은 여기에서 저장한 기본값을 사용합니다.
+          </span>
+        )}
+        {inherits && (
+          <span className="hint">
+            구성대비 분석에서 고른 도구·모델·추론강도를 그대로 씁니다.
+          </span>
+        )}
+        {selectedProvider && !selectedProvider.usable && (
+          <span className="hint" style={{ color: "var(--danger)" }}>
+            {blockedDetail(selectedProvider)}
+          </span>
+        )}
+        {searchTool && searchTool.capabilities.web_search !== true && (
+          <span className="hint" style={{ color: "var(--danger)" }}>
+            {searchTool.display_name}는 PRISM이 확인한 웹 검색 도구를 제공하지
+            않아 유사문헌 검색을 실행할 수 없습니다.
+          </span>
+        )}
+      </div>
+      {!inherits && (
+        <div className="field">
+          <label htmlFor={`${idPrefix}-model`}>모델</label>
+          <select
+            id={`${idPrefix}-model`}
+            aria-label={`${title} 모델`}
+            value={selectedModel}
+            onChange={(e) => {
+              const nextModel = e.target.value;
+              setModels((current) => {
+                const next = { ...current };
+                if (nextModel) next[provider] = nextModel;
+                else delete next[provider];
+                return next;
+              });
+              const supportedEfforts = effortOptionsForModel(nextModel);
+              setEfforts((current) => {
+                const saved = current[provider];
+                if (!saved || supportedEfforts.includes(saved)) return current;
+                const next = { ...current };
+                delete next[provider];
+                return next;
+              });
+            }}
+          >
+            <option value="">CLI 기본 모델</option>
+            {modelOptions.map((model) => (
+              <option key={model} value={model}>{model}</option>
+            ))}
+          </select>
+          <span className="hint">
+            {modelOptions.length > 0
+              ? `${modelOptions.length}개 모델을 선택할 수 있습니다.`
+              : "모델 목록을 확인할 수 없습니다."}
+          </span>
+        </div>
+      )}
+      {!inherits && effortOptions.length > 0 && (
+        <div className="field">
+          <label htmlFor={`${idPrefix}-effort`}>추론강도</label>
+          <select
+            id={`${idPrefix}-effort`}
+            aria-label={`${title} 추론강도`}
+            value={selectedEffort}
+            onChange={(e) =>
+              setEfforts((current) => {
+                const next = { ...current };
+                if (e.target.value) next[provider] = e.target.value;
+                else delete next[provider];
+                return next;
+              })
+            }
+          >
+            <option value="">모델 기본값</option>
+            {effortOptions.map((level) => (
+              <option key={level} value={level}>{level}</option>
+            ))}
+          </select>
+          <span className="hint">
+            비워 두면 PRISM 이 아무 것도 넘기지 않고 모델 기본값
+            {modelDefaultEffort ? `(${modelDefaultEffort})` : ""}을 씁니다.
+            선택값은 Codex CLI의 model_reasoning_effort로 전달됩니다. 모델을
+            바꾸면 지원하지 않는 기존 단계는 자동으로 해제됩니다.
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
@@ -82,6 +270,10 @@ export default function SettingsPage() {
   const [reasoningEffort, setReasoningEffort] = useState<Record<string, string>>(
     {},
   );
+  // 유사문헌 검색 전용. 빈 도구 = 구성대비 분석과 같은 도구·모델·추론강도.
+  const [searchProvider, setSearchProvider] = useState("");
+  const [searchModels, setSearchModels] = useState<Record<string, string>>({});
+  const [searchEfforts, setSearchEfforts] = useState<Record<string, string>>({});
   const [loginProvider, setLoginProvider] = useState<ProviderInfo | null>(null);
   const [loginSession, setLoginSession] = useState<ProviderLoginSession | null>(null);
   const [loginStarting, setLoginStarting] = useState(false);
@@ -108,6 +300,10 @@ export default function SettingsPage() {
   const [epoSecret, setEpoSecret] = useState("");
   const [epoChecking, setEpoChecking] = useState(false);
   const [epoCheck, setEpoCheck] = useState<CredentialCheck | null>(null);
+  // OpenAlex 키 초안. EPO Secret 과 같은 이유로 저장된 값에서 채우지 않는다.
+  const [openalexKey, setOpenalexKey] = useState("");
+  const [openalexChecking, setOpenalexChecking] = useState(false);
+  const [openalexCheck, setOpenalexCheck] = useState<CredentialCheck | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -132,6 +328,9 @@ export default function SettingsPage() {
         setDefaultProvider(s.values.default_provider ?? "agy");
         setDefaultModels(s.values.default_models ?? {});
         setReasoningEffort(s.values.reasoning_effort ?? {});
+        setSearchProvider(s.values.search_provider ?? "");
+        setSearchModels(s.values.search_models ?? {});
+        setSearchEfforts(s.values.search_reasoning_effort ?? {});
         setEpoKey(s.values.epo_consumer_key ?? "");
         setLiteratureEmail(s.values.literature_contact_email ?? "");
       })
@@ -280,6 +479,30 @@ export default function SettingsPage() {
     }
   };
 
+  const saveOpenalexKey = async (value: string, done: string) => {
+    try {
+      const updated = await api.updateSettings({ literature_openalex_api_key: value });
+      setSettings(updated);
+      setOpenalexCheck(null);
+      setOpenalexKey("");
+      notify(done);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const checkOpenalex = async () => {
+    setOpenalexChecking(true);
+    setError("");
+    try {
+      setOpenalexCheck(await api.checkOpenAlex());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setOpenalexChecking(false);
+    }
+  };
+
   const checkEpo = async () => {
     setEpoChecking(true);
     setError("");
@@ -292,14 +515,30 @@ export default function SettingsPage() {
     }
   };
 
-  const saveExecutionDefaults = async () => {
+  // 프롬프트와 실행 도구는 카드가 따로라 저장도 따로 한다. 한쪽 카드의 저장
+  // 버튼이 다른 카드에서 고치다 만 값을 함께 보내면 안 된다.
+  const savePromptDefaults = async () => {
     try {
       const updated = await api.updateSettings({
         default_prompt_id: defaultPromptId,
         default_search_prompt_id: defaultSearchPromptId,
+      });
+      setSettings(updated);
+      notify("기본 프롬프트를 저장했습니다.");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const saveExecutionDefaults = async () => {
+    try {
+      const updated = await api.updateSettings({
         default_provider: defaultProvider,
         default_models: defaultModels,
         reasoning_effort: reasoningEffort,
+        search_provider: searchProvider,
+        search_models: searchModels,
+        search_reasoning_effort: searchEfforts,
       });
       setSettings(updated);
       notify("실행 기본 설정을 저장했습니다.");
@@ -490,46 +729,11 @@ export default function SettingsPage() {
   const agyPermissions = settings.agy_permissions;
   // Secret 은 values 로 내려오지 않는다. 저장 여부의 근거는 이쪽뿐이다.
   const epoSecretSaved = settings.secrets_set?.epo_consumer_secret === true;
+  const openalexKeySaved =
+    settings.secrets_set?.literature_openalex_api_key === true;
   // 사용량은 백엔드가 한도까지 계산해서 준다. 화면이 다시 계산하면 경고 문구와
   // 표의 숫자가 어긋난다.
   const epoQuota = settings.epo_quota ?? {};
-  const selectedProvider = providers.find((p) => p.provider === defaultProvider);
-  const modelOptions = Array.isArray(selectedProvider?.capabilities.models)
-    ? selectedProvider.capabilities.models
-    : [];
-  const selectedModel = modelOptions.includes(defaultModels[defaultProvider])
-    ? defaultModels[defaultProvider]
-    : "";
-  const providerEffortOptions = Array.isArray(
-    selectedProvider?.capabilities.reasoning_efforts,
-  )
-    ? (selectedProvider.capabilities.reasoning_efforts as string[])
-    : [];
-  const effortsByModelValue =
-    selectedProvider?.capabilities.reasoning_efforts_by_model;
-  const effortsByModel =
-    effortsByModelValue &&
-    typeof effortsByModelValue === "object" &&
-    !Array.isArray(effortsByModelValue)
-      ? (effortsByModelValue as Record<string, string[]>)
-      : {};
-  const defaultsByModelValue =
-    selectedProvider?.capabilities.reasoning_defaults_by_model;
-  const defaultsByModel =
-    defaultsByModelValue &&
-    typeof defaultsByModelValue === "object" &&
-    !Array.isArray(defaultsByModelValue)
-      ? (defaultsByModelValue as Record<string, string>)
-      : {};
-  const effortOptionsForModel = (model: string) => {
-    const modelOptions = effortsByModel[model];
-    return Array.isArray(modelOptions) ? modelOptions : providerEffortOptions;
-  };
-  const effortOptions = effortOptionsForModel(selectedModel);
-  const selectedEffort = effortOptions.includes(reasoningEffort[defaultProvider])
-    ? reasoningEffort[defaultProvider]
-    : "";
-  const modelDefaultEffort = defaultsByModel[selectedModel] ?? "";
 
   return (
     <div className="page page-settings">
@@ -550,138 +754,43 @@ export default function SettingsPage() {
       ))}
 
       <div className="card settings-defaults">
-        <h2>실행 기본 설정</h2>
+        <h2>AI 실행 도구</h2>
         <p className="faint" style={{ marginTop: -6 }}>
-          실행 화면은 아래 설정을 그대로 사용합니다.
+          작업 종류마다 실행 도구·모델·추론강도를 따로 정합니다. 실행 화면은 이
+          값을 그대로 사용합니다.
         </p>
-        <div className="card-row">
-          <div className="field">
-            <label htmlFor="default-prompt">기본 분석 프롬프트</label>
-            <select
-              id="default-prompt"
-              value={defaultPromptId}
-              onChange={(e) => setDefaultPromptId(e.target.value)}
-            >
-                <option value="">최근 활성 분석 프롬프트 자동 선택</option>
-              {prompts.map((prompt) => (
-                <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
-                  {prompt.name}{prompt.enabled ? "" : " · 비활성"}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="default-search-prompt">기본 검색 전략 프롬프트</label>
-            <select
-              id="default-search-prompt"
-              value={defaultSearchPromptId}
-              onChange={(e) => setDefaultSearchPromptId(e.target.value)}
-            >
-              <option value="">기본 제공 검색 전략 사용</option>
-              {searchPrompts.map((prompt) => (
-                <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
-                  {prompt.name}
-                  {prompt.enabled ? "" : " · 비활성"}
-                </option>
-              ))}
-            </select>
-            <span className="hint">
-              검색 화면이 처음 고르는 전략입니다. 실행마다 화면에서 바꿀 수
-              있으며, 검색 실행·감사·보고서 계약은 어느 전략을 골라도 같습니다.
-            </span>
-          </div>
-          <div className="field">
-            <label htmlFor="default-provider">AI 실행 도구 (Provider)</label>
-            <select
-              id="default-provider"
-              value={defaultProvider}
-              onChange={(e) => setDefaultProvider(e.target.value)}
-            >
-              <option value="">지정 안 함 (실행 불가)</option>
-              {providers.map((provider) => (
-                <option key={provider.provider} value={provider.provider}>
-                  {provider.display_name}
-                  {provider.usable ? "" : ` · ${blockedReason(provider)}`}
-                </option>
-              ))}
-            </select>
-            {!defaultProvider && (
-              <span className="hint" style={{ color: "var(--danger)" }}>
-                AI 실행 도구를 지정하지 않으면 분석을 시작할 수 없습니다. 실행
-                화면은 여기에서 저장한 기본값을 사용합니다.
-              </span>
-            )}
-            {selectedProvider && !selectedProvider.usable && (
-              <span className="hint" style={{ color: "var(--danger)" }}>
-                {blockedDetail(selectedProvider)}
-              </span>
-            )}
-          </div>
-          <div className="field">
-            <label htmlFor="default-model">모델</label>
-            <select
-              id="default-model"
-              value={selectedModel}
-              onChange={(e) => {
-                const nextModel = e.target.value;
-                setDefaultModels((current) => {
-                  const next = { ...current };
-                  if (nextModel) next[defaultProvider] = nextModel;
-                  else delete next[defaultProvider];
-                  return next;
-                });
-                const supportedEfforts = effortOptionsForModel(nextModel);
-                setReasoningEffort((current) => {
-                  const saved = current[defaultProvider];
-                  if (!saved || supportedEfforts.includes(saved)) return current;
-                  const next = { ...current };
-                  delete next[defaultProvider];
-                  return next;
-                });
-              }}
-            >
-              <option value="">CLI 기본 모델</option>
-              {modelOptions.map((model) => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
-            <span className="hint">
-              {modelOptions.length > 0
-                ? `${modelOptions.length}개 모델을 선택할 수 있습니다.`
-                : "모델 목록을 확인할 수 없습니다."}
-            </span>
-          </div>
-          {effortOptions.length > 0 && (
-            <div className="field">
-              <label htmlFor="reasoning-effort">추론강도</label>
-              <select
-                id="reasoning-effort"
-                value={selectedEffort}
-                onChange={(e) =>
-                  setReasoningEffort((current) => {
-                    const next = { ...current };
-                    if (e.target.value) next[defaultProvider] = e.target.value;
-                    else delete next[defaultProvider];
-                    return next;
-                  })
-                }
-              >
-                <option value="">모델 기본값</option>
-                {effortOptions.map((level) => (
-                  <option key={level} value={level}>{level}</option>
-                ))}
-              </select>
-              <span className="hint">
-                비워 두면 PRISM 이 아무 것도 넘기지 않고 모델 기본값
-                {modelDefaultEffort ? `(${modelDefaultEffort})` : ""}을 씁니다.
-                선택값은 Codex CLI의 model_reasoning_effort로 전달됩니다. 모델을
-                바꾸면 지원하지 않는 기존 단계는 자동으로 해제됩니다.
-              </span>
-            </div>
-          )}
+        <h3 style={{ margin: "18px 0 4px", fontSize: 13 }}>구성대비 분석</h3>
+        <div className="card-row settings-tool-analysis">
+          <ToolFields
+            idPrefix="analysis"
+            title="구성대비 분석"
+            providers={providers}
+            provider={defaultProvider}
+            onProviderChange={setDefaultProvider}
+            models={defaultModels}
+            setModels={setDefaultModels}
+            efforts={reasoningEffort}
+            setEfforts={setReasoningEffort}
+          />
+        </div>
+        <h3 style={{ margin: "18px 0 4px", fontSize: 13 }}>유사문헌 검색</h3>
+        <div className="card-row settings-tool-search">
+          <ToolFields
+            idPrefix="search"
+            title="유사문헌 검색"
+            providers={providers}
+            provider={searchProvider}
+            onProviderChange={setSearchProvider}
+            models={searchModels}
+            setModels={setSearchModels}
+            efforts={searchEfforts}
+            setEfforts={setSearchEfforts}
+            inheritLabel="구성대비 분석과 같은 도구"
+            searchProvider={searchProvider || defaultProvider}
+          />
         </div>
         <button className="btn primary" onClick={saveExecutionDefaults}>
-          실행 기본 설정 저장
+          실행 도구 저장
         </button>
       </div>
 
@@ -912,13 +1021,14 @@ export default function SettingsPage() {
       </div>
 
       <div className="card settings-literature">
-        <h2>비특허문헌 검색 연동 (Crossref · Europe PMC)</h2>
+        <h2>비특허문헌 검색 연동 (Crossref · Europe PMC · OpenAlex)</h2>
         <p className="muted settings-integration-copy">
-          선택한 LLM이 필요할 때 Crossref·Europe PMC 도구를 호출합니다.
+          선택한 LLM이 필요할 때 Crossref·Europe PMC·OpenAlex 도구를 호출합니다.
           PRISM이 논문 후보를 독립 검색하거나 최종 목록에 추가하지 않습니다. 웹 검색은
           결과를 요약문과 익명 링크로만 돌려주어 논문을 식별하지 못하는 경우가
           있습니다. 등록 서지에 초록이 있으면 발행사 사이트를 열지 않고 받을 수
-          있습니다. 초록 제공 여부는 문헌마다 다르며, 자격증명은 필요하지 않습니다.
+          있습니다. 초록 제공 여부는 문헌마다 다릅니다. Crossref·Europe PMC는
+          자격증명이 필요 없고, OpenAlex는 API 키가 있으면 일일 한도가 커집니다.
         </p>
         <label className="checkbox">
           <input
@@ -955,6 +1065,77 @@ export default function SettingsPage() {
                 연락처 저장
               </button>
             </div>
+
+            <div className="field">
+              <label htmlFor="openalex-api-key">
+                OpenAlex API Key{" "}
+                <span
+                  className={`pill ${openalexKeySaved ? "ok" : "neutral"}`}
+                  style={{ marginLeft: 6 }}
+                >
+                  {openalexKeySaved ? "저장됨" : "미설정"}
+                </span>
+              </label>
+              <div className="btn-row">
+                <input
+                  id="openalex-api-key"
+                  type="password"
+                  value={openalexKey}
+                  onChange={(e) => setOpenalexKey(e.target.value)}
+                  placeholder={
+                    openalexKeySaved
+                      ? "저장되어 있습니다. 바꾸려면 새 값을 입력하십시오."
+                      : "openalex.org/settings/api 에서 발급한 API Key"
+                  }
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  style={{ flex: "1 1 320px", minWidth: 0 }}
+                />
+                <button
+                  className="btn small"
+                  disabled={!openalexKey.trim()}
+                  onClick={() =>
+                    saveOpenalexKey(openalexKey.trim(), "OpenAlex API Key 를 저장했습니다.")
+                  }
+                >
+                  저장
+                </button>
+                <button
+                  className="btn small"
+                  disabled={!openalexKeySaved}
+                  onClick={() => saveOpenalexKey("", "OpenAlex API Key 를 지웠습니다.")}
+                >
+                  지우기
+                </button>
+              </div>
+              <div className="hint">
+                키 없이도 조회되지만 무료 한도가 하루 $0.10 로 작습니다. 키가 있으면
+                하루 $1 까지 무료입니다(DOI 조회 무료, 검색 1,000회에 $1). 키는
+                화면에 다시 표시되지 않습니다.
+              </div>
+            </div>
+
+            <div className="btn-row">
+              <button
+                className="btn small"
+                disabled={openalexChecking}
+                onClick={checkOpenalex}
+              >
+                {openalexChecking ? "확인 중…" : "OpenAlex 연결 테스트"}
+              </button>
+              <span className="hint">
+                DOI 1건을 무료로 조회해 확인하며, 받은 문헌은 저장하지 않습니다.
+              </span>
+            </div>
+
+            {openalexCheck && (
+              <div
+                className={`notice ${openalexCheck.ok ? "ok" : "danger"}`}
+                style={{ marginTop: 10 }}
+              >
+                {openalexCheck.detail}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -973,10 +1154,15 @@ export default function SettingsPage() {
         <p className="muted settings-integration-copy">
           agy 는 승인 창을 띄울 수 없는 실행에서 허용 목록에 없는 주소를 자동으로
           거부하고, <b>그 자리에서 실행 전체를 빈 응답으로 종료합니다.</b> 이미
-          끝난 검색 결과와 감사 블록까지 함께 사라집니다. 그래서 PRISM 은 논문
-          출처로 자주 필요한 호스트를 <code>permissions.allow</code> 에 넣어
-          둡니다. 매 검색 실행은 이 목록을 그대로 읽어 모델에게 "지금 열 수 있는
-          주소"로 알려줍니다.
+          끝난 검색 결과와 감사 블록까지 함께 사라집니다. 그래서 PRISM 은{" "}
+          <code>permissions.allow</code> 에 <code>read_url(*)</code> 를 넣어
+          Codex·Claude 와 같이 어떤 주소든 열 수 있게 합니다. 이 규칙은 페이지
+          열람 도구에만 적용되고 명령 실행·파일 쓰기의 승인은 그대로입니다. 연
+          주소는 실행 기록의 감사 블록에 남습니다.
+        </p>
+        <p className="muted settings-integration-copy">
+          이 파일은 agy <b>전역</b> 설정이라 PRISM 밖에서 agy 를 쓸 때도 같은
+          규칙이 적용됩니다.
         </p>
         <p className="muted settings-integration-copy">
           <b>자동 적용은 설치당 한 번뿐입니다.</b> 그 뒤로 PRISM 은 이 파일을 읽기만
@@ -984,8 +1170,7 @@ export default function SettingsPage() {
           지운 것은 그러기로 한 선택이고, 프로그램이 되살릴 일이 아니기 때문입니다.
           나중에 권장 목록이 늘어나도 <b>그때 새로 추가된 호스트만</b> 넣습니다.
           지우신 항목은 그대로 둡니다. 전체 목록을 다시 넣는 유일한 방법이 위
-          버튼입니다. 어느 경우에도 기존 항목을 덮어쓰지 않고,{" "}
-          <code>read_url(*)</code> 처럼 범위를 넓히는 규칙은 만들지 않습니다.
+          버튼입니다. 어느 경우에도 기존 항목을 덮어쓰지 않습니다.
         </p>
         {agyPermissions ? (
           <>
@@ -1031,13 +1216,20 @@ export default function SettingsPage() {
                     누르십시오.
                   </div>
                 )}
-                {agyPermissions.wildcard && (
-                  <div className="notice danger">
-                    <strong>read_url(*) 가 들어 있습니다</strong>
+                {agyPermissions.wildcard ? (
+                  <div className="notice ok">
+                    <strong>모든 주소 열람 허용 (read_url(*))</strong>
                     <div>
-                      모든 주소의 열람이 허용된 상태입니다. PRISM 이 넣은 값이
-                      아니며 지우지도 않았습니다. 어떤 페이지를 열었는지 사후에
-                      가려낼 수 없으므로 직접 확인하십시오.
+                      목록 밖 주소 때문에 검색 실행이 종료되지 않습니다.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="notice warn">
+                    <strong>read_url(*) 가 없습니다</strong>
+                    <div>
+                      아래 호스트만 열 수 있고, 목록 밖 주소를 열려고 하면 실행
+                      전체가 종료됩니다. 넣으려면 위의 <b>권장 목록 다시 적용</b>을
+                      누르십시오.
                     </div>
                   </div>
                 )}
@@ -1330,35 +1522,86 @@ export default function SettingsPage() {
         />
       </div>
 
-      <div className="card settings-storage">
-        <h2>저장 위치와 실행 환경</h2>
-        <div className="table-scroll">
-          <table>
-            <tbody>
-              <tr>
-                <th>데이터 폴더</th>
-                <td className="break mono-text">{settings.data_dir}</td>
-              </tr>
-              <tr>
-                <th>실행 폴더</th>
-                <td className="break mono-text">{settings.runs_dir}</td>
-              </tr>
-              <tr>
-                <th>자식 프로세스 환경변수</th>
-                <td>
-                  allowlist {settings.env_filtering.allowlist.length}개만 전달, 그 외{" "}
-                  {settings.env_filtering.removed_count}개 제거
-                  <div className="faint">
-                    차단 접두사: {settings.env_filtering.blocked_prefixes.join(", ")}
-                  </div>
-                  <div className="faint">
-                    PRISM 을 Claude Code 세션 안에서 실행할 때 부모의 ANTHROPIC_* /
-                    CLAUDE_* 변수가 자식 CLI 로 새어 들어가 인증이 깨지는 것을 막습니다.
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      {/* 안전 지시문 카드 오른쪽 한 칸에 두 카드를 세로로 쌓는다. 그리드 행을
+          나눠 쓰면 왼쪽 카드 높이에 따라 두 카드 사이가 벌어진다. */}
+      <div className="settings-side">
+        <div className="card settings-storage">
+          <h2>저장 위치와 실행 환경</h2>
+          <div className="table-scroll">
+            <table>
+              <tbody>
+                <tr>
+                  <th>데이터 폴더</th>
+                  <td className="break mono-text">{settings.data_dir}</td>
+                </tr>
+                <tr>
+                  <th>실행 폴더</th>
+                  <td className="break mono-text">{settings.runs_dir}</td>
+                </tr>
+                <tr>
+                  <th>자식 프로세스 환경변수</th>
+                  <td>
+                    allowlist {settings.env_filtering.allowlist.length}개만 전달, 그 외{" "}
+                    {settings.env_filtering.removed_count}개 제거
+                    <div className="faint">
+                      차단 접두사: {settings.env_filtering.blocked_prefixes.join(", ")}
+                    </div>
+                    <div className="faint">
+                      PRISM 을 Claude Code 세션 안에서 실행할 때 부모의 ANTHROPIC_* /
+                      CLAUDE_* 변수가 자식 CLI 로 새어 들어가 인증이 깨지는 것을 막습니다.
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card settings-prompt-defaults">
+          <div className="split" style={{ marginBottom: 12 }}>
+            <h2 style={{ margin: 0 }}>기본 프롬프트</h2>
+            <button className="btn primary small" onClick={savePromptDefaults}>
+              기본 프롬프트 저장
+            </button>
+          </div>
+          <p className="faint" style={{ marginTop: -6 }}>
+            실행 화면이 처음 고르는 프롬프트입니다.
+          </p>
+          <div className="field">
+            <label htmlFor="default-prompt">기본 분석 프롬프트</label>
+            <select
+              id="default-prompt"
+              value={defaultPromptId}
+              onChange={(e) => setDefaultPromptId(e.target.value)}
+            >
+              <option value="">최근 활성 분석 프롬프트 자동 선택</option>
+              {prompts.map((prompt) => (
+                <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
+                  {prompt.name}{prompt.enabled ? "" : " · 비활성"}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="default-search-prompt">기본 검색 전략 프롬프트</label>
+            <select
+              id="default-search-prompt"
+              value={defaultSearchPromptId}
+              onChange={(e) => setDefaultSearchPromptId(e.target.value)}
+            >
+              <option value="">기본 제공 검색 전략 사용</option>
+              {searchPrompts.map((prompt) => (
+                <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
+                  {prompt.name}
+                  {prompt.enabled ? "" : " · 비활성"}
+                </option>
+              ))}
+            </select>
+            <span className="hint">
+              검색 화면이 처음 고르는 전략입니다. 실행마다 화면에서 바꿀 수
+              있으며, 검색 실행·감사·보고서 계약은 어느 전략을 골라도 같습니다.
+            </span>
+          </div>
         </div>
       </div>
 

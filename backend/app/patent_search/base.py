@@ -171,6 +171,7 @@ class PatentSearchResponse:
     # 문장으로만 남으면, 호출부는 "결과 0건"과 "전부 실패"를 구분하지 못하고
     # 채널 상태를 성공으로 적게 된다. 사람이 읽는 문장과 다른 축으로 둔다.
     failed_sources: tuple[str, ...] = ()
+    source_stats: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)

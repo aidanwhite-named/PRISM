@@ -53,6 +53,12 @@ def is_linkable_url(raw) -> bool:
 
 def identity_key(number: str = "", doi: str = "") -> str:
     """Exact publication identity: preserve country and kind code, never family."""
+    # arXiv:ID·arxiv.org URL·버전 붙은 DOI 를 한 문헌으로 센다(literature_client 의 규칙).
+    from .patent_search.literature_client import ARXIV_DOI_PREFIX, arxiv_identity
+
+    arxiv = arxiv_identity(doi) if doi else arxiv_identity(number)
+    if arxiv is not None:
+        return "doi:" + ARXIV_DOI_PREFIX + arxiv[0]
     if doi:
         text = str(doi).strip().lower()
         for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
@@ -80,13 +86,36 @@ def parse_payload(text: str) -> dict:
 
 def parse(text: str, observed_section=None, **_context) -> tuple[dict, list[str]]:
     value = parse_payload(text)
-    for key in ("term_expansions", "rounds", "access_failures"):
+    for key in ("term_expansions", "rounds", "access_failures", "candidate_dispositions"):
         if key in value and (not isinstance(value[key], list) or len(value[key]) > 200):
             raise SearchLogError(f"{key}는 최대 200개의 배열이어야 합니다.")
     if len(value["candidates"]) > 100:
         raise SearchLogError("최종 후보는 최대 100개입니다. 순위 절단 없이 출력 오류로 처리합니다.")
     result = {"candidates": [], "term_expansions": value.get("term_expansions", []),
               "rounds": value.get("rounds", []), "access_failures": value.get("access_failures", [])}
+    review = value.get("search_review", {})
+    if not isinstance(review, dict):
+        raise SearchLogError("search_review는 객체여야 합니다.")
+    result["search_review"] = {}
+    for key in ("stop_reason", "expansion_summary", "sampling_review"):
+        text = review.get(key, "")
+        if not isinstance(text, str) or len(text) > 10000:
+            raise SearchLogError(f"search_review.{key}는 10000자 이하 문자열이어야 합니다.")
+        result["search_review"][key] = text
+    gaps = review.get("remaining_gaps", [])
+    if not isinstance(gaps, list) or len(gaps) > 100 or any(not isinstance(x, str) or len(x) > 2000 for x in gaps):
+        raise SearchLogError("remaining_gaps는 짧은 문자열 배열이어야 합니다.")
+    result["search_review"]["remaining_gaps"] = gaps
+    result["candidate_dispositions"] = []
+    for item in value.get("candidate_dispositions", []):
+        if not isinstance(item, dict):
+            raise SearchLogError("candidate_dispositions 항목은 객체여야 합니다.")
+        clean = {key: item.get(key, "") for key in ("doc_number", "doi", "url", "reason")}
+        if any(not isinstance(x, str) or len(x) > 10000 for x in clean.values()):
+            raise SearchLogError("후보 제외 기록은 문자열 필드여야 합니다.")
+        if not clean["reason"].strip() or not any(clean[k].strip() for k in ("doc_number", "doi", "url")):
+            raise SearchLogError("후보 제외 기록에는 식별정보와 이유가 필요합니다.")
+        result["candidate_dispositions"].append(clean)
     for index, raw in enumerate(value["candidates"], 1):
         if not isinstance(raw, dict) or raw.get("group") not in (*GROUPS, None):
             raise SearchLogError(f"후보 {index}: group은 A/B/C/null이어야 합니다.")
@@ -131,33 +160,6 @@ def has_retrieval_attempt(calls, tool_uses=None, journal=None) -> bool:
         for source in ("epo", "literature", "kiwee") for action in ("search", "fetch")
     }
     return bool(names & eligible)
-
-
-def has_successful_query(calls, journal=None) -> bool:
-    """검색 **질의**가 한 건이라도 응답했는가.
-
-    has_retrieval_attempt 와 다른 질문이다. 그쪽은 "검색 계열 도구를 부르기는
-    했는가"를 보므로 URL 열람만으로도 참이 된다. 그런데 질의가 전멸한 실행에서
-    모델이 URL 을 직접 만들어 열면, 거기서 나온 후보는 검색 결과가 아니라 모델이
-    기억하고 있던 문헌이다.
-
-    실측(job 377c866d, 2026-09-12): search_web 3회가 모두 죽은 뒤 모델이
-    Google Patents 주소 5개를 스스로 만들어 열었고, 그중 하나(KR102143000B1)는
-    존재하지 않는 번호라 404 였다. 그 실행은 후보 1건짜리 "검색 결과"로
-    보고됐다. 사용자는 그것을 "이 정도밖에 없다"로 읽는다 — 실제로는 검색
-    자체가 없었는데.
-
-    성패를 모르는 호출(ok is None)은 성공 쪽으로 센다. Codex 의 web_search 는
-    완료 이벤트에 성공 신호를 싣지 않으므로, 모름을 실패로 세면 정상 실행이
-    검색 미수행으로 뒤집힌다.
-    """
-    for call in calls or []:
-        if str(call.get("name") or "") in SEARCH_TOOL_NAMES and call.get("ok") is not False:
-            return True
-    for row in journal or []:
-        if str(row.get("tool") or "").endswith("_search") and row.get("ok") is not False:
-            return True
-    return False
 
 
 def observed(calls, tool_uses=None, **_context) -> dict:
@@ -225,16 +227,15 @@ def build(*, claim_text, provider="", model="", prompt_id="", prompt_name="",
           focus_boundary_neutralized=False, template_mode="", strategy_boundary_neutralized=False,
           tool_policy_name="", allowed_tools=(), mcp_tools=(), advertised_tools_enforced=False,
           quality=None, verification_followup=None) -> dict:
-    from .search_recall import assess as assess_recall
     try:
         llm_output = parse_payload(raw_output) if raw_output else None
     except SearchLogError:
         llm_output = None
     return {
         "version": MANIFEST_VERSION, "status": "incomplete" if error else (
-            "verification_incomplete" if quality and quality.get("verification_status") != "complete" else "complete"),
+            "verification_incomplete" if quality and quality.get("verification_status") != "complete" else (
+                "search_incomplete" if quality and (quality.get("search_audit") or {}).get("status") == "incomplete" else "complete")),
         "quality": quality, "verification_followup": verification_followup,
-        "reference_retrieval": assess_recall((spec_document or {}).get("publication_number"), tool_journal or []),
         "provider": provider, "model": model, "group_definitions": dict(GROUP_DEFINITIONS),
         "input": {"claim_text": claim_text, "spec_document": spec_document, "search_focus": search_focus,
                   "claim_boundary_neutralized": claim_boundary_neutralized,

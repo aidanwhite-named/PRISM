@@ -342,7 +342,7 @@ export function RunSessionProvider({ children }: { children: ReactNode }) {
 
   // 실행이 끝나면 최종 상태를 다시 읽어 온다. 다른 메뉴에 있어도 돌아온다.
   useEffect(() => {
-    if (!streamJobId || !stream.finished) return;
+    if (!streamJobId || (!stream.finished && !stream.searchPreviewVersion)) return;
     let cancelled = false;
     api
       .getJob(streamJobId)
@@ -355,7 +355,7 @@ export function RunSessionProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [stream.finished, streamJobId]);
+  }, [stream.finished, stream.searchPreviewVersion, streamJobId]);
 
   // 새로고침 대비 저장. 타이핑마다 쓰지 않도록 조금 미룬다.
   useEffect(() => {

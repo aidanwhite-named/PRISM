@@ -211,11 +211,6 @@ export const api = {
   /** 실행 원문. "model" 은 검색 작업에서 모델이 쓴 산문(감사 자료)이다. */
   rawOutput: (id: string, which: "stdout" | "stderr" | "model") =>
     fetch(`/api/jobs/${id}/raw?which=${which}`).then((r) => r.text()),
-  /** 로컬 검색 실행의 감사 자료. 파일 원문을 그대로 받는다. */
-  retrievalArtifactUrl: (
-    id: string,
-    which: "evidence" | "manifest" | "extraction" | "trace",
-  ) => `/api/jobs/${id}/retrieval?which=${which}`,
 
   history: (params: { provider?: string; status?: string } = {}) => {
     const query = new URLSearchParams();
@@ -253,4 +248,6 @@ export const api = {
   // 않는다 — 백엔드가 저장된 값을 읽는다.
   checkEpoCredentials: () =>
     request<CredentialCheck>("/api/settings/epo/check", { method: "POST" }),
+  checkOpenAlex: () =>
+    request<CredentialCheck>("/api/settings/openalex/check", { method: "POST" }),
 };

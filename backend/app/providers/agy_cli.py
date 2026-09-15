@@ -47,7 +47,7 @@ from pathlib import Path
 
 from ..enums import AuthState
 from ..execution import process as proc
-from . import agy_permissions
+from . import agy_mcp, agy_permissions
 from .agy_stream import AgyStreamParser, build_stdin_message
 from .agy_login import run_agy_models
 from .base import (
@@ -59,6 +59,7 @@ from .base import (
     Provider,
 )
 from .env import build_child_env
+from .agy_search_compat import search_compatibility
 from .resolver import ExecutableKind, ResolvedExecutable, resolve_simple
 
 # agy 는 실행될 때마다 마지막 확인에서 15분이 지났으면 백그라운드 업데이터를
@@ -126,9 +127,13 @@ _ARTIFACT_STEPS = "steps"
 _ARTIFACT_FILE = "content.md"
 # agy 의 페이지 열람 도구. 이 이름의 호출만 산출물 경로와 대조한다.
 _FETCH_TOOL = "read_url_content"
+# 큰 MCP 결과를 agy 가 넘겨 두는 파일 이름.
+_MCP_OUTPUT_FILE = "output.txt"
 
 
-def content_artifact_step(path: str, conversation_id: str | None) -> int | None:
+def content_artifact_step(
+    path: str, conversation_id: str | None, filename: str = _ARTIFACT_FILE
+) -> int | None:
     """이 경로가 이번 대화의 read_url_content 산출물이면 그 단계 번호.
 
     아니면 None. 판정은 사전 차단이 아니라 사후 감사다 — 이 함수가 None 을
@@ -149,7 +154,7 @@ def content_artifact_step(path: str, conversation_id: str | None) -> int | None:
     conversation, marker, steps, step, name = parts[-5:]
     if marker != _ARTIFACT_MARKER or steps != _ARTIFACT_STEPS:
         return None
-    if name.casefold() != _ARTIFACT_FILE:
+    if name.casefold() != filename:
         return None
     if conversation.casefold() != conversation_id.casefold():
         return None
@@ -187,12 +192,39 @@ def audit_content_reads(state, policy) -> None:
     scoped = set(getattr(policy, "content_read_tools", ()) or ())
     if not scoped:
         return
+    mcp_tools = set(getattr(policy, "mcp_tools", ()) or ())
     for call in state.tool_calls:
         if call.get("name") not in scoped or "scope_ok" in call:
             continue
         summary = call.get("input")
         if not isinstance(summary, dict):
             summary = {}
+        # MCP 도구를 부르기 전에 agy 가 풀어 둔 도구 스키마를 읽는다(실측).
+        # 이번 실행에 허용한 prism-search 도구의 스키마만 통과시키고, 본문
+        # 열람(content_read)으로는 올리지 않는다.
+        schema_tool = agy_mcp.schema_read_tool(str(summary.get("path") or ""))
+        if schema_tool and agy_mcp.TOOL_PREFIX + schema_tool in mcp_tools:
+            call["scope_ok"] = True
+            call["scope"] = "mcp_schema"
+            continue
+        # MCP 결과가 크면 agy 는 스트림에 싣지 않고 같은 대화의
+        # steps/<n>/output.txt 에 쓴 뒤 모델이 view_file 로 읽게 한다
+        # (1.2.2 실측: 41~53 KB 검색 결과). n 이 이번 실행에서 성공한 허용
+        # prism-search 호출일 때만 통과시킨다. 원본은 PRISM 저널에 따로 있으므로
+        # 페이지 본문 열람으로 올리지 않는다.
+        output_step = content_artifact_step(
+            str(summary.get("path") or ""), state.conversation_id, _MCP_OUTPUT_FILE
+        )
+        if output_step is not None:
+            source = state.tool_calls_by_step.get(str(output_step))
+            if (source is not None and source.get("name") in mcp_tools
+                    and source.get("ok") is True):
+                call["scope_ok"] = True
+                call["scope"] = f"mcp_output:{output_step}"
+            else:
+                call["scope_ok"] = False
+                call["scope"] = "out_of_scope"
+            continue
         step = content_artifact_step(
             str(summary.get("path") or ""), state.conversation_id
         )
@@ -456,6 +488,10 @@ class AgyCliProvider(Provider):
         search_policy = (
             policy if policy is not None and policy.name == AGY_WEB_SEARCH.name else None
         )
+        if search_policy is not None and search_policy.mcp_tools:
+            # prism-search 서버 정의는 agy 전역 설정에 있고, 이 실행의 작업 폴더·
+            # 상한·기준일은 agy 가 물려주는 환경으로만 전달한다(agy_mcp 참고).
+            env.update(agy_mcp.run_env(request.mcp_servers))
         budget_exceeded = False
         content_budget_exceeded = False
         # agy 1.1.26 은 최종 result 를 보낸 뒤에도 프로세스가 남는 경우가 있다.
@@ -528,17 +564,29 @@ class AgyCliProvider(Provider):
 
         await emit("provider_start", {"provider": self.id, "message": "agy CLI 실행"})
 
-        run = await proc.run_streaming(
-            job_id=request.job_id,
-            argv=resolved.command(args),
-            cwd=request.work_dir,
-            env=env,
-            stdin_data=build_stdin_message(self.compose_message(request)),
-            on_stdout_line=on_stdout,
-            on_stderr_line=on_stderr,
-            timeout_seconds=request.timeout_seconds,
-            completion_signal=finished,
-        )
+        async with search_compatibility(
+            enabled=search_policy is not None and outcome.cli_version == "1.2.2",
+            timeout=request.timeout_seconds,
+        ) as relay:
+            if relay is not None:
+                env["CLOUD_CODE_URL"] = relay.url
+            run = await proc.run_streaming(
+                job_id=request.job_id,
+                argv=resolved.command(args),
+                cwd=request.work_dir,
+                env=env,
+                stdin_data=build_stdin_message(self.compose_message(request)),
+                on_stdout_line=on_stdout,
+                on_stderr_line=on_stderr,
+                timeout_seconds=request.timeout_seconds,
+                completion_signal=finished,
+            )
+            if relay is not None:
+                await emit("provider_compatibility", {
+                    "provider": self.id, "cli_version": outcome.cli_version,
+                    "corrected_responses": relay.corrected_responses,
+                    "removed_empty_parts": relay.removed_parts,
+                })
 
         state = parser.state
         if search_policy is not None:

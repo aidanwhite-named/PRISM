@@ -756,8 +756,15 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .page-history > .notice { grid-column: 1 / -1; }
 .page-settings > .settings-defaults { grid-column: span 7; }
 .page-settings > .settings-provider { grid-column: 1 / -1; }
-.page-settings > .settings-context { grid-column: span 7; }
-.page-settings > .settings-storage { grid-column: span 5; }
+.page-settings > .settings-context { grid-column: 1 / span 7; }
+/* 저장 위치 · 기본 프롬프트를 안전 지시문 오른쪽 한 칸에 세로로 쌓는다. */
+.page-settings > .settings-side { grid-column: 8 / span 5; min-width: 0; }
+/* 나란히 놓인 AI 실행 도구 카드와 오른쪽 칸의 아래 끝을 맞춘다. 짧은 쪽이
+   늘어나고, 오른쪽 칸에서는 기본 프롬프트 카드가 남는 높이를 채운다. */
+.page-settings > .settings-defaults,
+.page-settings > .settings-side { align-self: stretch; }
+.page-settings > .settings-side { display: flex; flex-direction: column; }
+.settings-side > .settings-prompt-defaults { flex: 1 1 auto; }
 .page-settings > .settings-limits { grid-column: 1 / -1; }
 .page-settings > .settings-run-limits,
 .page-settings > .settings-kiwee,
@@ -1604,7 +1611,7 @@ details > summary { color: var(--text-muted); font-size: 12px; }
   .page-settings > .settings-defaults,
   .page-settings > .settings-limits,
   .page-settings > .settings-context,
-  .page-settings > .settings-storage { grid-column: 1 / -1; }
+  .page-settings > .settings-side { grid-column: 1 / -1; }
   .page-prompts > .prompt-toolbar,
   .page-prompts > .prompt-library,
   .page-history > .history-filter,

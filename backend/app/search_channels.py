@@ -9,6 +9,7 @@ STATUS_LABELS = {
     "available": "사용 가능", "disabled": "연동 꺼짐",
     "not_configured": "인증 미설정", "not_implemented": "접속 미구현",
     "unsupported_transport": "이 Provider의 실행별 MCP 연결 미지원",
+    "not_registered": "agy 전역 MCP 설정에 PRISM 검색 서버 미등록",
     "unverified": "연결 미확인", "unreachable": "연결 실패",
 }
 
@@ -129,11 +130,9 @@ def web_evidence(tool_calls, tool_names, *, cli_version: str = "",
             "at": (now or datetime.now(timezone.utc)).isoformat()}
 
 
-def availability(values: dict, provider: str = "claude", *, cli_version: str = "",
-                 now: datetime | None = None) -> dict:
-    health = values.get(WEB_HEALTH_KEY)
-    record = health.get(provider) if isinstance(health, dict) else None
-    result = {"web": web_status(record, cli_version=cli_version, now=now)}
+def availability(values: dict, provider: str = "claude") -> dict:
+    result = {"web": {"status": "available", "detail": "Provider 기본 웹 도구"}}
+    registration = None
     for name in ("epo", "kiwee", "literature"):
         status = describe(values, name)
         code = "available"
@@ -143,10 +142,29 @@ def availability(values: dict, provider: str = "claude", *, cli_version: str = "
             code = "not_implemented"
         elif not status.configured:
             code = "not_configured"
+        elif provider == "agy":
+            if registration is None:
+                registration = _agy_registration()
+            if not registration.ok:
+                code = "not_registered"
+                result[name] = {"status": code, "detail": registration.detail() or STATUS_LABELS[code]}
+                continue
         elif provider not in ("claude", "codex"):
             code = "unsupported_transport"
         result[name] = {"status": code, "detail": STATUS_LABELS[code]}
     return result
+
+
+def _agy_registration():
+    # agy 는 실행별 MCP 인자가 없어 전역 설정 등록 여부로 판정한다.
+    from .providers import agy_mcp
+    return agy_mcp.read_state()
+
+
+def mcp_transport_ready(provider: str) -> bool:
+    if provider in ("claude", "codex"):
+        return True
+    return provider == "agy" and _agy_registration().ok
 
 def no_usable_channel(statuses: dict) -> bool:
     """쓸 수 있는 채널이 하나도 없는가.

@@ -51,6 +51,13 @@ def _scope(field: str) -> str:
         return prefix
     return "bibliographic"
 
+
+def _party_names(text: str) -> set[str]:
+    # Country tags and separators differ between OPS and model output.
+    text = re.sub(r"\[[A-Z]{2}\]", "", text)
+    return {normalized for part in re.split(r"[;\n]+", text)
+            if (normalized := re.sub(r"[\W_]+", "", part.casefold()))}
+
 def _matching_sources(candidate: dict, journal: list[dict], store) -> list[dict]:
     found = []
     for call in journal:
@@ -70,8 +77,6 @@ def _matching_sources(candidate: dict, journal: list[dict], store) -> list[dict]
                 check = verify_excerpt(excerpt=text, field=FieldValue(text, evidence), store=store)
                 if check.verified:
                     verified_fields[name] = {"text": text, "evidence_ref": ref}
-                    if name in record.get("truncated_fields", []):
-                        verified_fields[name]["truncated"] = True
             if verified_fields:
                 found.append({"tool": call.get("tool"), "call_id": call.get("id"),
                               "url": record.get("url", ""), "document_number": record.get("document_number"),
@@ -79,11 +84,6 @@ def _matching_sources(candidate: dict, journal: list[dict], store) -> list[dict]
     return found
 
 def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -> dict:
-    # MCP retrieval runs in another process. Register the literature re-parser
-    # here as well; otherwise a fresh web process falsely marks saved DOI
-    # evidence unresolved and needlessly asks the model to fetch it again.
-    from .patent_search import literature_parser
-    literature_parser.register()
     result = copy.deepcopy(reported)
     store = store or ArtifactStore(PATHS.evidence_dir.resolve())
     read_urls = {manifest.normalize_url(url) for url in observed.get("succeeded_fetch_urls", [])}
@@ -112,7 +112,6 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
         scope = {name: "not_requested" for name in SCOPES}
         delivered = {}
         values_by_field = {}
-        truncated_values = set()
         for source in sources:
             for name, field in source["fields"].items():
                 kind = _scope(name)
@@ -120,8 +119,6 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
                     scope[kind] = "verified"
                 delivered[_ref_key(field["evidence_ref"])] = field
                 values_by_field.setdefault(name, set()).add(field["text"])
-                if field.get("truncated"):
-                    truncated_values.add((name, field["text"]))
         # Fetch attempts are independent from the returned content. Failed or
         # missing constituents must not become document-wide 'verified'.
         for call in journal:
@@ -170,12 +167,7 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
             issues.append("publication_date_conflict")
         elif not dates:
             issues.append("publication_date_unverified")
-        # A screening excerpt and its full fetched field are compatible. Only explicitly
-        # marked excerpts can be subsumed; differing full sources remain a conflict.
-        comparable = {name: {text for text in texts if not (
-            (name, text) in truncated_values and any(other != text and other.startswith(text) for other in texts))}
-            for name, texts in values_by_field.items()}
-        if any(len(values) > 1 for field, values in comparable.items() if field != "publication_date"):
+        if any(len(values) > 1 for field, values in values_by_field.items() if field != "publication_date"):
             issues.append("source_conflict")
         titles = {text for name, values in values_by_field.items()
                   if name.split(":")[0] == "title" for text in values}
@@ -189,9 +181,11 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
         applicants = {text for name, values in values_by_field.items()
                       if name.split(":")[0] in ("applicants", "authors") for text in values}
         candidate["verified_applicants"] = sorted(applicants)
+        if not candidate.get("applicant") and len(applicants) == 1:
+            candidate["applicant"] = next(iter(applicants))
         if not applicants:
             issues.append("applicant_unverified")
-        elif normalize_title(candidate.get("applicant", "")) not in {normalize_title(text) for text in applicants}:
+        elif _party_names(candidate.get("applicant", "")) not in [_party_names(text) for text in applicants]:
             issues.append("applicant_mismatch")
         # Candidate-level excerpts without a field reference cannot be verified.
         if candidate.get("verbatim_excerpt"):

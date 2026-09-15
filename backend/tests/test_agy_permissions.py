@@ -119,15 +119,24 @@ def test_a_backup_is_written_before_the_file_changes(settings_file):
     assert json.loads(backups[0].read_text(encoding="utf-8")) == original
 
 
-def test_no_wildcard_rule_is_ever_written(settings_file):
-    """read_url(*) 를 만들지 않는다. 범위를 넓히면 감사할 수 없게 된다."""
+def test_the_recommended_list_opens_every_address(settings_file):
+    """권장 목록은 read_url(*) 를 넣는다. 목록 밖 주소 하나가 실행을 날리지 않게.
+
+    넓히는 것은 read_url 규칙뿐이다. 다른 도구의 규칙은 만들지 않는다.
+    """
     _write(settings_file, {"permissions": {"allow": []}})
 
-    agy_permissions.apply_recommended()
+    state, _ = agy_permissions.apply_recommended()
 
     rules = _read(settings_file)["permissions"]["allow"]
-    assert "read_url(*)" not in rules
-    assert all(agy_permissions.WILDCARD not in rule for rule in rules)
+    assert "read_url(*)" in rules
+    assert all(rule.startswith("read_url(") for rule in rules)
+    assert state.wildcard is True
+
+
+def test_an_existing_install_gets_only_the_wildcard_on_upgrade(settings_file):
+    """v1 까지 적용된 설치는 v2 에서 * 하나만 받는다."""
+    assert agy_permissions.hosts_since("1") == ("*",)
 
 
 def test_an_existing_wildcard_is_reported_but_not_removed(settings_file):

@@ -769,9 +769,6 @@ def assemble_job(
         "attachment_id": spec.attachment_id, "filename": spec.original_filename,
         "sha256": spec.sha256, "page_count": spec.page_count, "char_count": len(spec_text),
     }
-    if spec_document is not None:
-        from .search_recall import reference_publication
-        spec_document["publication_number"] = reference_publication(spec_text)
     return AssemblyResult(
         lanes=lanes,
         spec_document=spec_document,

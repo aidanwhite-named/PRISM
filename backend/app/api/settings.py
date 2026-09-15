@@ -91,6 +91,24 @@ def check_epo_credentials(session: Session = Depends(get_db)) -> CredentialCheck
     )
 
 
+@router.post("/openalex/check", response_model=CredentialCheckOut)
+def check_openalex(session: Session = Depends(get_db)) -> CredentialCheckOut:
+    """저장된 OpenAlex 키로 DOI 단건 조회를 한 번 한다(무료 호출).
+
+    EPO 확인과 같은 원칙이다. 키는 요청 본문이 아니라 저장된 값에서 읽고,
+    받은 문헌은 저장하지 않는다.
+    """
+    from ..patent_search import openalex_client
+
+    values = settings_service.get_all(session)
+    if not values.get(patent_search.LITERATURE_SETTING_ENABLED, False):
+        raise HTTPException(400, "비특허문헌 연동이 꺼져 있습니다.")
+    ok, detail, status = openalex_client.check_access(
+        str(values.get("literature_openalex_api_key") or "")
+    )
+    return CredentialCheckOut(ok=ok, detail=detail, http_status=status)
+
+
 @router.post("/agy-permissions/apply", response_model=SettingsOut)
 def apply_agy_permissions(session: Session = Depends(get_db)) -> SettingsOut:
     """권장 논문 출처를 agy 의 허용 목록에 다시 병합한다.

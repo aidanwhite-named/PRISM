@@ -26,14 +26,16 @@ const ISSUES: Record<string, string> = {
   applicant_unverified: "저자·출원인 대조 미확인", applicant_mismatch: "보고 저자·출원인과 보존 원문 차이",
 };
 const REASONS: Record<string, string> = {
-  unsupported_transport: "실행별 도구 연결 미지원", not_implemented: "접속 미구현",
+  unsupported_transport: "실행별 도구 연결 미지원", not_registered: "agy MCP 서버 미등록", not_implemented: "접속 미구현",
   disabled: "연동 꺼짐", not_configured: "인증 미설정", limit_exhausted: "호출·쿼터 한도 소진",
   access_failed: "조회 실패", timeout: "시간 한도 소진", rate_limited: "Provider 사용량 제한",
   cancelled: "취소됨", outcome_unknown: "호출 완료 여부 미확인",
   page_read_without_provenance: "페이지 열람 성공 · 보존 근거 대조 경로 없음",
 };
+const REVIEW_LABELS: Record<string, string> = { stop_reason: "종료 이유", expansion_summary: "확장 결과", sampling_review: "페이지 편향 보완 내역" };
 export function SearchResults({ data }: { data: SearchManifestV14 }) {
   const candidates = data.reported?.candidates ?? [];
+  const audit = data.quality?.search_audit;
   const groups = ["A", "B", "C", null] as const;
   return <div className="search-results">
     <nav className="search-group-nav" aria-label="문헌 그룹">
@@ -45,7 +47,19 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     </nav>
     <p>A/B/C는 LLM의 기술적 판단입니다. 증거 확보 수준은 별도로 표시합니다.</p>
     {data.error && <p role="alert">미완료: {data.error}</p>}
+    {data.verification_followup?.usage_complete === false && <p>토큰 사용량은 확인된 단계만 집계한 값입니다. 중단된 단계의 사용량은 포함되지 않을 수 있습니다.</p>}
     {data.status === "verification_incomplete" && <p role="alert">검색 실행 종료 · 검증 미완료</p>}
+    {audit && <section aria-label="탐색 종료 감사">
+      <p role={audit.status === "incomplete" ? "alert" : undefined}>탐색 종료 감사: {audit.status === "incomplete" ? "미완료" : "기록 확인 (충분성 판정 아님)"}</p>
+      <ul>{audit.unaccounted_fetches.map(identity => <li key={identity}>조회 후 후보·제외 사유에서 누락: {identity}</li>)}</ul>
+      {audit.missing_review_fields.length > 0 && <p>종료 근거 기록 누락: {audit.missing_review_fields.map(key => REVIEW_LABELS[key] || key).join(", ")}</p>}
+      {audit.broad_searches.length > 0 && <p>전체 결과의 일부 페이지만 확인한 넓은 EPO 검색: {audit.broad_searches.length}회</p>}
+      {audit.reported_review.stop_reason && <p>LLM 종료 이유: {audit.reported_review.stop_reason}</p>}
+      <details><summary>LLM 확장·페이지 편향 보완 기록</summary>
+        <p>{audit.reported_review.expansion_summary}</p><p>{audit.reported_review.sampling_review}</p>
+        <ul>{audit.reported_review.remaining_gaps?.map((gap, i) => <li key={i}>남은 탐색 과제: {gap}</li>)}</ul>
+      </details>
+    </section>}
     {data.quality && <>
       <p>근거 검증 후보: {data.quality.verified_candidate_count}/{data.quality.candidate_count}건. 검색의 충분성·누락 없음은 보증하지 않습니다.</p>
       {candidates.some(item => item.evidence_level === "source_page_reviewed" && !item.evidence_sources.length) &&
@@ -91,6 +105,9 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     })}</section>)}
     {data.date_filter.excluded.length > 0 && <details><summary>기준일 이후 공개로 제외된 문헌</summary>
       <pre>{JSON.stringify(data.date_filter.excluded, null, 2)}</pre></details>}
+    {!!data.reported?.candidate_dispositions?.length && <details><summary>LLM 후보 제외·통합 기록</summary>
+      <ul>{data.reported.candidate_dispositions.map((item, i) => <li key={i}>{item.doc_number || item.doi || item.url}: {item.reason}</li>)}</ul>
+    </details>}
   </div>;
 }
 export default function SearchManifestView({ job, auditOnly = false }: { job: Job; auditOnly?: boolean }) {

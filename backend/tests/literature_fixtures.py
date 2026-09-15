@@ -53,3 +53,28 @@ CROSSREF_EMPTY = (
 
 #: 결과 0건인 Europe PMC 응답.
 EUROPEPMC_EMPTY = b'{"version":"6.9","hitCount":0,"resultList":{"result":[]}}'
+
+# --- OpenAlex (2026-09-15 채취, 키 없이, select 로 필드를 줄여 받은 실제 응답) ---
+
+#: ``/works/https://doi.org/10.3390/s25103219`` 응답. 초록이 단어 위치 색인으로 온다.
+OPENALEX_WORK = _read("openalex_work.json")
+#: 목표 문헌의 OpenAlex 작업 id. 인용 확장의 기준이다.
+OPENALEX_WORK_ID = "W4410539571"
+
+#: Crossref 에는 초록이 없던 IEEE 논문. OpenAlex 에는 초록이 있다.
+IEEE_DOI = "10.1109/icdh.2012.31"
+OPENALEX_WORK_IEEE = _read("openalex_work_ieee.json")
+
+#: ``search=computer vision sensor low-power edge detection circuit`` 응답(3건).
+#: 전문 색인 검색이라 목표 문헌이 상위에 오지 않는다 — 실제 동작 그대로다.
+OPENALEX_SEARCH = _read("openalex_search.json")
+OPENALEX_SEARCH_TOTAL = 36912
+
+#: ``filter=cites:W4410539571`` 응답. 목표 문헌을 인용한 2건.
+OPENALEX_CITES = _read("openalex_cites.json")
+OPENALEX_CITING_DOI = "10.3390/s26030962"
+
+#: arXiv 논문의 OpenAlex 단건 응답. arXiv API 가 이 PC 에서 429 로 막혀 있어
+#: arXiv DOI 조회는 이 응답으로 이어받는다.
+ARXIV_DOI = "10.48550/arxiv.2412.19860"
+OPENALEX_WORK_ARXIV = _read("openalex_work_arxiv.json")

@@ -237,8 +237,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const [searchDepth, setSearchDepth] = useState<"quick" | "standard" | "deep">("standard");
   // 빈 문자열 = 지정 안 함. 제한된 안전성 Provider 가 자동으로 선택되면
   // 사용자가 위험을 확인하지 않은 채 실행하게 된다.
-  const [providerId, setProviderId] = useState("");
-  const [model, setModel] = useState("");
+  // 두 작업은 기본 도구를 따로 둔다. 분석 화면에서도 검색 도구가 필요하다 —
+  // 「미대응 구성 검색」은 검색 작업을 만든다.
+  const [analysisTool, setAnalysisTool] = useState({ provider: "", model: "" });
+  const [searchTool, setSearchTool] = useState({ provider: "", model: "" });
   // 환경설정에서 사용자가 스스로 걸어 둔 글자 수 한도. 화면에 상수를 박아 두면
   // 설정을 바꿔도 옛 숫자가 남아, 사용자가 틀린 한도를 믿고 입력을 줄이게 된다.
   // null = 제한 없음(기본값), undefined = 아직 못 읽음.
@@ -345,13 +347,23 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
         // 설정에 없으면 비워 둔다. 백엔드도 자동 선택하지 않으므로
         // 화면만 고른 척하면 실행 시 400 이 난다.
-        const configuredProvider = appSettings.values.default_provider;
-        const nextProvider = PROVIDER_IDS.has(configuredProvider)
-          ? configuredProvider
-          : "";
-        setProviderId(nextProvider);
-        setModel(
-          nextProvider ? appSettings.values.default_models?.[nextProvider] ?? "" : "",
+        // 검색 도구가 비어 있으면 분석의 도구·모델을 그대로 쓴다(백엔드와 같은 규칙).
+        const values = appSettings.values;
+        const known = (id: string | undefined) =>
+          id && PROVIDER_IDS.has(id) ? id : "";
+        const analysisProvider = known(values.default_provider);
+        const analysis = {
+          provider: analysisProvider,
+          model: analysisProvider
+            ? values.default_models?.[analysisProvider] ?? ""
+            : "",
+        };
+        const searchId = known(values.search_provider);
+        setAnalysisTool(analysis);
+        setSearchTool(
+          searchId
+            ? { provider: searchId, model: values.search_models?.[searchId] ?? "" }
+            : analysis,
         );
       })
       .catch((e) => setError(String(e.message)));
@@ -412,14 +424,20 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     () => searchPrompts.find((p) => p.id === searchPromptId) ?? null,
     [searchPrompts, searchPromptId],
   );
+  const searching = kind === "similarity_search";
+  // 이 화면이 실행할 도구.
+  const { provider: providerId, model } = searching ? searchTool : analysisTool;
   const selectedProvider = useMemo(
     () => providers.find((p) => p.provider === providerId) ?? null,
     [providers, providerId],
   );
+  const searchProvider = useMemo(
+    () => providers.find((p) => p.provider === searchTool.provider) ?? null,
+    [providers, searchTool.provider],
+  );
 
-  const searching = kind === "similarity_search";
   const jobKindLabel = JOB_KIND_LABEL[kind];
-  const searchAvailable = supportsSearch(selectedProvider);
+  const searchAvailable = supportsSearch(searchProvider);
   const eligibleGapComponents = useMemo(
     () =>
       job?.job_kind === "patent_analysis"
@@ -661,8 +679,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     try {
       const created = await api.createJob({
         job_kind: "similarity_search",
-        provider: providerId || null,
-        model: model || null,
+        // 분석 화면에서 시작해도 검색 작업이므로 검색 도구로 돌린다.
+        provider: searchTool.provider || null,
+        model: searchTool.model || null,
         prompt_id: searchPromptId || null,
         source_job_id: job.id,
         search_component_ids: selectedGapIds,
@@ -1703,7 +1722,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               job={job}
               components={eligibleGapComponents}
               selectedIds={selectedGapIds}
-              providerLabel={selectedProvider?.display_name ?? providerId}
+              providerLabel={searchProvider?.display_name ?? searchTool.provider}
               searchAvailable={searchAvailable}
               submitting={submitting}
               onSelectionChange={setSelectedGapIds}
@@ -1768,7 +1787,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             <AnswerContextView context={job.report_context} />
             {displayText && <div className="answer-actions no-print"><Link className="btn" to={`/answers?source=${job.id}`}>이 실행에 정답 보고서 등록</Link></div>}
           </>}
-          {job.job_kind === "similarity_search" && !running && job.search_manifest?.version === 14 && job.output_mode === "markdown" ? (
+          {job.job_kind === "similarity_search" && job.search_manifest?.version === 14 && job.output_mode === "markdown" ? (
             <SearchResults data={job.search_manifest} />
           ) : (displayText || running) && (
             <ResultView

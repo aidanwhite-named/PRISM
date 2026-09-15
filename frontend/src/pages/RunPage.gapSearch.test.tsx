@@ -168,6 +168,41 @@ describe("미대응 구성 검색", () => {
     expect((screen.getByRole("button", { name: /미대응 구성 검색/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("분석 화면에서 시작해도 검색 전용 도구로 검색 작업을 만든다", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.settings).mockResolvedValueOnce({
+      values: {
+        default_provider: "agy",
+        default_models: { agy: "analysis-model" },
+        search_provider: "claude",
+        search_models: { claude: "search-model" },
+        max_inline_chars: 0,
+      },
+    } as unknown as Awaited<ReturnType<typeof api.settings>>);
+    vi.mocked(api.listProviders).mockResolvedValueOnce([
+      { ...provider, usable: true, capabilities: { web_search: false } },
+      { ...provider, provider: "claude", display_name: "Claude", usable: true },
+    ]);
+    window.location.hash = `#/analysis?job=${JOB_ID}`;
+    render(
+      <RunSessionProvider>
+        <HashRouter><RunPage kind="patent_analysis" /></HashRouter>
+      </RunSessionProvider>,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /미대응 구성 검색/ }));
+    const start = await screen.findByRole("button", { name: "선택 구성으로 웹 검색" });
+    // 분석 도구(agy)는 여기서 웹 검색을 못 하지만, 검색 도구(Claude)는 할 수 있다.
+    await waitFor(() => expect((start as HTMLButtonElement).disabled).toBe(false));
+    expect(document.querySelector(".gap-search-panel")?.textContent).toContain(
+      "검색 실행 도구: Claude",
+    );
+    await userEvent.click(start);
+    expect(api.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      job_kind: "similarity_search", provider: "claude", model: "search-model",
+    }));
+  });
+
   it("보고서보다 앞에 선택 화면을 연다", async () => {
     window.location.hash = `#/analysis?job=${JOB_ID}`;
     render(

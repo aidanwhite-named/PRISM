@@ -459,7 +459,11 @@ async def _resolve_provider(
     있다. 모델 호출보다 먼저 fresh probe 를 수행해서, 인증되지 않은 작업을
     QUEUED/RUNNING 으로 보이게 하거나 Provider 프로세스를 시작하지 않는다.
     """
-    provider_id = payload.provider or str(values.get("default_provider") or "")
+    # 유사문헌 검색과 구성대비 분석은 기본 도구를 따로 둔다.
+    configured_provider, default_models, _ = settings_service.execution_defaults(
+        values, payload.job_kind
+    )
+    provider_id = payload.provider or configured_provider
     if not provider_id:
         # 자동 선택하지 않는다. 제한된 안전성 Provider 가 기본값으로 끼어들면
         # 사용자가 위험을 확인하지 않은 채 실행하게 된다.
@@ -471,7 +475,6 @@ async def _resolve_provider(
     provider_paths = values.get("provider_paths") or {}
     if build_provider(provider_id, provider_paths) is None:
         raise HTTPException(400, f"알 수 없거나 제거된 Provider 입니다: {provider_id}")
-    default_models = values.get("default_models") or {}
     selected_model = payload.model or default_models.get(provider_id) or None
 
     # 실제 계정 인증을 사용하는 CLI는 캐시를 우회해 매 작업 직전에 확인한다.
@@ -964,7 +967,10 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
     values = settings_service.get_all(session)
     job_kind = JobKind(payload.job_kind)
     max_chars = settings_service.inline_char_budget(values)
-    provider_id = payload.provider or str(values.get("default_provider") or "")
+    configured_provider, default_models, _ = settings_service.execution_defaults(
+        values, job_kind
+    )
+    provider_id = payload.provider or configured_provider
 
     # --- 프롬프트 본문 ---------------------------------------------------
     search_prompt_id = ""
@@ -1055,25 +1061,6 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
     # 상한과 실행이 강제하는 상한이 어긋난다.
     retrieval_budget = retrieval.budget_from_settings(values)
 
-    # --- 검색 채널 -------------------------------------------------------
-    # runner 에도 같은 검사가 있다. 여기서 한 번 더 보는 이유는 **시점**이다.
-    # runner 에서만 막으면 사용자는 실행 버튼을 누른 뒤에야 실패한 작업으로
-    # 그 사실을 안다. 화면은 누르기 전에 말할 수 있어야 한다.
-    if job_kind is JobKind.SIMILARITY_SEARCH and provider_id:
-        channels = search_channels.availability(values, provider_id)
-        if search_channels.no_usable_channel(channels):
-            return PreflightOut(
-                job_kind=job_kind.value,
-                provider=provider_id,
-                lanes=[],
-                chars=0,
-                bytes=0,
-                char_budget=max_chars,
-                byte_budget=byte_budget,
-                blocked=True,
-                message=search_channels.unusable_channel_message(channels),
-            )
-
     # --- 실제 조립 --------------------------------------------------------
     try:
         context_manifest = answer_library.build_context(session, payload.claim_text,
@@ -1107,7 +1094,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
             provider_byte_budget=byte_budget,
             retrieval_budget=retrieval_budget,
             provider_id=provider_id,
-            model=str(payload.model or values.get("default_models", {}).get(provider_id, "")),
+            model=str(payload.model or default_models.get(provider_id, "")),
             provider_measure=getattr(provider, "payload_bytes", None),
             claim_element_count=job_assembly.claim_element_count(
                 payload.claim_text or ""

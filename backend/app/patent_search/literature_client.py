@@ -92,6 +92,29 @@ _CROSSREF_SELECT = (
 
 _DOI_PATTERN = re.compile(r"10\.\d{4,9}/[^\s\"'<>]+")
 
+# arXiv 는 DataCite 에 10.48550/arXiv.<id> 로 DOI 를 등록한다. 모델과 웹은 같은
+# 논문을 arXiv:<id>, arxiv.org/abs/<id>v2, .../pdf/<id>v1.pdf 로도 적는다. 표기가
+# 다르다고 다른 문헌으로 세면 같은 논문이 후보에 둘로 남고 검증 대조도 빗나간다.
+# 버전(v2)은 문헌 신원이 아니라 개정판 표시라 신원 키에서 뗀다.
+ARXIV_DOI_PREFIX = "10.48550/arxiv."
+_ARXIV_PATTERN = re.compile(
+    r"(?:10\.48550/arxiv\.|arxiv:\s*|arxiv\.org/(?:abs|pdf)/)"
+    r"(?P<id>\d{4}\.\d{4,5}|[a-z][a-z.-]*/\d{7})(?P<version>v\d+)?",
+    re.IGNORECASE,
+)
+
+
+def arxiv_identity(value) -> tuple[str, str] | None:
+    """arXiv 표기를 (기본 식별자, 버전) 으로. arXiv 표시가 없으면 None.
+
+    ``2412.19860`` 처럼 표시 없는 번호는 받지 않는다 — 다른 체계의 번호와
+    구별할 수 없다.
+    """
+    match = _ARXIV_PATTERN.search(str(value or ""))
+    if match is None:
+        return None
+    return match.group("id").lower(), (match.group("version") or "").lower()
+
 # 검색어에서 떼어 낼 검색엔진 문법. 이 API 들은 불리언·필드 연산자를 이 형태로
 # 받지 않으며, 그대로 보내면 연산자가 검색어의 일부로 들어가 결과가 망가진다.
 _ENGINE_OPERATORS = re.compile(
@@ -135,6 +158,9 @@ def normalize_doi(value) -> str:
     text = str(value or "").strip()
     if not text:
         raise LiteratureError("DOI 가 비어 있습니다.")
+    arxiv = arxiv_identity(text)
+    if arxiv is not None:
+        return ARXIV_DOI_PREFIX + arxiv[0]
     match = _DOI_PATTERN.search(text)
     if match is None:
         raise LiteratureError(f"DOI 형식이 아닙니다: {text[:120]}")

@@ -24,6 +24,7 @@ export interface JobStreamState {
   /** 로컬 검색 실행의 진행 상황. 색인·라운드·읽은 페이지는 PRISM 이 센다. */
   retrievalRound: number;
   retrievalPagesRead: number;
+  searchPreviewVersion: number;
 }
 
 const EMPTY: JobStreamState = {
@@ -37,6 +38,7 @@ const EMPTY: JobStreamState = {
   fetchCount: 0,
   retrievalRound: 0,
   retrievalPagesRead: 0,
+  searchPreviewVersion: 0,
 };
 
 export function useJobStream(jobId: string | null): JobStreamState {
@@ -80,6 +82,10 @@ export function useJobStream(jobId: string | null): JobStreamState {
         const payload = event.payload ?? {};
 
         switch (event.type) {
+          case "search_preview_ready":
+            next.searchPreviewVersion = event.seq;
+            next.stage = "최초 검색 결과 확인 가능 · 필요한 항목 추가 확인 중";
+            break;
           case "result_progress":
             // 모델 출력을 화면에 실시간으로 붙이지 않는다. 완성 전의 원문에는
             // 기계 판독 블록이 섞여 있고, 보고서 자리에는 그것을 걷어낸 최종

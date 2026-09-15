@@ -5,7 +5,9 @@ from .search_channels import cell, STATUS_LABELS
 from .search_legacy import view
 from .search_manifest import GROUP_DEFINITIONS, is_linkable_url
 from .search_verification import ISSUE_LABELS, LEVEL_LABELS
-from .search_quality import REASON_LABELS, stream_only_failures
+from .search_quality import REASON_LABELS
+
+REVIEW_LABELS = {"stop_reason": "종료 이유", "expansion_summary": "확장 결과", "sampling_review": "페이지 편향 보완 내역"}
 
 def _link(raw) -> str:
     if not is_linkable_url(raw):
@@ -19,11 +21,29 @@ def render(manifest: dict) -> str:
         lines += [f"이전 형식(v{data['legacy_version']})의 저장 기록입니다. 재분류·재검증하지 않았습니다.", ""]
     if data.get("status") == "verification_incomplete":
         lines += ["검색 실행 종료 · 검증 미완료. 아래 후보와 LLM 분류는 확인이 더 필요합니다.", ""]
+    elif data.get("status") == "search_incomplete":
+        lines += ["검색 실행 종료 · 탐색 종료 감사 미완료. 후보는 보존했으며 누락·종료 근거 확인이 필요합니다.", ""]
     elif data.get("status") != "complete":
         lines += ["검색이 완료되지 않았습니다. 최종 후보 보고서가 아닙니다.", cell(data.get("error")), ""]
     quality = data.get("quality")
+    if (data.get("verification_followup") or {}).get("usage_complete") is False:
+        lines += ["토큰 사용량은 확인된 단계만 집계했습니다. 중단된 단계의 사용량은 미확정입니다.", ""]
     if quality:
         lines += [f"근거 검증 후보: {quality['verified_candidate_count']}/{quality['candidate_count']}건. 검색의 충분성·누락 없음은 보증하지 않습니다.", ""]
+        audit = quality.get("search_audit") or {}
+        if audit:
+            lines += ["탐색 종료 감사: " + ("미완료" if audit.get("status") == "incomplete" else "기록 확인 (충분성 판정 아님)"), ""]
+            for identity in audit.get("unaccounted_fetches", []):
+                lines.append("- 조회 후 후보·제외 사유에서 누락: " + cell(identity))
+            if audit.get("missing_review_fields"):
+                lines.append("- 종료 근거 기록 누락: " + cell(", ".join(REVIEW_LABELS.get(key, key) for key in audit["missing_review_fields"])))
+            if audit.get("broad_searches"):
+                lines.append(f"- 전체 결과의 일부 페이지만 확인한 넓은 EPO 검색: {len(audit['broad_searches'])}회")
+            review = audit.get("reported_review") or {}
+            for field, label in (("stop_reason", "LLM 종료 이유"), ("expansion_summary", "LLM 확장 기록"), ("sampling_review", "LLM 페이지 편향 보완 기록")):
+                if review.get(field):
+                    lines.append("- " + label + ": " + cell(review[field]))
+            lines += ["- 남은 탐색 과제: " + cell(gap) for gap in review.get("remaining_gaps", [])]
         for item in quality.get("outstanding", []):
             reason = REASON_LABELS.get(item["reason"], "원문 조회 미시도" if item["reason"] == "not_attempted" else "조회 후 검증 미해결")
             lines.append(f"- {cell(item['identity'])}: {reason}, 대응 근거 미검증 {item['unverified_mapping_count']}개")
@@ -32,33 +52,14 @@ def render(manifest: dict) -> str:
         followup = data.get("verification_followup") or {}
         lines += ["", "추가 확인: " + cell(followup.get("reason", "기록 없음")), ""]
     lines += ["A/B/C는 LLM의 기술적 판단이며, 증거 확보 수준과 독립적입니다.", ""]
-    recall = data.get("reference_retrieval") or {}
-    if recall.get("publication_number"):
-        label = {"keyword_hit": "키워드 검색 응답에서 발견",
-                 "classification_only": "분류 검색에서만 발견 — 키워드 검색 발견 미확인",
-                 "identifier_only": "번호·인명 검색에서만 발견 — 키워드 검색 발견 미확인",
-                 "not_observed": "키워드 검색 응답에서 발견 확인 안 됨"}.get(recall.get("status"), "미확인")
-        lines += ["## 입력 공개문헌 검색 점검", "",
-                  f"{cell(recall['publication_number'])}: **{label}**", "",
-                  "EPO 실제 도구 응답 기준입니다. 웹 검색 결과 본문은 자동 대조할 수 없습니다. "
-                  "번호 직접 조회·최종 후보 포함 여부와 구분하며, 한 문헌의 발견이 전체 검색의 누락 없음을 보증하지는 않습니다.", ""]
-        for hit in recall.get("hits", []):
-            origin = "자동 동의어 보완" if hit.get("origin") == "vocabulary_probe" else "모델 검색"
-            lines.append("- " + origin + " (" + cell(hit.get("kind")) + "): " + cell(hit.get("cql")))
     definitions = data.get("group_definitions") or GROUP_DEFINITIONS
     for group, meaning in definitions.items():
         lines.append(f"- {cell(group)}: {cell(meaning)}")
-    # 제목이 "사용 가능한 도구"였다. 그 목록에는 쓸 수 없는 도구도 들어 있고,
-    # web 은 실패한 실행에서도 "사용 가능"으로 찍혔다. 상태를 상태라고 부르고,
-    # 판단 근거(마지막 실측 시각·실패 사유)를 같이 적는다.
-    lines += ["", "## 검색 도구 상태", ""]
+    lines += ["", "## 사용 가능한 도구", ""]
     for name, status in data.get("tool_availability", {}).items():
-        label = STATUS_LABELS.get(status.get("status"), status.get("status"))
-        detail = str(status.get("detail") or "").strip()
-        lines.append(f"- {cell(name)}: {cell(label)}" + (f" — {cell(detail)}" if detail else ""))
-    journal = data.get("tool_journal", [])
-    failures = [row for row in journal if row.get("ok") is False]
-    failures += stream_only_failures(journal, data.get("observed") or {})
+        lines.append(f"- {cell(name)}: {cell(STATUS_LABELS.get(status.get('status'), status.get('status')))}")
+    failures = [row for row in data.get("tool_journal", []) if row.get("ok") is False]
+    failures += (data.get("observed") or {}).get("tool_failures", [])
     if failures:
         lines += ["", "도구 호출 실패 (문헌 부재를 뜻하지 않음):", ""]
         for row in failures:
@@ -75,6 +76,10 @@ def render(manifest: dict) -> str:
               "기준: 공개일(publication date). 출원일·우선일로 대체하지 않습니다.",
               f"공개일 미확인 후보: {dates.get('unknown_publication_date', 0)}건"]
     candidates = (data.get("reported") or {}).get("candidates", [])
+    dispositions = (data.get("reported") or {}).get("candidate_dispositions", [])
+    if dispositions:
+        lines += ["", "## LLM 후보 제외·통합 기록", ""]
+        lines += ["- " + cell(c.get("doc_number") or c.get("doi") or c.get("url")) + ": " + cell(c.get("reason")) for c in dispositions]
     if not candidates:
         lines += ["", "최종 후보가 없습니다. 미검색·접속 실패는 관련 문헌의 부재를 뜻하지 않습니다."]
     ordered = [(rank, item) for group in ("A", "B", "C", None)

@@ -21,7 +21,7 @@ _TOOL_INPUT_KEYS = {
     "mcp__prism-search__epo_fetch": ("publication_number", "constituent"),
     "mcp__prism-search__kiwee_search": ("query", "max_results"),
     "mcp__prism-search__kiwee_fetch": ("publication_number", "constituent"),
-    "mcp__prism-search__literature_search": ("query", "max_results"),
+    "mcp__prism-search__literature_search": ("query", "max_results", "source", "openalex_mode", "cites_doi"),
     "mcp__prism-search__literature_fetch": ("doi", "constituent"),
 }
 _MAX_INPUT_VALUE = 500

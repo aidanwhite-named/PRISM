@@ -157,7 +157,10 @@ def test_available_tools_do_not_create_independent_searches():
         "kiwee_integration_enabled": True, "literature_integration_enabled": True}, "agy")
     assert status["epo"]["status"] == "disabled"
     assert status["kiwee"]["status"] == "not_implemented"
-    assert status["literature"]["status"] == "unsupported_transport"
+    # agy 는 전역 MCP 설정에 등록돼야 쓸 수 있다. 테스트 홈에는 등록이 없다.
+    assert status["literature"]["status"] == "not_registered"
+    assert search_channels.availability({"literature_integration_enabled": True},
+        "gemini")["literature"]["status"] == "unsupported_transport"
 
 def test_cql_error_is_structured_and_not_free_text():
     with pytest.raises(epo_cql.CqlError):

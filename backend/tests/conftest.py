@@ -23,6 +23,10 @@ _TEST_AGY_SETTINGS = os.path.join(
     tempfile.mkdtemp(prefix="prism-agy-test-"), "settings.json"
 )
 os.environ["PRISM_AGY_SETTINGS_PATH"] = _TEST_AGY_SETTINGS
+# agy 전역 MCP 설정·스키마 폴더도 실제 홈을 건드리지 않게 돌린다.
+_TEST_AGY_MCP_DIR = tempfile.mkdtemp(prefix="prism-agy-mcp-test-")
+os.environ["PRISM_AGY_MCP_CONFIG_PATH"] = os.path.join(_TEST_AGY_MCP_DIR, "mcp_config.json")
+os.environ["PRISM_AGY_MCP_SCHEMA_DIR"] = os.path.join(_TEST_AGY_MCP_DIR, "schemas", "prism-search")
 
 import shutil  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -147,3 +151,12 @@ def block_literature_network(monkeypatch):
         )
 
     monkeypatch.setattr(literature_client, "_live_transport", refuse)
+
+    from app.patent_search import openalex_client
+
+    def refuse_openalex(url, api_key, timeout):
+        raise AssertionError(
+            f"테스트가 OpenAlex 로 실제 요청을 보내려 했습니다: {url} — transport 를 주입하십시오."
+        )
+
+    monkeypatch.setattr(openalex_client, "_live_transport", refuse_openalex)

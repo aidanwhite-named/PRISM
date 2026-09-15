@@ -371,8 +371,9 @@ PRISM 은 항상 `--disable-slash-commands` 로 실행하므로 plan 모드는 �
 그래서 PRISM 은 논문 출처로 자주 필요한 호스트를 agy 전역 설정의
 `permissions.allow` 에 **병합**한다(`backend/app/providers/agy_permissions.py`).
 
-- arxiv.org · www.mdpi.com · ieeexplore.ieee.org · dl.acm.org ·
+- v1: arxiv.org · www.mdpi.com · ieeexplore.ieee.org · dl.acm.org ·
   www.researchgate.net · www.semanticscholar.org
+- v2: `read_url(*)` (모든 주소)
 - **자동 적용은 버전당 한 번뿐이다.** 앱 시작 시의 마이그레이션이고, 끝나면
   버전이 기록된다(`agy_allowlist_migration`). 그 뒤로 Provider 검사는 이 파일을
   **읽기만** 한다 — 검사할 때마다 병합하면 사용자가 지운 호스트가 되살아나고,
@@ -388,8 +389,11 @@ PRISM 은 항상 `--disable-slash-commands` 로 실행하므로 plan 모드는 �
   되돌리는 경로는 없다.
 - 기존 항목은 덮어쓰지 않고, 중복은 추가하지 않는다. 쓰기 전에 백업을 만들고
   원자적으로 바꾼다. JSON 이 깨져 있으면 손대지 않고 오류를 표시한다.
-- `read_url(*)` 나 `read_url(google.com)` 처럼 범위를 넓히지 않는다.
-  `--dangerously-skip-permissions` 도 쓰지 않는다.
+- 권장 v2 는 `read_url(*)` 다. 목록 밖 주소 하나로 실행이 날아가는 위험을
+  없애고 Codex·Claude 와 같은 조건으로 맞춘다. 이 규칙은 `read_url_content`
+  에만 적용되고, 연 주소는 감사 블록에 남는다. agy **전역** 설정이라 PRISM
+  밖의 agy 사용에도 적용된다. `--dangerously-skip-permissions` 는 모든 도구의
+  승인을 넘기므로 쓰지 않는다.
 - 실제로 적용된 호스트는 같은 화면에서 확인한다. 다른 출처가 필요하면 그 파일에
   직접 추가하면 되고, 다음 검색 실행이 그 목록을 그대로 읽어 모델에게 알려준다.
 

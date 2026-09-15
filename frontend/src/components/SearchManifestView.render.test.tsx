@@ -24,6 +24,21 @@ function current(): SearchManifestV14 {
   };
 }
 describe("single-agent audit", () => {
+  it("shows lost leads and missing stopping rationale without inserting a candidate", () => {
+    const data = current(); data.status = "search_incomplete";
+    data.quality = { execution_status: "complete", verification_status: "complete", search_coverage: "not_established",
+      candidate_count: 1, verified_candidate_count: 1, outstanding: [], constraints: [],
+      search_audit: { status: "incomplete", unaccounted_fetches: ["patent:US9626789B2"],
+        broad_searches: [{}], missing_review_fields: ["stop_reason"],
+        reported_review: { remaining_gaps: ["Index handling remains unconfirmed."] } } };
+    data.reported!.candidate_dispositions = [{ doc_number: "US9536343B2", doi: "", url: "", reason: "Different relation" }];
+    render(<SearchResults data={data} />);
+    expect(screen.getByRole("alert").textContent).toContain("탐색 종료 감사: 미완료");
+    expect(screen.getByText(/조회 후 후보·제외 사유에서 누락: patent:US9626789B2/)).toBeTruthy();
+    expect(screen.getByText(/종료 근거 기록 누락: 종료 이유/)).toBeTruthy();
+    expect(screen.getByText(/US9536343B2: Different relation/)).toBeTruthy();
+    expect(document.querySelectorAll(".search-result-candidate")).toHaveLength(1);
+  });
   it("groups candidates without changing ranks and avoids duplicating cards in audit", () => {
     const data = current();
     const original = data.reported!.candidates[0];

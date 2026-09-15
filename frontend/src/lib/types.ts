@@ -294,25 +294,31 @@ export interface SearchCandidate {
   verification_scope: Record<string, "not_requested" | "verified" | "unavailable">;
   evidence_sources: unknown[]; mapping: SearchMappingRow[];
 }
+export interface SearchReview {
+  stop_reason?: string; expansion_summary?: string; sampling_review?: string; remaining_gaps?: string[];
+}
 export interface SearchManifestV14 {
-  version: 14; status: "complete" | "incomplete" | "verification_incomplete"; provider: string; model: string;
+  version: 14; status: "complete" | "incomplete" | "verification_incomplete" | "search_incomplete"; provider: string; model: string;
   quality?: { execution_status: string; verification_status: string; search_coverage: string;
+    search_audit?: { status: "incomplete" | "recorded"; unaccounted_fetches: string[];
+      broad_searches: unknown[]; missing_review_fields: string[]; reported_review: SearchReview };
     candidate_count: number; verified_candidate_count: number;
     outstanding: { identity: string; reason: string; unverified_mapping_count: number }[];
     constraints: { source: string; reason: string; detail?: string }[] } | null;
-  verification_followup?: { attempted: boolean; reason: string } | null;
+  verification_followup?: { attempted: boolean; reason: string; usage_complete?: boolean } | null;
   group_definitions: Record<string, string>;
   input: { claim_text: string; spec_document: unknown; search_focus: GapSearchFocus | null };
   prompt: { id: string; name: string; sha256: string; runtime_context_sha256: string };
   started_at: string; completed_at: string;
   limits: { max_tool_calls: number; timeout_seconds: number };
   tool_availability: Record<string, { status: "available" | "disabled" | "not_configured" |
-    "not_implemented" | "unsupported_transport" | "unverified" | "unreachable"; detail: string }>;
+    "not_implemented" | "unsupported_transport" | "not_registered" | "unverified" | "unreachable"; detail: string }>;
   tool_journal: Record<string, unknown>[];
   observed: { tool_calls: Record<string, unknown>[]; tool_call_counts: Record<string, number>;
     search_queries: string[]; search_call_count: number; attempted_fetch_urls: string[]; succeeded_fetch_urls: string[]; url_lookup_attempts: string[]; tool_failures: unknown[]; unknown_tool_outcomes: unknown[] };
   llm_output: unknown;
-  reported: { candidates: SearchCandidate[]; term_expansions: unknown[]; rounds: unknown[]; access_failures: unknown[] } | null;
+  reported: { candidates: SearchCandidate[]; term_expansions: unknown[]; rounds: unknown[]; access_failures: unknown[];
+    search_review?: SearchReview; candidate_dispositions?: { doc_number: string; doi: string; url: string; reason: string }[] } | null;
   date_filter: { cutoff: string; applied: boolean; excluded: { doc_number: string; doi: string;
     title: string; publication_date: string; detail: string; reason_code: string }[];
     unknown_publication_date: number };
@@ -612,6 +618,13 @@ export interface AppSettings {
     default_models: Record<string, string>;
     /** provider -> 추론강도. 키가 없으면 모델 기본값이다. */
     reasoning_effort?: Record<string, string>;
+    /**
+     * 유사문헌 검색 전용 실행 도구. 위 세 값은 구성대비 분석의 값이다.
+     * 비어 있으면 검색도 분석의 도구·모델·추론강도를 그대로 쓴다.
+     */
+    search_provider?: string;
+    search_models?: Record<string, string>;
+    search_reasoning_effort?: Record<string, string>;
     keep_raw_output: boolean;
     fail_on_tool_use: boolean;
     max_search_tool_calls: number;
@@ -664,6 +677,11 @@ export interface AppSettings {
     literature_integration_enabled: boolean;
     /** Crossref 예의 풀 표시용 연락처. 비워 둬도 동작한다. */
     literature_contact_email: string;
+    /**
+     * OpenAlex API 키. 응답에서는 **항상 빈 문자열**이다. 저장 여부는
+     * secrets_set 을 봐야 한다. 비어 있어도 조회되지만 일일 한도가 작다.
+     */
+    literature_openalex_api_key: string;
     /** 질의 하나가 받아 오는 결과 건수 상한. 두 DB 각각에 적용된다. */
     literature_max_results_per_query: number;
     /** 서지 API HTTP 대기 시간의 총합(초). */
@@ -700,7 +718,7 @@ export interface AgyPermissionState {
   applied: string[];
   /** 권장 목록 중 아직 없는 것. */
   missing: string[];
-  /** read_url(*) 가 이미 들어 있는가. PRISM 은 이 값을 만들지 않는다. */
+  /** read_url(*) 가 들어 있는가. 참이면 모든 주소를 열 수 있다(권장 v2). */
   wildcard: boolean;
   /** 읽지 못한 이유. 비어 있지 않으면 다른 칸은 신뢰할 수 없다. */
   error: string;

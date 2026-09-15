@@ -161,13 +161,24 @@ def test_a_policy_without_an_allowlist_file_reads_as_nothing_open(
     assert job_assembly.allowed_hosts_for("web_search") == ()
 
 
-def test_recommended_hosts_are_the_ones_the_prompt_can_name(settings_file) -> None:
-    """권장 목록을 적용하면 그 호스트들이 그대로 프롬프트로 간다."""
+def test_recommended_list_tells_the_model_every_address_is_open(settings_file) -> None:
+    """권장 목록(read_url(*))을 적용하면 프롬프트가 호스트 제한을 걸지 않는다."""
     agy_permissions.apply_recommended(create=True)
 
     text = _lane_text(
         _assemble("agy_web_search", job_assembly.allowed_hosts_for("agy_web_search"))
     )
 
-    for host in agy_permissions.RECOMMENDED_HOSTS:
-        assert host in text
+    assert "모든 주소" in text
+    assert "다음뿐입니다" not in text
+    assert "  - *" not in text
+    # 열람 실패 규칙은 그대로 따라간다.
+    assert "access_failures" in text
+
+
+def test_wildcard_among_hosts_still_means_everything_is_open() -> None:
+    """호스트 규칙과 * 가 섞여 있어도 목록으로 제한하지 않는다."""
+    text = _lane_text(_assemble("agy_web_search", ["arxiv.org", "*"]))
+
+    assert "모든 주소" in text
+    assert "다음뿐입니다" not in text

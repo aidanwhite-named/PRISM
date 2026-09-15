@@ -80,6 +80,55 @@ _INPUT_ALIASES = {
 }
 _MAX_INPUT_VALUE = 500
 
+# agy 는 MCP 도구를 `call_mcp_tool` 하나로 부른다(1.2.2 실측):
+#   tool_info.parameters = {"ServerName": "probe", "ToolName": "echo_env", "Arguments": {...}}
+# 감사·정책은 Claude 와 같은 `mcp__<서버>__<도구>` 이름으로 본다. 그래야 허용 목록과
+# 호출 기록 대조가 Provider 마다 갈라지지 않는다.
+_MCP_DISPATCH_TOOL = "call_mcp_tool"
+_MCP_INPUT_KEYS = {
+    "search_capabilities": (),
+    "epo_search": ("query", "max_results"),
+    "epo_fetch": ("publication_number", "constituent"),
+    "kiwee_search": ("query", "max_results"),
+    "kiwee_fetch": ("publication_number", "constituent"),
+    "literature_search": ("query", "max_results", "source", "openalex_mode", "cites_doi"),
+    "literature_fetch": ("doi", "constituent"),
+}
+_MAX_STRUCTURED_INPUT = 2000
+
+
+def _mcp_call(raw) -> tuple[str, dict] | None:
+    """call_mcp_tool 인수를 (정규화한 이름, 감사용 인수 요약) 으로 바꾼다."""
+    if not isinstance(raw, dict):
+        return None
+    casefolded = {str(key).casefold(): value for key, value in raw.items()}
+    server = casefolded.get("servername")
+    tool = casefolded.get("toolname")
+    if not isinstance(server, str) or not isinstance(tool, str) or not server or not tool:
+        return None
+    arguments = casefolded.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except ValueError:
+            arguments = {}
+    if not isinstance(arguments, dict):
+        arguments = {}
+    kept: dict = {}
+    for key in _MCP_INPUT_KEYS.get(tool, ()):
+        value = arguments.get(key)
+        if isinstance(value, str):
+            kept[key] = value[:_MAX_INPUT_VALUE]
+        elif isinstance(value, int) and not isinstance(value, bool):
+            kept[key] = value
+        elif isinstance(value, dict):
+            # 구조화 CQL. 통째로 두되 감사 기록을 밀어낼 크기면 버린다.
+            if len(json.dumps(value, ensure_ascii=False)) <= _MAX_STRUCTURED_INPUT:
+                kept[key] = value
+    if tool not in _MCP_INPUT_KEYS:
+        kept = {"keys": sorted(str(key) for key in arguments)[:10]}
+    return f"mcp__{server}__{tool}", {"arguments": kept}
+
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -237,12 +286,25 @@ class AgyStreamParser:
                 tool_info = body.get("tool_info")
                 if not isinstance(tool_info, dict):
                     tool_info = {}
+                mcp = (
+                    _mcp_call(tool_info.get("parameters"))
+                    if tool_name == _MCP_DISPATCH_TOOL
+                    else None
+                )
+                if call is not None:
+                    tool_name = call["name"]
+                elif mcp is not None:
+                    tool_name = mcp[0]
                 if call is None:
                     call = {
                         "id": f"agy-step-{call_key}",
                         "name": tool_name,
                         "ts": _utcnow_iso(),
-                        "input": _summarize_input(tool_name, tool_info.get("parameters")),
+                        "input": (
+                            mcp[1]
+                            if mcp is not None
+                            else _summarize_input(tool_name, tool_info.get("parameters"))
+                        ),
                         "ok": None,
                         "error": None,
                     }

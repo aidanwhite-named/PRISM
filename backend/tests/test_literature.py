@@ -91,10 +91,9 @@ def test_crossref_work_is_read_with_jats_stripped():
     # 실제 응답의 초록은 <jats:p> 로 감싸여 있다. 값에 태그가 남으면 안 된다.
     assert "<jats:" not in work.abstract
     assert work.abstract.startswith("We propose a complementary")
-    # 저자는 given/family 로 쪼개져 있어 한 경로로 뽑을 수 없다. 표시용으로만
-    # 쓰고 근거 필드에는 넣지 않는다.
+    # 구조화된 저자 정보를 원본에서 동일한 규칙으로 다시 추출한다.
     assert "Minkyu Song" in work.authors
-    assert "authors" not in work.paths
+    assert literature_parser._extract(fx.CROSSREF_WORK, work.paths["authors"]) == work.authors
 
 
 def test_europepmc_detail_is_read_as_plain_text():

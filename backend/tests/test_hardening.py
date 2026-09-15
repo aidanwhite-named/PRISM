@@ -438,6 +438,135 @@ def test_retired_optin_setting_is_rejected_and_hidden(client) -> None:
     assert "enabled_experimental_providers" not in values
 
 
+def test_search_tool_follows_analysis_until_set() -> None:
+    """검색 도구가 비어 있으면 분석의 세 값을 통째로 따른다."""
+    from app.settings_service import execution_defaults
+
+    values = {
+        "default_provider": "agy",
+        "default_models": {"agy": "a-model"},
+        "reasoning_effort": {"agy": "high"},
+        "search_provider": "",
+        "search_models": {"claude": "s-model"},
+        "search_reasoning_effort": {"codex": "low"},
+    }
+    analysis = ("agy", {"agy": "a-model"}, {"agy": "high"})
+    assert execution_defaults(values, "patent_analysis") == analysis
+    assert execution_defaults(values, "similarity_search") == analysis
+
+    values["search_provider"] = "claude"
+    assert execution_defaults(values, "patent_analysis") == analysis
+    assert execution_defaults(values, "similarity_search") == (
+        "claude",
+        {"claude": "s-model"},
+        {"codex": "low"},
+    )
+
+
+def test_search_tool_settings_are_validated(client) -> None:
+    try:
+        data = client.put(
+            "/api/settings",
+            json={
+                "values": {
+                    "search_provider": "gemini",
+                    "search_models": {"agy": "s-model"},
+                    "search_reasoning_effort": {"codex": "high"},
+                }
+            },
+        ).json()
+        # 옛 이름은 agy 로 읽는다. 분석 값과 같은 규칙이다.
+        assert data["values"]["search_provider"] == "agy"
+        assert data["values"]["search_models"] == {"agy": "s-model"}
+        assert data["values"]["search_reasoning_effort"] == {"codex": "high"}
+
+        bad_provider = client.put(
+            "/api/settings", json={"values": {"search_provider": "nope"}}
+        )
+        assert bad_provider.status_code == 400
+        bad_effort = client.put(
+            "/api/settings",
+            json={"values": {"search_reasoning_effort": {"codex": "higher"}}},
+        )
+        assert bad_effort.status_code == 400
+    finally:
+        client.put(
+            "/api/settings",
+            json={
+                "values": {
+                    "search_provider": "",
+                    "search_models": {},
+                    "search_reasoning_effort": {},
+                }
+            },
+        )
+
+
+def test_each_job_kind_resolves_its_own_default_tool(client, monkeypatch) -> None:
+    """검색은 search_provider 로, 분석은 default_provider 로 실행한다."""
+    from app.api import jobs as jobs_api
+
+    probe_calls: list[str] = []
+
+    async def fresh_probe(provider_id, overrides=None):
+        del overrides
+        probe_calls.append(provider_id)
+        # 로그아웃으로 돌려 작업이 만들어지기 전에 멈춘다.
+        return ProbeResult(
+            provider=provider_id,
+            display_name=provider_id,
+            installed=True,
+            executable_ok=True,
+            auth_state=AuthState.NOT_LOGGED_IN,
+        )
+
+    monkeypatch.setattr(jobs_api, "probe_one", fresh_probe)
+    client.put(
+        "/api/settings",
+        json={"values": {"default_provider": "agy", "search_provider": "claude"}},
+    )
+    try:
+        search = client.post(
+            "/api/jobs",
+            json={
+                "job_kind": "similarity_search",
+                "claim_text": "청구항 1. 제1 센서를 포함하는 장치.",
+            },
+        )
+        assert search.status_code == 400
+        assert "claude 로그인이 필요합니다" in search.json()["detail"]
+
+        prompt = client.post(
+            "/api/prompts", json={"name": "도구 분리", "body": "요약하십시오."}
+        ).json()
+        analysis = client.post("/api/jobs", json={"prompt_id": prompt["id"]})
+        assert analysis.status_code == 400
+        assert "agy 로그인이 필요합니다" in analysis.json()["detail"]
+        assert probe_calls == ["claude", "agy"]
+    finally:
+        client.put(
+            "/api/settings",
+            json={"values": {"default_provider": "", "search_provider": ""}},
+        )
+
+
+def test_warning_names_the_search_tool_when_it_differs(client) -> None:
+    data = client.put(
+        "/api/settings",
+        json={"values": {"default_provider": "claude", "search_provider": "agy"}},
+    ).json()
+    try:
+        assert any(
+            "유사문헌 검색 실행 도구(agy)" in note for note in data["warnings"]
+        )
+        assert not any("구성대비 분석 실행 도구" in note for note in data["warnings"])
+    finally:
+        client.put(
+            "/api/settings",
+            json={"values": {"default_provider": "", "search_provider": ""}},
+        )
+
+
 def test_warning_follows_the_selected_provider_not_a_gate(client) -> None:
     """경고는 '켜 두었는가'가 아니라 '지금 무엇으로 실행하는가'를 본다."""
     data = client.put(

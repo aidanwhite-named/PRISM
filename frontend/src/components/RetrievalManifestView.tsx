@@ -13,9 +13,6 @@
  *  못한 페이지는 그렇다고만 적는다.
  */
 
-import { useState } from "react";
-
-import { api } from "../lib/api";
 import { isNarrowed } from "../lib/types";
 import type { Job, RetrievalDocument } from "../lib/types";
 
@@ -158,7 +155,6 @@ function DocumentRow({ document }: { document: RetrievalDocument }) {
 }
 
 export default function RetrievalManifestView({ job }: { job: Job }) {
-  const [open, setOpen] = useState(false);
   const manifest = job.retrieval_manifest;
 
   if (!isNarrowed(job.delivery_plan) && !manifest) return null;
@@ -182,11 +178,9 @@ export default function RetrievalManifestView({ job }: { job: Job }) {
       <h2>로컬 검색 기록</h2>
       <p className="faint">
         이 실행은 인용발명 문헌의 <strong>전체 본문을 프롬프트에 넣지
-        않았습니다.</strong> 근거 패키지에는 찾은 구간과 함께 그 구간이 실린
-        페이지 전문·앞뒤 페이지가 예산이 허락하는 만큼 들어갑니다. 거기에 없는
-        페이지는 이번 검토 범위 밖입니다.{" "}
-        PRISM 이 페이지·문단 단위로 로컬 색인한 뒤, AI 가
-        청구항 구성별로 검색·열람한 구간만 근거 패키지로 전달했습니다. 아래에
+        않았습니다.</strong> PRISM 이 페이지·문단 단위로 로컬 색인한 뒤, AI 가
+        청구항 구성별로 검색·열람한 구간과 그 구간이 실린 페이지 전문·앞뒤
+        페이지만 예산이 허락하는 만큼 근거 패키지로 전달했습니다. 근거 패키지에
         없는 페이지는 이번 검토 범위 밖이며, 검토하지 않은 것과 문헌에 없는
         것은 다릅니다.
       </p>
@@ -392,133 +386,6 @@ export default function RetrievalManifestView({ job }: { job: Job }) {
             </div>
           )}
 
-          <div className="btn-row no-print" style={{ marginTop: 12 }}>
-            <a
-              className="btn"
-              href={api.retrievalArtifactUrl(job.id, "evidence")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              근거 패키지 열기
-            </a>
-            <a
-              className="btn"
-              href={api.retrievalArtifactUrl(job.id, "trace")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              검색 trace 열기
-            </a>
-            <a
-              className="btn"
-              href={api.retrievalArtifactUrl(job.id, "extraction")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              추출 완전성 보고서
-            </a>
-            <button className="btn" onClick={() => setOpen((value) => !value)}>
-              {open ? "상세 접기" : "구성별 검색어 보기"}
-            </button>
-          </div>
-
-          {open && (
-            <div className="table-scroll" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>구성</th>
-                    <th>실제 실행된 검색어</th>
-                    <th>문헌별 검색</th>
-                    <th>검색 채널</th>
-                    <th>후보</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {manifest.components.map((component) => (
-                    <tr key={component.id}>
-                      <td className="mono-text">
-                        {component.id}
-                        <div className="faint">{component.label}</div>
-                      </td>
-                      <td className="break">
-                        {component.queries.join(", ") || "(없음)"}
-                      </td>
-                      <td className="mono-text">
-                        {(component.searched_documents ?? []).map((record) => (
-                          <div key={record.attachment_id}>
-                            {record.attachment} · 검색어 {record.queries.length}개
-                            · 후보 {record.hits}건
-                          </div>
-                        ))}
-                        {(component.unsearched_documents ?? []).length > 0 && (
-                          <div style={{ color: "var(--danger)" }}>
-                            검색하지 않음:{" "}
-                            {component.unsearched_documents.join(", ")}
-                          </div>
-                        )}
-                      </td>
-                      <td className="mono-text">
-                        {component.channels_used.join(", ") || "(없음)"}
-                        {component.channels_failed.length > 0 && (
-                          <div style={{ color: "var(--danger)" }}>
-                            실행 실패: {component.channels_failed.join(", ")}
-                          </div>
-                        )}
-                      </td>
-                      <td>{component.candidates}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <table style={{ marginTop: 12 }}>
-                <thead>
-                  <tr>
-                    <th>라운드</th>
-                    <th>상태</th>
-                    <th>action</th>
-                    <th>입력 sha256</th>
-                    <th>출력 sha256</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {manifest.rounds.map((round) => (
-                    <tr key={round.round}>
-                      <td>{round.round}</td>
-                      <td>
-                        {round.status}
-                        {round.error && (
-                          <div className="faint break">{round.error}</div>
-                        )}
-                      </td>
-                      <td>{round.actions}</td>
-                      <td className="mono-text">
-                        {round.input_sha256.slice(0, 16)}…
-                      </td>
-                      <td className="mono-text">
-                        {round.output_sha256.slice(0, 16)}…
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {manifest.action_errors.length > 0 && (
-                <div className="notice warn" style={{ marginTop: 12 }}>
-                  <strong>거절한 AI 요청</strong>
-                  <ul>
-                    {manifest.action_errors.map((item, index) => (
-                      <li key={index}>
-                        {item.action ? `${item.action}: ` : ""}
-                        {item.reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
         </>
       )}
     </section>

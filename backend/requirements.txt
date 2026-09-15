@@ -5,4 +5,9 @@ sqlalchemy==2.0.36
 python-multipart==0.0.20
 pypdf==5.1.0
 psutil==6.1.1
+arxiv==4.0.1
+# OpenAlex. 원본 바이트를 잡는 훅이 pyalex 내부 호출 경로에 기대므로 버전을 고정한다.
+pyalex==0.21
+# requests 가 Windows 인증서 저장소를 믿게 한다(사내 TLS 재서명 환경).
+truststore==0.10.4
 pywinpty==3.0.0; sys_platform == "win32"

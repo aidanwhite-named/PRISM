@@ -21,9 +21,9 @@ PROTOCOL_VERSION = "2025-06-18"
 LEDGER_NAME = "search_tool_calls.jsonl"
 
 @contextmanager
-def _quota_lock():
+def _quota_lock(filename="epo-mcp.lock"):
     """Serialize OPS calls across MCP processes before syncing persistent quota."""
-    path = PATHS.data_dir / "epo-mcp.lock"
+    path = PATHS.data_dir / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a+b") as handle:
         if path.stat().st_size == 0:
@@ -48,21 +48,66 @@ def _quota_lock():
 class ToolLimitExceeded(RuntimeError):
     pass
 
+
+def error_response(exc, name, arguments, secrets=()):
+    """Keep the OPS fault, but explain which scope failed and the next options."""
+    value = {"error_code": getattr(exc, "fault_code", "") or type(exc).__name__,
+             "detail": scrub(str(exc), *secrets)[:500]}
+    args = arguments if isinstance(arguments, dict) else {}
+    if name == "epo_fetch":
+        value["requested_identifier"] = args.get("publication_number", "")
+        value["requested_constituent"] = args.get("constituent", "claims")
+        value["not_evidence_of_absence"] = True
+        if value["error_code"] == "CLIENT.InvalidCountryCode":
+            value["recovery"] = {
+                "reason": "Requested constituent is unsupported for this country; not a missing publication.",
+                "suggested_constituents": ["biblio", "abstract", "family"],
+                "next_step": "Try an unattempted bibliographic/abstract scope. For claims use a source page or an identified family publication; keep identities separate.",
+            }
+        elif value["error_code"] == "SERVER.EntityNotFound":
+            value["recovery"] = {
+                "reason": "The requested identifier/scope was not found; number format or scope coverage may be responsible.",
+                "next_step": "Verify the publication number against a source page or OPS number-service conversion. Try an unattempted biblio scope; retain the unresolved candidate.",
+            }
+    return value
+
+
+def epo_search_advice(result, begin=1):
+    """Expose page sampling, not an estimate of technical recall."""
+    coverage = result["coverage"]
+    returned, total = coverage["returned_records"], coverage.get("total_results")
+    coverage["result_range"] = f"{begin}-{begin + returned - 1}" if returned else None
+    coverage["more_results_available"] = begin + returned - 1 < total if total is not None else None
+    coverage["next_begin"] = begin + returned if returned and coverage["more_results_available"] and begin + returned <= 2000 else None
+    dates = sorted(str(r.get("publication_date")) for r in result["records"] if r.get("publication_date"))
+    coverage["publication_date_range"] = {"earliest": dates[0], "latest": dates[-1]} if dates else None
+    coverage["ordering"] = "provider_default; no relevance ordering requested"
+    warnings = []
+    if total and returned and total > returned * 10:
+        warnings.append({"code": "broad_query_sample", "artifact_id": result.get("raw_artifact_id", ""),
+                         "detail": "Only a small page was read. Inspect date bias; refine technical relations, combine observed IPC/CPC with terms, partition the date range, or read another page. Do not infer absence from this page."})
+    result["search_warnings"] = warnings
+    return result
+
+
 class SearchTools:
-    def __init__(self, *, values=None, work_dir=None, max_calls=None, cutoff=None, provider=None):
+    def __init__(self, *, values=None, work_dir=None, max_calls=None, cutoff=None):
         self.work_dir = Path(work_dir or os.environ["PRISM_SEARCH_WORK_DIR"])
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_path = self.work_dir / LEDGER_NAME
         self.max_calls = max(1, int(max_calls or os.environ.get("PRISM_SEARCH_MAX_TOOL_CALLS", 40)))
         self.calls = sum(row.get("state") == "started" for row in search_manifest.read_tool_journal(self.work_dir))
         self.cutoff = search_dates.normalize_cutoff(cutoff if cutoff is not None else os.environ.get("PRISM_SEARCH_CUTOFF", ""))
-        self.provider = provider or os.environ.get("PRISM_SEARCH_PROVIDER", "claude")
         if values is None:
             with session_scope() as session:
                 values = settings_service.get_all(session)
         self.values = values
         self.backends = {}
-        self.secrets = credential_tokens(str(values.get("epo_consumer_key") or ""), str(values.get("epo_consumer_secret") or ""))
+        openalex_key = str(values.get("literature_openalex_api_key") or "").strip()
+        self.secrets = (
+            *credential_tokens(str(values.get("epo_consumer_key") or ""), str(values.get("epo_consumer_secret") or "")),
+            *((openalex_key,) if openalex_key else ()),
+        )
 
     def _record(self, row: dict):
         row = {**row, "timestamp": datetime.now(timezone.utc).isoformat()}
@@ -73,7 +118,7 @@ class SearchTools:
             os.fsync(handle.fileno())
 
     def statuses(self):
-        return search_channels.availability(self.values, self.provider)
+        return search_channels.availability(self.values)
 
     def tool_definitions(self):
         statuses = self.statuses()
@@ -82,10 +127,8 @@ class SearchTools:
             if statuses[tool["name"].split("_")[0]]["status"] == "available"
         ]
 
-    def call(self, name: str, arguments: dict, *, _vocabulary_probe=False) -> dict:
+    def call(self, name: str, arguments: dict) -> dict:
         row = {"id": str(uuid.uuid4()), "tool": name, "arguments": arguments, "sequence": self.calls}
-        if _vocabulary_probe:
-            row["query_origin"] = "vocabulary_probe"
         if self.calls >= self.max_calls:
             self._record({**row, "state": "rejected", "ok": False, "error_code": "tool_call_limit_exceeded"})
             raise ToolLimitExceeded("tool_call_limit_exceeded")
@@ -97,6 +140,20 @@ class SearchTools:
             if definition is None:
                 raise ValueError("tool_unavailable")
             _validate(arguments, definition["inputSchema"])
+            if name.endswith("_fetch"):
+                expected = {**arguments, "constituent": arguments.get("constituent", "abstract" if name == "literature_fetch" else "claims")}
+                for previous in reversed(search_manifest.read_tool_journal(self.work_dir)):
+                    old = previous.get("arguments") or {}
+                    actual = {**old, "constituent": old.get("constituent", "abstract" if name == "literature_fetch" else "claims")}
+                    result = previous.get("result") or {}
+                    if (previous.get("tool") == name and previous.get("state") == "completed"
+                            and previous.get("ok") is True and actual == expected
+                            and result.get("records") and not result.get("failed_sources")
+                            and result.get("identifier_matched") is not False):
+                        result = copy.deepcopy(result)
+                        result["reused_from_call_id"] = previous["id"]
+                        self._record({**row, "state": "completed", "ok": True, "result": result})
+                        return result
             if name == "search_capabilities":
                 result = {"tools": self.statuses(), "publication_cutoff": self.cutoff or None,
                           "tool_calls_used": self.calls, "tool_calls_limit": self.max_calls}
@@ -111,26 +168,9 @@ class SearchTools:
                         raise PatentSearchError("quota_persistence_failed")
             else:
                 result = self._execute(name, arguments)
-            # Release the OPS lock before a bounded, separately journalled supplementary query.
-            # Reuse only aliases supplied by the model; never insert domain-specific vocabulary.
-            if (name == "epo_search" and not _vocabulary_probe and not result.get("duplicate_query")
-                    and (result.get("total_found") or 0) > 1000 and self.calls < self.max_calls):
-                previous = [entry.get("arguments", {}).get("query", {})
-                            for entry in search_manifest.read_tool_journal(self.work_dir)
-                            if entry.get("tool") == "epo_search" and entry.get("ok") is True]
-                variant = _distinct_alias_query(arguments["query"], previous)
-                if variant:
-                    try:
-                        result["vocabulary_probe"] = self.call("epo_search", {
-                            "query": variant, "max_results": min(arguments.get("max_results", 10), 5),
-                        }, _vocabulary_probe=True)
-                    except Exception as exc:
-                        # A failed supplement must not discard the original successful search.
-                        result["vocabulary_probe_error"] = scrub(str(exc), *self.secrets)[:300]
         except Exception as exc:
-            detail = scrub(str(exc), *self.secrets)[:500]
-            code = getattr(exc, "fault_code", "") or type(exc).__name__
-            self._record({**row, "state": "completed", "ok": False, "error_code": code, "detail": detail})
+            self._record({**row, "state": "completed", "ok": False,
+                          **error_response(exc, name, arguments, self.secrets)})
             raise
         self._record({**row, "state": "completed", "ok": True, "result": result})
         return result
@@ -160,55 +200,29 @@ class SearchTools:
         normalized = []
         # Do not silently hide unknown publication dates with a DB-side cutoff.
         cql = epo_cql.build(node, normalized=normalized)
-        start = arguments.get("start", 1)
-        size = arguments.get("max_results", 10)
-        previous = [row for row in search_manifest.read_tool_journal(self.work_dir)
-                    if row.get("tool") == "epo_search" and row.get("ok") is True
-                    and not (row.get("result") or {}).get("duplicate_query")]
-        for row in previous:
-            result = row.get("result") or {}
-            if result.get("cql") == cql and result.get("start", 1) == start and result.get("page_size", 10) == size:
-                return {"duplicate_query": True, "previous_call_id": row["id"], "cql": cql,
-                        "total_found": result.get("total_found"), "next_start": result.get("next_start"),
-                        "records": [], "note": "Identical query/page already delivered; reuse its records and evidence_refs."}
-        response = self._backend("epo").search_structured(node, max_results=size, start=start)
-        result = _response(response, scope="bibliographic_search")
-        seen = {record["document_number"] for row in previous
-                for record in (row.get("result") or {}).get("records", [])}
-        repeated = [record["document_number"] for record in result["records"] if record["document_number"] in seen]
-        result["records"] = [record for record in result["records"] if record["document_number"] not in seen]
-        for record in result["records"]:
-            # One title/abstract language, only screening metadata. Full source stays in the artifact.
-            fields = record["fields"]
-            keep = {"applicants", "publication_date", "ipc", "cpc"}
-            for prefix in ("title", "abstract"):
-                names = [name for name in fields if name == prefix or name.startswith(prefix + ":")]
-                preferred = prefix + ":en"
-                if names:
-                    keep.add(preferred if preferred in names else names[0])
-            record["fields"] = {name: value for name, value in fields.items() if name in keep}
-            record["evidence_refs"] = {name: ref for name, ref in record["evidence_refs"].items()
-                                       if name in keep and name not in ("ipc", "cpc")}
-            record["truncated_fields"] = [name for name in record["truncated_fields"] if name in keep]
-            for name, value in record["fields"].items():
-                if name.startswith("abstract") and len(value) > 700:
-                    record["fields"][name] = value[:700]
-                    if name not in record["truncated_fields"]:
-                        record["truncated_fields"].append(name)
-        end = start + len(response.records) - 1
-        more = bool(response.records) and end < response.total_found
-        return {**result, "cql": cql, "start": start, "page_size": size,
-                "returned_count": len(response.records), "previously_seen": repeated,
-                "next_start": end + 1 if more and end < 2000 else None,
-                "has_more": more, "summary_only": True,
-                "coverage_note": ("Partial results: vary vocabulary, refine core concepts/classification or request next_start; do not infer absence."
-                                  if more else "No matches: replace literal claim terms with alternative vocabulary and reduce required concepts."
-                                  if not response.records else ""),
-                "normalized_classifications": normalized, "publication_cutoff": self.cutoff or None}
+        begin = arguments.get("begin", 1)
+        paging = {"begin": begin} if begin != 1 else {}
+        response = self._backend("epo").search_structured(node, max_results=arguments.get("max_results", 10), **paging)
+        return epo_search_advice({**_response(response, scope="bibliographic_search"), "cql": cql,
+                "normalized_classifications": normalized, "publication_cutoff": self.cutoff or None}, begin)
 
     def _plain_search(self, backend_id, arguments):
         query = arguments["query"]
-        response = self._backend(backend_id).search(PatentSearchQuery(query, arguments.get("max_results", 10)))
+        backend = self._backend(backend_id)
+        source = arguments.get("source")
+        if backend_id == "literature" and source == "arxiv":
+            response = backend.search_arxiv(query, arguments.get("max_results", 5))
+        elif backend_id == "literature":
+            if arguments.get("cites_doi") and source not in (None, "openalex"):
+                raise ValueError("cites_doi_requires_openalex")
+            response = backend.search(
+                PatentSearchQuery(query, arguments.get("max_results", 10)),
+                sources=_LITERATURE_SOURCES.get(source),
+                openalex_mode=arguments.get("openalex_mode", "search"),
+                cites_doi=arguments.get("cites_doi", ""),
+            )
+        else:
+            response = backend.search(PatentSearchQuery(query, arguments.get("max_results", 10)))
         return {**_response(response, scope="bibliographic_search"), "query": query,
                 "publication_cutoff": self.cutoff or None}
 
@@ -247,62 +261,6 @@ def _validate(value, schema, depth=0):
     if "enum" in schema and value not in schema["enum"]:
         raise ValueError("invalid_enum")
 
-
-def _distinct_alias_query(query: dict, previous: list[dict]) -> dict | None:
-    """Separate novel alternatives from previously searched vocabulary, at most once.
-
-    Only OR-word lists change. Required/all concepts stay intact, and an entire
-    concept is never removed. This supplements the original query, never replaces it.
-    """
-    from .search_recall import query_kind
-    if query_kind(query) != "keyword":
-        return None
-    def terms(node):
-        if not isinstance(node, dict):
-            return
-        if node.get("type", "term") == "group":
-            if node.get("op") == "not":
-                return
-            for child in node.get("items", []):
-                yield from terms(child)
-        elif node.get("field") in ("ti", "ab", "ta", "txt"):
-            yield node
-    previous = [node for node in previous if query_kind(node) == "keyword"]
-    seen = {word.casefold() for node in previous for term in terms(node)
-            for word in term.get("value", "").split()}
-    if not seen:
-        return None
-    variant = copy.deepcopy(query)
-    changed = False
-    for term in terms(variant):
-        if term.get("match") != "any":
-            continue
-        words = term.get("value", "").split()
-        fresh = [word for word in words if word.casefold() not in seen]
-        if fresh and len(fresh) < len(words):
-            term["value"] = " ".join(fresh)
-            changed = True
-    if not changed:
-        return None
-    # Carry at most one previously required core concept into the supplementary query.
-    # Otherwise a novel alias alone can drift into an unrelated, very broad field.
-    current_words = {word.casefold() for term in terms(variant) for word in term.get("value", "").split()}
-    for prior in reversed(previous):
-        anchors = [term for term in terms(prior) if term.get("match", "all") == "all"
-                   and not current_words.intersection(word.casefold() for word in term.get("value", "").split())]
-        if anchors:
-            anchor = copy.deepcopy(anchors[-1])
-            if variant.get("type") == "group" and variant.get("op") == "and":
-                variant["items"].append(anchor)
-            else:
-                variant = {"type": "group", "op": "and", "items": [variant, anchor]}
-            break
-    try:
-        epo_cql.build(_query_node(variant))
-    except ValueError:
-        return None
-    return variant
-
 def _query_node(raw: Any, depth=0):
     if depth > epo_cql.MAX_DEPTH or not isinstance(raw, dict):
         raise ValueError("invalid_cql_structure_or_depth")
@@ -325,6 +283,37 @@ def _query_node(raw: Any, depth=0):
     raise ValueError("unsupported_cql_type")
 
 def _response(response, *, scope: str) -> dict:
+    stats = list(response.source_stats)
+    returned = len(response.records)
+    # A multi-source literature count is returned rows, not an index-wide total.
+    is_search = scope == "bibliographic_search"
+    total = response.total_found if not stats else None
+    if len(stats) == 1:
+        total = stats[0].get("total_results")
+    families = {r.fields["family_id"].value for r in response.records if "family_id" in r.fields}
+    unique = len({r.doc_number for r in response.records})
+    coverage = {
+        "returned_records": returned,
+        "unique_documents": unique,
+        # 여러 출처가 같은 문헌을 돌려준 수. 오류가 아니라 교차 확인 신호다.
+        "duplicate_records": returned - unique,
+        # 기본 첫 페이지 범위. EPO는 epo_search_advice에서 실제 begin으로 바꾼다.
+        # 출처가 여럿이면 범위는 source_stats 에 따로 있다.
+        "result_range": f"1-{returned}" if is_search and returned and len(stats) <= 1 else None,
+        "total_results": total,
+        "more_results_available": (total > returned) if total is not None else None,
+        "returned_fraction": round(returned / total, 6) if total and not stats else None,
+        "status": "partial_failure" if response.failed_sources and returned else (
+            "failed" if response.failed_sources else "results" if returned else "zero_results"),
+        "source_stats": [
+            {**stat, "result_range": f"1-{stat['returned_records']}" if stat.get("returned_records") else None}
+            for stat in stats
+        ],
+        "unique_families_in_page": len(families) if families else None,
+        "abstracts_in_page": sum(any(k.startswith("abstract") for k in r.fields) for r in response.records),
+        "classification_records_in_page": sum(any(k in r.fields for k in ("ipc", "cpc")) for r in response.records),
+        "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+    }
     return {
         "untrusted_external_data": True,
         "verification_scope": scope,
@@ -335,15 +324,27 @@ def _response(response, *, scope: str) -> dict:
         "request_url": response.request_url,
         "notes": list(response.notes),
         "failed_sources": list(response.failed_sources),
-        "records": [_record(record) for record in response.records],
+        "records": [_record(record, compact=scope == "bibliographic_search") for record in response.records],
+        "coverage": coverage,
+        "available_fields": sorted({k.split(":")[0] for r in response.records for k in r.fields}),
+        "scope_note": "Bibliographic search/abstract is not claims or full-text verification." if is_search else "Only returned fields were obtained.",
     }
 
 
-def _record(record) -> dict:
+def _record(record, *, compact=False) -> dict:
     fields = {}
     evidence = {}
+    selected = set(record.fields)
+    if compact:
+        selected = {name for name in selected if name in {"applicants", "authors", "publication_date", "ipc", "cpc", "container"}}
+        abstracts = [name for name in record.fields if name.split(":")[0] == "abstract"]
+        if abstracts:
+            selected.add("abstract:en" if "abstract:en" in abstracts else abstracts[0])
+    limit = 1200 if compact else 40000
     for name, field in record.fields.items():
-        fields[name] = field.value[:40000]
+        if name not in selected:
+            continue
+        fields[name] = field.value[:limit]
         if field.evidence is not None:
             evidence[name] = {
                 "artifact_id": field.evidence.artifact_id,
@@ -358,7 +359,8 @@ def _record(record) -> dict:
         "publication_date": publication_date,
         "fields": fields,
         "evidence_refs": evidence,
-        "truncated_fields": [name for name, field in record.fields.items() if len(field.value) > 40000],
+        "truncated_fields": [name for name, field in record.fields.items() if name in selected and len(field.value) > limit],
+        "omitted_fields": [name for name in record.fields if name not in selected],
     }
 
 
@@ -384,26 +386,32 @@ _QUERY_SCHEMA = {
 }
 _EPO_SEARCH = _tool(
     "epo_search",
-    "Search EPO OPS. Compact screening records, total_found and next_start. Broad queries may include one separately journalled vocabulary_probe using only your new OR aliases, within the shared call budget. Duplicate records are referenced in previously_seen. Fetch selected publications for full evidence.",
+    "Search EPO OPS with structured CQL. Provider-default order is not relevance ranking. Inspect coverage/date range and broad_query_sample warnings. Use observed ipc/cpc plus technical terms, date_range partitions, or begin for subsequent pages. Keep each OR branch technically specific; match=any splits words with OR. Returns actual CQL and artifact references.",
     {"query": _QUERY_SCHEMA, "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
-     "start": {"type": "integer", "minimum": 1, "maximum": 2000}},
+     "begin": {"type": "integer", "minimum": 1, "maximum": 2000}},
     ["query"],
 )
 _EPO_FETCH = _tool(
     "epo_fetch",
-    "Fetch an EPO publication constituent. Use abstract, claims, description, biblio or family.",
+    "Fetch an EPO publication constituent: abstract, claims, description, biblio or family. US claims/description are not supplied by OPS; use biblio/abstract and a source page or identified family for full text. Scope failure is not publication absence. EntityNotFound may require number-format verification; never silently drop a fetched candidate.",
     {"publication_number": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "claims", "description", "biblio", "family"]}},
     ["publication_number"],
 )
+# literature_search 의 source 값 -> 백엔드 출처. 없으면(None) 쓸 수 있는 곳 전부다.
+_LITERATURE_SOURCES = {
+    "crossref_epmc": ("crossref", "europepmc"),
+    "openalex": ("openalex",),
+}
+
 _LITERATURE_SEARCH = _tool(
     "literature_search",
-    "Search Crossref and Europe PMC using a literature-specific natural-language query.",
-    {"query": {"type": "string", "minLength": 1, "maxLength": 500}, "max_results": {"type": "integer", "minimum": 1, "maximum": 20}},
+    "Search literature. Omit source to query Crossref, Europe PMC and OpenAlex together. source=crossref_epmc searches only Crossref and Europe PMC; source=openalex searches only OpenAlex (broad coverage incl. IEEE/Elsevier abstracts and arXiv); source=arxiv searches arXiv preprints with arXiv query syntax. openalex_mode=search matches full-text index (broad, noisy); title_and_abstract restricts to titles/abstracts (narrow). cites_doi=<DOI> searches only works that cite that DOI (OpenAlex citation expansion; query narrows within them). HTTP 429 from OpenAlex means daily quota exhausted, not absence of literature. Metadata/abstract is not PDF full text.",
+    {"query": {"type": "string", "minLength": 1, "maxLength": 500}, "max_results": {"type": "integer", "minimum": 1, "maximum": 20}, "source": {"type": "string", "enum": ["crossref_epmc", "openalex", "arxiv"]}, "openalex_mode": {"type": "string", "enum": ["search", "title_and_abstract"]}, "cites_doi": {"type": "string", "minLength": 1, "maxLength": 200}},
     ["query"],
 )
 _LITERATURE_FETCH = _tool(
     "literature_fetch",
-    "Fetch bibliographic or abstract evidence for an exact DOI. Mismatched DOI responses are rejected by the backend.",
+    "Fetch bibliographic or abstract evidence for an exact DOI (Europe PMC, then OpenAlex, then Crossref for abstracts; a record without an abstract does not stop the search). arXiv IDs are accepted as 10.48550/arXiv.<id>, arXiv:<id> or arxiv.org/abs/<id> (version suffix ignored for identity) and try arXiv first, then OpenAlex. Mismatched identities are rejected; PDF full text is not fetched.",
     {"doi": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "biblio"]}},
     ["doi"],
 )
@@ -418,18 +426,14 @@ def _reply(request_id, result=None, error=None):
     sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
     sys.stdout.flush()
 
-def _tool_result(value, *, error=False):
-    # No outputSchema is advertised. Text JSON is the complete MCP result;
-    # an identical structuredContent doubles the wire payload in Codex logs.
-    # The full evidence remains in the PRISM journal.
-    return {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False, separators=(",", ":"))}],
-            "isError": error}
-
+INACTIVE_ERROR = "not_in_prism_search_run"
 
 def main():
     sys.stdin.reconfigure(encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
-    tools = SearchTools()
+    # agy 는 전역 설정의 MCP 서버를 모든 세션에서 띄운다. PRISM 검색 실행이 넘긴
+    # 작업 폴더가 없으면(터미널의 agy, 문서 분석 실행) 도구를 내놓지 않는다.
+    tools = SearchTools() if os.environ.get("PRISM_SEARCH_WORK_DIR") else None
     while True:
         line = sys.stdin.readline(65537)
         if not line:
@@ -451,17 +455,21 @@ def main():
             elif method == "ping":
                 _reply(request_id, {})
             elif method == "tools/list":
-                _reply(request_id, {"tools": tools.tool_definitions()})
+                _reply(request_id, {"tools": tools.tool_definitions() if tools else []})
+            elif method == "tools/call" and tools is None:
+                value = {"error_code": INACTIVE_ERROR, "detail": "PRISM 검색 실행 밖에서는 도구를 제공하지 않습니다."}
+                _reply(request_id, {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}],
+                                    "structuredContent": value, "isError": True})
             elif method == "tools/call":
                 params = request.get("params") or {}
                 try:
                     value = tools.call(str(params.get("name") or ""), params.get("arguments", {}))
                     error = False
                 except Exception as exc:
-                    value = {"error_code": getattr(exc, "fault_code", "") or type(exc).__name__,
-                             "detail": scrub(str(exc), *tools.secrets)[:500]}
+                    value = error_response(exc, str(params.get("name") or ""), params.get("arguments", {}), tools.secrets)
                     error = True
-                _reply(request_id, _tool_result(value, error=error))
+                _reply(request_id, {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}],
+                                    "structuredContent": value, "isError": error})
             else:
                 _reply(request_id, error={"code": -32601, "message": "Method not found"})
         except (ValueError, TypeError):
