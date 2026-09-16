@@ -160,25 +160,3 @@ def block_literature_network(monkeypatch):
         )
 
     monkeypatch.setattr(openalex_client, "_live_transport", refuse_openalex)
-
-    from app.patent_search import oa_pdf
-
-    def refuse_pdf(url, timeout):
-        raise AssertionError(
-            f"테스트가 논문 OA PDF 로 실제 요청을 보내려 했습니다: {url} — transport 를 주입하십시오."
-        )
-
-    monkeypatch.setattr(oa_pdf, "_live_transport", refuse_pdf)
-
-
-@pytest.fixture(autouse=True)
-def block_gpatents_network(monkeypatch):
-    """Google Patents 페이지로 나가는 실제 요청을 막는다. 같은 이유, 같은 방식."""
-    from app.patent_search import gpatents_backend
-
-    def refuse(url, timeout):
-        raise AssertionError(
-            f"테스트가 Google Patents 로 실제 요청을 보내려 했습니다: {url} — transport 를 주입하십시오."
-        )
-
-    monkeypatch.setattr(gpatents_backend, "_live_transport", refuse)

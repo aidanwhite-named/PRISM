@@ -136,35 +136,6 @@ def test_schema_view_is_allowed_only_for_enabled_prism_tools(agy_home):
     assert policy.unexpected_calls(parser.state.tool_calls) == ["view_file"]
 
 
-def test_schema_dir_listing_is_allowed_only_for_the_schema_dir(agy_home):
-    """job c4246521: 스키마를 읽기 전에 list_dir 로 폴더부터 봤고 실행 전체가 위반이 됐다."""
-    _, _, schemas = agy_home
-    parser = AgyStreamParser()
-    parser.feed(json.dumps({"event": "init", "conversation_id": "c1", "init": {}}))
-    parser.feed(_step(4, "DONE", "list_dir", {"DirectoryPath": str(schemas)}))
-    parser.feed(_step(5, "DONE", "list_dir", {"DirectoryPath": str(schemas.parent)}))
-    parser.feed(_step(6, "DONE", "list_dir", {"DirectoryPath": str(schemas / "..")}))
-    parser.feed(_step(7, "DONE", "list_dir", {"DirectoryPath": str(schemas.parent / "probe")}))
-    parser.feed(_step(8, "DONE", "list_dir", {"DirectoryPath": str(schemas / "epo_search.json")}))
-    policy = replace(AGY_WEB_SEARCH, mcp_tools=("mcp__prism-search__epo_search",))
-    audit_content_reads(parser.state, policy)
-    assert parser.state.tool_calls[0]["input"] == {"path": str(schemas)}
-    scopes = [call["scope"] for call in parser.state.tool_calls]
-    assert scopes == ["mcp_schema_dir"] + ["out_of_scope"] * 4
-    assert policy.unexpected_calls(parser.state.tool_calls) == ["list_dir"]
-
-
-def test_schema_dir_listing_needs_prism_tools_in_this_run(agy_home):
-    """prism-search 도구가 없는 실행에서는 스키마 폴더를 볼 이유가 없다."""
-    _, _, schemas = agy_home
-    parser = AgyStreamParser()
-    parser.feed(json.dumps({"event": "init", "conversation_id": "c1", "init": {}}))
-    parser.feed(_step(4, "DONE", "list_dir", {"DirectoryPath": str(schemas)}))
-    audit_content_reads(parser.state, AGY_WEB_SEARCH)
-    assert parser.state.tool_calls[0]["scope_ok"] is False
-    assert AGY_WEB_SEARCH.unexpected_calls(parser.state.tool_calls) == ["list_dir"]
-
-
 def test_large_mcp_output_file_is_readable_only_for_its_own_successful_call(tmp_path):
     """run f2e77760: 41~53 KB 검색 결과가 steps/<n>/output.txt 로 넘겨졌다."""
     steps = tmp_path / "brain" / "c1" / ".system_generated" / "steps"

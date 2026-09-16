@@ -137,7 +137,7 @@ def test_final_prompt_carries_claim_inside_the_boundary(client) -> None:
 
     # 검색 실행의 시스템 프롬프트는 신뢰 경계이자 증거 등급 계약이다.
     assert "WebFetch" in system
-    assert "확인하지 못한 날짜·발췌·번역·위치는 빈 문자열" in system
+    assert "원문 확인이 불가능하면" in system
     # 첨부 분석용 런타임 컨텍스트가 섞이면 안 된다.
     assert "별도의 도구는 제공되지 않습니다" not in text
 
@@ -237,12 +237,12 @@ def test_missing_audit_block_fails_instead_of_shipping_unverified_prose(client) 
     assert client.get(f"/api/jobs/{job['id']}/raw?which=model").text.strip()
 
 
-def test_tool_call_budget_stops_the_run(client, monkeypatch) -> None:
-    # 화면에서 바꿀 수 없는 고정값이므로 기본값 자체를 줄여서 확인한다.
-    from app.config import DEFAULTS
-
-    monkeypatch.setitem(DEFAULTS, "max_search_tool_calls", 3)
-    job = wait_for_job(client, _start(client, claim=f"{CLAIM}\nSEARCH_BUDGET")["id"])
+def test_tool_call_budget_stops_the_run(client) -> None:
+    client.put("/api/settings", json={"values": {"max_search_tool_calls": 3}})
+    try:
+        job = wait_for_job(client, _start(client, claim=f"{CLAIM}\nSEARCH_BUDGET")["id"])
+    finally:
+        client.put("/api/settings", json={"values": {"max_search_tool_calls": 40}})
     assert job["status"] == JobStatus.FAILED
     assert job["error_code"] == ErrorCode.SEARCH_BUDGET_EXCEEDED
 

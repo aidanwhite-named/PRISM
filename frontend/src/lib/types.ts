@@ -275,32 +275,15 @@ export interface GapSearchFocus {
  */
 export type SearchGroup = "A" | "B" | "C" | null;
 export type SearchEvidenceLevel = "search_snippet_only" | "source_page_reviewed" |
-  "official_bibliographic" | "official_abstract" | "source_page_text_verified" |
-  "oa_pdf_text_verified" | "official_claims" | "official_full_text";
+  "official_bibliographic" | "official_abstract" | "official_claims" | "official_full_text";
 export type SearchVerificationIssue = "publication_date_unverified" | "title_unverified" | "title_mismatch" | "applicant_unverified" | "applicant_mismatch" | "identifier_unverified" | "identifier_invalid" |
-  "identifier_mismatch" | "source_not_read" | "quote_unverified" | "support_unverified" | "passage_unverified" |
+  "identifier_mismatch" | "source_not_read" | "quote_unverified" | "support_unverified" |
   "duplicate_group_conflict" | "publication_date_conflict" | "source_conflict";
 export interface SearchMappingRow {
   feature: string; degree: string; counterpart: string; similar: string; different: string;
   support_text: string; support_verified: boolean; quote_verified: boolean;
   verbatim_excerpt: string; translation: string; source_location: string;
   evidence_ref: { artifact_id: string; field_path: string; profile_id: string } | null;
-  evidence_passage_id?: string;
-  passage_resolution?: {
-    passage_id: string; start: number; end: number; restored_fields: string[];
-    evidence_ref: { artifact_id: string; field_path: string; profile_id: string };
-  };
-  evidence_ref_resolution?: {
-    reason: "delivered_response_path";
-    reported: { artifact_id: string; field_path: string; profile_id: string };
-    resolved: { artifact_id: string; field_path: string; profile_id: string };
-  };
-  /** PRISM 이 보존한 Google Patents 페이지 또는 논문 OA PDF 에서 글자 그대로 확인됨 (비공식 출처). */
-  page_quote_verified?: boolean;
-  /** 근거 필드의 출처: google_patents_page | oa_pdf | preserved_response | "" */
-  support_origin?: string;
-  /** 번호 표시에서 PRISM 이 계산한 근거 위치 (예: 청구항 2, 논문 p.12). */
-  support_location?: string;
 }
 export interface SearchCandidate {
   verified_titles?: string[]; verified_applicants?: string[];
@@ -409,12 +392,16 @@ export interface ProviderInfo {
     | null
   >;
   notes: string[];
+  install_hint: string;
   /** PRISM에 실제 분석 실행 Adapter가 구현되어 있는가. */
   execution_supported: boolean;
   /** 실행 허용 여부. 설치·인증에 더해 안전 정책까지 반영. */
   usable: boolean;
   /** 설치/실행/인증만 본 상태. 안전 정책은 반영하지 않음. */
   runnable: boolean;
+  /** PRISM 의 안전 원칙(도구 없는 실행)을 충족하지 못하는 Provider. */
+  experimental: boolean;
+  risks: string[];
 }
 
 export type ProviderLoginState =
@@ -619,6 +606,7 @@ export interface AppSettings {
     max_files_per_job: number;
     /** 0 = 제한 없음(기본값). */
     max_inline_chars: number;
+    default_timeout_seconds: number;
     max_concurrency_per_provider: number;
     runtime_context: string;
     runtime_context_enabled: boolean;
@@ -639,6 +627,7 @@ export interface AppSettings {
     search_reasoning_effort?: Record<string, string>;
     keep_raw_output: boolean;
     fail_on_tool_use: boolean;
+    max_search_tool_calls: number;
     /** 인용발명 전달 방식 정책. auto = 넣을 수 있는 만큼 넓게. */
     retrieval_mode: "auto" | "full" | "retrieval";
     retrieval_max_rounds: number;
@@ -676,6 +665,8 @@ export interface AppSettings {
     epo_consumer_secret: string;
     /** OPS HTTP 대기 시간의 총합. 실행 전체 시간과 별개인 내부 안전 한도. */
     epo_http_budget_seconds: number;
+    /** 0 = 시간당 사용량을 관측·표시만 하고 차단하지 않음. 주간 한도는 계약값이라 별도. */
+    epo_hourly_quota_bytes: number;
     epo_max_detail_fetches: number;
     /** PRISM 이 관측해 적는 값. 사용자가 PUT 으로 못 고친다(사용량 되돌리기 방지). */
     epo_quota_state: Record<string, unknown>;
@@ -695,12 +686,6 @@ export interface AppSettings {
     literature_max_results_per_query: number;
     /** 서지 API HTTP 대기 시간의 총합(초). */
     literature_http_budget_seconds: number;
-    /** Google Patents 원문 페이지 조회(비공식 출처). 사람 속도로만 조회한다. */
-    gpatents_page_enabled: boolean;
-    /** 페이지 요청 사이 최소 간격(초). 3–60. */
-    gpatents_min_interval_seconds: number;
-    /** 실행 하나에서 새로 받는 페이지 수 상한. 1–40. */
-    gpatents_max_fetches_per_run: number;
   };
   warnings: string[];
   data_dir: string;
@@ -747,6 +732,7 @@ export interface AgyPermissionState {
 export interface EpoQuotaSnapshot {
   week?: string;
   weekly_limit_bytes?: number;
+  hourly_limit_bytes?: number;
   local_bytes?: number;
   ops_weekly_bytes?: number | null;
   ops_hourly_bytes?: number | null;

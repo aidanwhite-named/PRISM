@@ -228,7 +228,7 @@ def test_default_search_includes_openalex_only_when_configured(store):
                           literature_routes=routes, openalex_calls=calls)
     configured.configure({})
     stats = configured.search(PatentSearchQuery("edge", 3)).source_stats
-    assert [s["source"] for s in stats] == ["openalex", "crossref", "europepmc"]
+    assert [s["source"] for s in stats] == ["crossref", "europepmc", "openalex"]
     assert len(calls) == 1
 
 
@@ -309,19 +309,16 @@ def _no_epmc_abstract(document):
 
 
 def test_a_record_without_abstract_does_not_end_the_abstract_search(store):
-    """OpenAlex 가 초록 없는 레코드를 줘도 Europe PMC 까지 가야 한다."""
-    def no_openalex_abstract(document):
-        document["abstract_inverted_index"] = None
-
+    """Europe PMC 가 초록 없는 레코드를 줘도 OpenAlex 까지 가야 한다."""
     backend = _backend(
         store,
-        {f"doi.org/{fx.TARGET_DOI}": (200, _without(fx.OPENALEX_WORK, no_openalex_abstract))},
-        literature_routes={"europepmc": (200, fx.EUROPEPMC_DETAIL)},
+        {f"doi.org/{fx.TARGET_DOI}": (200, fx.OPENALEX_WORK)},
+        literature_routes={"europepmc": (200, _without(fx.EUROPEPMC_DETAIL, _no_epmc_abstract))},
     )
     response = backend.fetch_document(fx.TARGET_DOI, "abstract")
     abstract = response.records[0].fields["abstract"]
-    assert abstract.evidence.profile_id == literature_parser.PROFILE_EUROPEPMC_JSON
-    assert "openalex 레코드에 초록이 없습니다." in response.notes
+    assert abstract.evidence.profile_id == literature_parser.PROFILE_OPENALEX_JSON
+    assert "europepmc 레코드에 초록이 없습니다." in response.notes
 
 
 def test_when_no_source_has_an_abstract_the_first_record_is_kept(store):
@@ -343,7 +340,7 @@ def test_when_no_source_has_an_abstract_the_first_record_is_kept(store):
     assert len(response.records) == 1
     record = response.records[0]
     assert "abstract" not in record.fields
-    assert record.fields["title"].evidence.profile_id == literature_parser.PROFILE_OPENALEX_JSON
+    assert record.fields["title"].evidence.profile_id == literature_parser.PROFILE_EUROPEPMC_JSON
     assert sum("초록이 없습니다" in note for note in response.notes) == 3
 
 

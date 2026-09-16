@@ -54,9 +54,6 @@ from .resolver import ResolvedExecutable, resolve_claude
 # (실측: mcpServers: Invalid input: expected record, received undefined)
 _EMPTY_MCP = json.dumps({"mcpServers": {}})
 
-# 파일 쓰기·셸 실행을 하는 내장 도구. 어떤 정책에서도 허용하지 않는다.
-WRITE_TOOLS = ("Bash", "Edit", "Write", "NotebookEdit")
-
 _CHILD_ENV_EXTRA = {
     # 사용자 레벨 auto-memory 가 실행에 섞이지 않게 한다.
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
@@ -70,6 +67,11 @@ class ClaudeCliProvider(Provider):
     # 이 Provider 만 --tools 로 내장 도구 목록을 강제할 수 있다.
     supported_tool_policies = frozenset({NO_TOOLS.name, WEB_SEARCH.name})
     search_tool_policy = WEB_SEARCH
+    install_hint = (
+        "npm install -g @anthropic-ai/claude-code 로 설치한 뒤, 별도 터미널에서 "
+        "claude setup-token 또는 claude auth login 으로 로그인하십시오. "
+        "PRISM 은 API Key 를 입력받지 않고 CLI 에 저장된 로그인 세션만 사용합니다."
+    )
 
     def __init__(self, executable_override: str | None = None) -> None:
         self._override = executable_override or None
@@ -85,6 +87,7 @@ class ClaudeCliProvider(Provider):
         result = ProbeResult(
             provider=self.id,
             display_name=self.display_name,
+            install_hint=self.install_hint,
             capabilities={
                 "non_interactive": True,
                 "stream_json": True,
@@ -187,10 +190,6 @@ class ClaudeCliProvider(Provider):
             # 전부 사라진다(파일 접근/셸/네트워크 표면이 없어진다).
             "--tools",
             ",".join(policy.allowed_tools),
-            # 방어 심화. 쓰기·실행 도구는 --tools 목록에 없어 이미 노출되지 않지만,
-            # 이름으로도 한 번 더 거부한다. 검색 실행도 읽기 전용이어야 한다.
-            "--disallowedTools",
-            *WRITE_TOOLS,
         ]
         permitted_tools = (*policy.allowed_tools, *policy.mcp_tools)
         if permitted_tools:

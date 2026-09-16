@@ -261,16 +261,6 @@ def test_stdin_message_keeps_korean_unescaped() -> None:
     assert "한글" in line
 
 
-def test_agy_print_timeout_line_is_recognized() -> None:
-    from app.providers.agy_cli import print_timeout_hit
-
-    assert print_timeout_hit(
-        "[agy] print timeout after 5m0s with turn in progress; returning partial output\n"
-    )
-    assert not print_timeout_hit("[agy] not logged in\n")
-    assert not print_timeout_hit(None)
-
-
 def test_build_args_and_policy() -> None:
     from pathlib import Path
 
@@ -287,11 +277,6 @@ def test_build_args_and_policy() -> None:
     assert args[args.index("--output-format") + 1] == "stream-json"
     assert args[args.index("--model") + 1] == "gemini-3.1-pro-low"
     assert "--disable-slash-commands" in args
-    # agy 기본 5분 상한이 PRISM 마감보다 먼저 오면 진행 중인 턴이 빈 응답으로
-    # 버려진다(job c4246521). 마감은 PRISM 쪽이 쥔다.
-    print_timeout = args[args.index("--print-timeout") + 1]
-    assert print_timeout.endswith("s")
-    assert int(print_timeout[:-1]) > request.timeout_seconds
     # 절대 쓰면 안 되는 플래그
     assert "--dangerously-skip-permissions" not in args
     assert "--mode" not in args

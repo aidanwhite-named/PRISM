@@ -502,7 +502,7 @@ class OpsClient:
         self, build_request: Callable[[str], urllib.request.Request], *, kind: str
     ) -> OpsCall:
         """인증 헤더를 붙여 보내고, 필요한 만큼만 재시도한다."""
-        # 영속 원장은 주간 데이터량 한도만 맡는다. 60초짜리 black 상태는
+        # 영속 원장은 주간·시간당 데이터량만 맡는다. 60초짜리 black 상태는
         # 이 작업의 클라이언트 안에서만 확인한다.
         self._check_transient_throttle()
         if not self._token_valid():

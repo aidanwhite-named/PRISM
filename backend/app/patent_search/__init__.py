@@ -86,11 +86,6 @@ from .epo_quota import (
     QuotaState,
     Throttled,
 )
-from .gpatents_backend import (
-    BACKEND_ID as GPATENTS_BACKEND_ID,
-    SETTING_ENABLED as GPATENTS_SETTING_ENABLED,
-    GooglePatentsPageBackend,
-)
 from .kiwee_backend import KiweePatentSearchBackend
 from .literature_backend import (
     BACKEND_ID as LITERATURE_BACKEND_ID,
@@ -134,7 +129,6 @@ _ENABLE_KEYS: dict[str, str] = {
     "kiwee": "kiwee_integration_enabled",
     "epo": EPO_SETTING_ENABLED,
     "literature": LITERATURE_SETTING_ENABLED,
-    "gpatents": GPATENTS_SETTING_ENABLED,
 }
 
 # 설정 키. 이름의 단일 출처. 백엔드가 하나뿐이던 시절의 이름이라 Kiwee 를
@@ -145,19 +139,15 @@ SETTING_KEY = _ENABLE_KEYS["kiwee"]
 DEFAULT_BACKEND_ID = "kiwee"
 
 # 화면이 상태를 보여 줄 백엔드 전체. 등록 순서가 표시 순서다.
-BACKEND_IDS = ("kiwee", "epo", "literature", "gpatents")
+BACKEND_IDS = ("kiwee", "epo", "literature")
 
 _REGISTRY: dict[str, Callable[[], PatentSearchBackend]] = {
     "kiwee": KiweePatentSearchBackend,
     "epo": EpoOpsBackend,
     "literature": LiteratureBackend,
-    "gpatents": GooglePatentsPageBackend,
 }
 
 __all__ = [
-    "GPATENTS_BACKEND_ID",
-    "GPATENTS_SETTING_ENABLED",
-    "GooglePatentsPageBackend",
     "SETTING_KEY",
     "DEFAULT_BACKEND_ID",
     "BACKEND_IDS",

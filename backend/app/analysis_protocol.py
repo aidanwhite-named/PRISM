@@ -45,19 +45,7 @@ from .citation_mapping import _OPEN as _MAPPING_OPEN
 # 이라는 판단이고, 판단 불가와 같은 칸에 넣으면 그 둘이 화면에서 구별되지 않는다.
 INSTRUCTIONS = f"""# PRISM 기계 판독 블록
 
-사람이 읽는 보고서 본문을 끝낸 직후 아래 블록을 출력한다. 화면에서는 제거되므로
-본문에서 설명하지 않는다. **문헌 매핑 블록을 먼저**, 구성별 분석 블록을 그 다음에
-한 번씩 출력한다. 출력 한도에 닿을 수 있으므로 문헌 매핑 블록을 맨 마지막에 미루지 마라.
-
-## 문헌 매핑 블록
-
-번호를 부여한 모든 문헌에 대해 `citation_number`는 표의 번호, `attachment`는 첨부의
-`ATT-02`형 자료 번호, `document_number`는 확인된 고유 문헌번호를 쓴다. UUID·해시는
-쓰지 않으며 문헌번호 미확인 시 블록 전체를 생략한다. 한 줄 JSON이며 코드펜스를 쓰지 않는다.
-
-{_MAPPING_OPEN}
-{{"items":[{{"citation_number":1,"attachment":"ATT-02","document_number":"KR10-1234567"}}]}}
-[/PRISM_CITATION_MAPPING_V1]
+종합 요약 뒤에 아래 두 블록을 출력한다. 화면에서는 제거되므로 본문에서 설명하지 않는다.
 
 ## 구성별 분석 블록
 
@@ -67,6 +55,13 @@ INSTRUCTIONS = f"""# PRISM 기계 판독 블록
 {{"items":[{{"claim":"청구항 1","symbol":"(A)","feature":"청구항 구성 내용","similarity":92,"status":"matched","basis":"direct","difference":""}},{{"claim":"청구항 1","symbol":"(B)","feature":"청구항 구성 내용","similarity":0,"status":"below_threshold","basis":"inferred","difference":"확인 범위에서 대응 내용 없음"}},{{"claim":"청구항 1","symbol":"(C)","feature":"청구항 구성 내용","similarity":null,"status":"unreadable","basis":"inferred","difference":"검토 범위 제한으로 확인하지 못한 기능"}}]}}
 [/PRISM_COMPONENT_ANALYSIS_V1]
 
+## 문헌 매핑 블록
+
+보고서 맨 마지막에 한 번만 출력한다. 번호를 부여한 모든 문헌에 대해 `citation_number`는 표의 번호, `attachment`는 첨부의 `ATT-02`형 자료 번호, `document_number`는 확인된 고유 문헌번호를 쓴다. UUID·해시는 쓰지 않으며 문헌번호 미확인 시 블록 전체를 생략한다. 한 줄 JSON이며 코드펜스를 쓰지 않는다.
+
+{_MAPPING_OPEN}
+{{"items":[{{"citation_number":1,"attachment":"ATT-02","document_number":"KR10-1234567"}}]}}
+[/PRISM_CITATION_MAPPING_V1]
 """
 
 

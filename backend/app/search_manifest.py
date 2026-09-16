@@ -136,7 +136,7 @@ def parse(text: str, observed_section=None, **_context) -> tuple[dict, list[str]
             clean = {}
             for key in ("feature", "degree", "counterpart", "similar", "different", "support_text",
                         "support_source", "support_scope", "support_url", "verbatim_excerpt",
-                        "translation", "source_location", "evidence_passage_id"):
+                        "translation", "source_location"):
                 item = row.get(key, "")
                 if item is not None and not isinstance(item, str):
                     raise SearchLogError(f"후보 {index}: mapping.{key}는 문자열이어야 합니다.")
@@ -158,7 +158,7 @@ def has_retrieval_attempt(calls, tool_uses=None, journal=None) -> bool:
     eligible = SEARCH_TOOL_NAMES | FETCH_TOOL_NAMES | {
         f"mcp__prism-search__{source}_{action}"
         for source in ("epo", "literature", "kiwee") for action in ("search", "fetch")
-    } | {"mcp__prism-search__gpatents_fetch", "mcp__prism-search__literature_fetch_pdf"}
+    }
     return bool(names & eligible)
 
 

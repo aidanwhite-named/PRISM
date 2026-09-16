@@ -5,7 +5,7 @@ codex-cli 0.149.0 을 실제로 실행해서 계약을 확인했다.
   실행 : codex exec --json --color never --sandbox read-only
               --skip-git-repo-check --ephemeral --ignore-user-config
               --ignore-rules -C <work_dir> -o <파일> [-m 모델]
-              -c tools.web_search=<bool> [-c web_search="live"] -
+              -c tools.web_search=<bool> -
   입력 : 프롬프트 본문 (stdin). 마지막 인수 `-` 가 stdin 에서 읽으라는 뜻이다.
   출력 : JSONL 이벤트 (stdout) + 최종 본문 (-o 로 지정한 파일)
 
@@ -64,6 +64,22 @@ from .resolver import ResolvedExecutable, resolve_simple
 # 최종 본문을 받을 파일 이름. 작업 폴더는 실행별로 격리돼 있다.
 _LAST_MESSAGE_FILE = "codex_last_message.txt"
 
+# 이 Provider 를 켜기 전에 사용자가 알아야 할 것. Settings 에 그대로 표시된다.
+RISKS = (
+    "셸 실행과 파일 수정 도구를 끄는 수단이 없습니다. 설정의 [tools] 표에는 "
+    "web_search 등 세 항목뿐이고 셸·파일 도구는 그 목록에 없습니다.",
+    "PRISM 은 도구 호출을 '탐지'해서 실패로 기록할 뿐, 호출 자체를 '차단'하지 "
+    "못합니다. 실패로 표시되는 시점에는 이미 명령 실행이 끝난 뒤일 수 있습니다. "
+    "이건 fail-closed 가 아니라 사후 탐지입니다.",
+    "`--sandbox read-only` 로 실행하지만 이는 Codex 자신의 경계이며 PRISM 이 "
+    "보증하는 경계가 아닙니다. 읽기 접근은 여전히 열려 있습니다.",
+    "도구 호출 탐지는 CLI 가 내보내는 항목 종류 이름에 기반합니다. 다음 버전에서 "
+    "이름이 바뀌거나 도구가 늘면 놓칠 수 있습니다.",
+    "시스템 프롬프트를 분리할 수 없어 PRISM 런타임 컨텍스트가 사용자 메시지에 "
+    "포함됩니다. 첨부 문서와 같은 층위라 프롬프트 인젝션 방어가 약합니다.",
+    "신뢰할 수 없는 출처의 문서 분석에는 사용하지 마십시오.",
+)
+
 # 실행 파일에서 확인한 모델 slug. 계정별 모델 목록을 반환하는 명령이 없어서
 # CLI 가 아는 이름만 노출한다.
 MODELS = (
@@ -104,6 +120,13 @@ class CodexCliProvider(Provider):
     # *실제 호출*을 사후 탐지하는 제한된 안전성 정책이다.
     supported_tool_policies = frozenset({CODEX_WEB_SEARCH.name})
     search_tool_policy = CODEX_WEB_SEARCH
+    install_hint = (
+        "npm install -g @openai/codex 로 설치한 뒤 `codex login` 으로 "
+        "로그인하십시오. Codex 데스크톱 앱에 번들된 실행 파일은 WindowsApps 권한 "
+        "때문에 외부 프로세스에서 호출하지 못할 수 있습니다. 그런 경우 Settings "
+        "에서 절대 경로를 지정하고 다시 검사하십시오. PRISM 은 API Key 를 "
+        "입력받지 않고 CLI 에 저장된 로그인 세션만 사용합니다."
+    )
 
     def __init__(self, executable_override: str | None = None) -> None:
         self._override = executable_override or None
@@ -119,6 +142,9 @@ class CodexCliProvider(Provider):
         result = ProbeResult(
             provider=self.id,
             display_name=self.display_name,
+            install_hint=self.install_hint,
+            experimental=True,
+            risks=list(RISKS),
             capabilities={
                 "non_interactive": True,
                 "stream_json": True,
@@ -251,13 +277,6 @@ class CodexCliProvider(Provider):
             "-c",
             f"tools.web_search={'true' if wants_search else 'false'}",
         ]
-        if wants_search:
-            # 기본값 cached 는 OpenAI 가 미리 색인한 페이지만 돌려준다. 2026-09-15
-            # 실측에서 US9208613B2 Google Patents 페이지가 cached 에서는
-            # "Cache miss", live 에서는 청구항 1 첫머리까지 열렸다. 실시간 페이지는
-            # 프롬프트 인젝션 노출이 늘지만 PRISM 은 웹 결과를 신뢰하지 않는
-            # 데이터로 다루고 read-only 샌드박스를 그대로 둔다.
-            args += ["-c", 'web_search="live"']
         if request.model:
             args += ["-m", request.model]
         # 사용자가 고르지 않았으면 **아무 것도 넘기지 않는다.** 그래야 모델

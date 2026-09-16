@@ -77,10 +77,6 @@ COMPOSED_FIELDS = (
     "applicants",
     "inventors",
     "ipc",
-    # 인용문헌 목록. 행마다 공개번호·인용 주체·단계·카테고리를 PRISM 이 이어 붙인다.
-    # OPS 가 문헌에 붙여 둔 경우에만 있다(2026-09-15 실측: US 서지에는 있고 JP·EP A1
-    # 서지에는 없었다).
-    "references_cited",
 )
 SCALAR_FIELDS = ("publication_date", "family_id")
 SUPPORTED_FIELDS = MULTILINGUAL_FIELDS + COMPOSED_FIELDS + SCALAR_FIELDS
@@ -189,7 +185,6 @@ class EpoDocument:
     applicants: tuple = ()
     inventors: tuple = ()
     ipc: tuple = ()
-    references_cited: tuple = ()
 
     @property
     def publication_number(self) -> str:
@@ -224,8 +219,6 @@ class EpoDocument:
             found["inventors"] = "\n".join(self.inventors)
         if self.ipc:
             found["ipc"] = "\n".join(self.ipc)
-        if self.references_cited:
-            found["references_cited"] = "\n".join(self.references_cited)
         if self.publication_date:
             found["publication_date"] = self.publication_date
         if self.family_id:
@@ -272,38 +265,6 @@ def _dedupe(values) -> tuple:
     return tuple(ordered)
 
 
-def _references(node) -> tuple:
-    """``references-cited`` 의 인용 한 건을 한 줄로.
-
-    특허 인용은 docdb 번호(국가+번호+종류), 비특허 인용은 ``NPL:`` 뒤 본문 앞부분.
-    인용 주체(cited-by: applicant/examiner…), 단계(cited-phase), 카테고리(X/Y/A)가
-    있으면 함께 적는다. 없는 값은 만들지 않는다.
-    """
-    lines = []
-    for holder in _iter(node, "references-cited"):
-        for citation in _iter(holder, "citation"):
-            patcit = next(_iter(citation, "patcit"), None)
-            if patcit is not None:
-                country, number, kind, _ = _docdb_id(patcit)
-                if not number:
-                    continue
-                parts = [f"{country}{number}{kind}"]
-            else:
-                npl = next(_iter(citation, "nplcit"), None)
-                text = " ".join(_text_of(npl).split()) if npl is not None else ""
-                if not text:
-                    continue
-                parts = ["NPL: " + text[:300]]
-            for name in ("cited-by", "cited-phase"):
-                if citation.get(name):
-                    parts.append(f"{name}={citation.get(name)}")
-            categories = _dedupe(_text_of(entry) for entry in _iter(citation, "category"))
-            if categories:
-                parts.append("category=" + ",".join(categories))
-            lines.append(" | ".join(parts))
-    return _dedupe(lines)
-
-
 def _read_one(node) -> EpoDocument | None:
     """exchange-document 또는 fulltext-document 하나를 읽는다."""
     country = (node.get("country") or "").strip()
@@ -342,7 +303,6 @@ def _read_one(node) -> EpoDocument | None:
     )
 
     return EpoDocument(
-        references_cited=_references(node),
         doc_key=_doc_key(country, number, kind),
         country=country,
         doc_number=number,

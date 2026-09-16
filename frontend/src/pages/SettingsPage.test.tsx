@@ -18,6 +18,7 @@ const settingsResponse = {
     max_total_upload_bytes: 104857600,
     max_files_per_job: 20,
     max_inline_chars: 0,
+    default_timeout_seconds: 900,
     max_concurrency_per_provider: 1,
     runtime_context: "런타임",
     runtime_context_enabled: true,
@@ -28,6 +29,7 @@ const settingsResponse = {
     reasoning_effort: {},
     keep_raw_output: true,
     fail_on_tool_use: true,
+    max_search_tool_calls: 40,
     retrieval_mode: "auto",
     retrieval_max_rounds: 10,
     retrieval_max_page_reads: 80,
@@ -74,10 +76,9 @@ const appliedResponse = {
   ...settingsResponse,
   agy_permissions: {
     ...settingsResponse.agy_permissions,
-    allowed_hosts: ["patents.google.com", "arxiv.org", "dl.acm.org", "*"],
+    allowed_hosts: ["patents.google.com", "arxiv.org", "dl.acm.org"],
     applied: ["arxiv.org", "dl.acm.org"],
     missing: [],
-    wildcard: true,
   },
 };
 
@@ -93,6 +94,7 @@ const providersResponse = [
     auth_state: "OK",
     capabilities: { models: ["agy-default"] },
     notes: [],
+    install_hint: "",
     execution_supported: true,
     usable: true,
     runnable: true,
@@ -121,6 +123,7 @@ const providersResponse = [
       },
     },
     notes: [],
+    install_hint: "",
     execution_supported: true,
     usable: true,
     runnable: true,
@@ -178,7 +181,7 @@ describe("대용량 인용발명 전달 방식", () => {
   it("브라우저 인증 코드를 제출하고 확인 후 로그인 완료를 표시한다", async () => {
     const { api } = await import("../lib/api");
     vi.mocked(api.listProviders).mockResolvedValueOnce([
-      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN" },
+      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN", experimental: true, risks: [] },
     ] as Awaited<ReturnType<typeof api.listProviders>>);
     vi.mocked(api.startProviderLogin).mockResolvedValueOnce({
       session_id: "google-login", provider: "agy", intent: "login",
@@ -206,7 +209,7 @@ describe("대용량 인용발명 전달 방식", () => {
   it("agy에서 Google 브라우저 로그인을 시작한다", async () => {
     const { api } = await import("../lib/api");
     vi.mocked(api.listProviders).mockResolvedValueOnce([
-      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN" },
+      { ...providersResponse[0], auth_state: "NOT_LOGGED_IN", experimental: true, risks: [] },
     ] as Awaited<ReturnType<typeof api.listProviders>>);
     await renderPage();
     fireEvent.click(screen.getByRole("button", { name: /^로그인$/ }));
@@ -218,22 +221,6 @@ describe("대용량 인용발명 전달 방식", () => {
     });
     expect(screen.queryByRole("button", { name: "창 닫고 로그인 확인" })).toBeNull();
     expect(screen.queryByText("agy 로그인 도우미 열기")).toBeNull();
-  });
-
-  it("걷어낸 안내 문구와 설정 카드를 그리지 않는다", async () => {
-    await renderPage();
-    const text = document.body.textContent ?? "";
-    for (const removed of [
-      "전체 실행 상한",
-      "EPO 사용량 안전 한도",
-      "시간당 사용량 상한",
-      "상세 및 설치/로그인 안내",
-      "안전 제한",
-    ]) {
-      expect(text).not.toContain(removed);
-    }
-    // 실행 파일 경로 지정과 점검 버튼은 남는다.
-    expect(screen.getAllByRole("button", { name: "경로 저장" }).length).toBe(2);
   });
 
   it("유사문헌 검색 도구를 구성대비 분석과 따로 저장한다", async () => {
@@ -406,30 +393,34 @@ describe("대용량 인용발명 전달 방식", () => {
     expect(text).not.toContain("raw stdout/stderr 를 파일로 보존");
   });
 
-  it("read_url(*) 가 없으면 경고와 지금 열 수 있는 호스트를 보여 준다", async () => {
+  it("agy 권장 호스트가 실제로 적용됐는지 화면에서 확인할 수 있다", async () => {
     const { container } = await renderPage();
     const card = container.querySelector(".settings-agy-permissions");
     expect(card).toBeTruthy();
     const text = card?.textContent ?? "";
-    expect(text).toContain("read_url(*) 가 없습니다");
-    expect(text).toContain("patents.google.com, arxiv.org");
-    // * 하나로 판정한다. 권장 호스트별 적용 표시는 더 이상 없다.
-    expect(text).not.toContain("적용됨 ·");
+    // 적용된 것과 아직 없는 것을 구분해서 보여 준다. 목록만 나열하면 "권장한다"
+    // 와 "적용됐다" 를 구별할 수 없다.
+    expect(text).toContain("적용됨 · arxiv.org");
+    expect(text).toContain("미적용 · dl.acm.org");
     // 어느 파일을 고쳤는지 밝힌다. 남의 도구 설정을 만졌으면 그 위치를 말해야 한다.
     expect(text).toContain("C:/Users/tester/.gemini/antigravity-cli/settings.json");
     // 허용이 열람 성공 보장이 아니라는 것도 화면에 남는다.
     expect(text).toContain("허용은 접근 권한일 뿐");
   });
 
-  it("자동 적용이 일회성이라고 밝히고 재적용 버튼을 준다", async () => {
+  it("허용 목록 자동 적용이 일회성이라고 밝히고 재적용 버튼을 준다", async () => {
     const { container } = await renderPage();
-    const text =
-      container.querySelector(".settings-agy-permissions")?.textContent ?? "";
-    // 사용자가 지운 항목을 프로그램이 되살리지 않는다는 것이 이 화면의 계약이다.
-    expect(text).toContain("자동 적용은 설치당 한 번뿐");
-    expect(text).toContain("직접 지운 항목은 되살리지 않습니다");
+    const card = container.querySelector(".settings-agy-permissions");
+    const text = card?.textContent ?? "";
+    // 사용자가 지운 호스트를 프로그램이 되살리지 않는다는 것이 이 화면의 계약이다.
+    expect(text).toContain("자동 적용은 설치당 한 번뿐입니다.");
+    expect(text).toContain("Provider 를 다시 검사해도 목록을 고치지 않습니다");
+    // 버전이 올라가도 전체를 다시 넣지 않는다는 것까지 밝혀야 한다. 그러지
+    // 않으면 사용자는 언젠가 지운 항목이 돌아올 수 있다고 읽는다.
+    expect(text).toContain("그때 새로 추가된 호스트만");
+    expect(text).toContain("전체 목록을 다시 넣는 유일한 방법이 위 버튼입니다");
     expect(
-      screen.getByRole("button", { name: "권장 설정 다시 적용" }),
+      screen.getByRole("button", { name: "권장 목록 다시 적용" }),
     ).toBeTruthy();
   });
 
@@ -438,7 +429,7 @@ describe("대용량 인용발명 전달 방식", () => {
     const { container } = await renderPage();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "권장 설정 다시 적용" }),
+      screen.getByRole("button", { name: "권장 목록 다시 적용" }),
     );
 
     await waitFor(() =>
@@ -447,7 +438,7 @@ describe("대용량 인용발명 전달 방식", () => {
     await waitFor(() =>
       expect(
         container.querySelector(".settings-agy-permissions")?.textContent ?? "",
-      ).toContain("모든 주소 열람 허용"),
+      ).toContain("적용됨 · dl.acm.org"),
     );
   });
 
@@ -457,8 +448,8 @@ describe("대용량 인용발명 전달 방식", () => {
       container.querySelector(".settings-agy-permissions")?.textContent ?? "";
     // PRISM 은 agy 가 프롬프트를 따르도록 강제하지 못한다. 화면 문구가 그
     // 한계와 어긋나면 사용자는 보장되지 않는 동작을 보장으로 읽는다.
-    expect(text).toContain("모델에게 지시하며");
-    expect(text).toContain("PRISM 이 강제하지는 않습니다");
+    expect(text).toContain("모델에게 지시합니다.");
+    expect(text).toContain("PRISM 이 강제할 수 있는 동작은 아닙니다");
   });
 
   it("특허 연동 카드를 전체 폭 대상으로 표시하고 설명을 간결하게 유지한다", async () => {

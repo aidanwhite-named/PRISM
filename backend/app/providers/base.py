@@ -29,8 +29,19 @@ class ProbeResult:
     auth_state: str = AuthState.UNKNOWN
     capabilities: dict = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    install_hint: str = ""
     # 설치·인증 상태와 별개로 PRISM이 이 Provider의 실행 경로를 구현했는가.
     execution_supported: bool = True
+
+    # 제한된 안전성 Provider: 기술적으로는 동작하지만 PRISM 의 안전
+    # 원칙(도구 없는 실행)을 충족하지 못한다.
+    #
+    # 이 표시는 '고지'이지 '관문'이 아니다. 예전에는 사용자가 체크박스로
+    # 동의해야 실행할 수 있었지만, 매번 같은 화면을 넘기게 만들 뿐이라
+    # 걷어냈다. 위험 목록은 Settings 의 Provider 상세에 그대로 남고, 도구
+    # 호출에 대한 사후 판정(tools_uncontrollable)도 그대로다.
+    experimental: bool = False
+    risks: list[str] = field(default_factory=list)
 
     @property
     def runnable(self) -> bool:
@@ -193,17 +204,13 @@ WEB_SEARCH = ToolPolicy(
 # 파일 읽기가 함께 열린다. 그래서 "이번 대화의 read_url_content 산출물"이라는
 # 인자 조건을 만족한 호출만 agy_cli 가 scope_ok 로 표시하고, 그것만 통과한다.
 # 다른 경로·다른 대화·일반 파일은 그대로 위반이다.
-#
-# list_dir 도 같은 자리에 있다. 모델이 MCP 도구 스키마를 읽기 전에 그 폴더
-# 목록부터 보는 일이 실측됐다(2026-09-15 job c4246521, 4단계). prism-search
-# 스키마 폴더 자체를 가리킬 때만 scope_ok 가 붙고, 다른 폴더는 위반이다.
 AGY_WEB_SEARCH = ToolPolicy(
     name="agy_web_search",
     allowed_tools=("search_web", "read_url_content"),
     required_tools=("search_web",),
     max_tool_calls=40,
     enforce_advertised_allowlist=False,
-    content_read_tools=("view_file", "list_dir"),
+    content_read_tools=("view_file",),
     max_content_read_calls=40,
 )
 
@@ -245,8 +252,6 @@ PRISM_MCP_TOOL_NAMES = (
     "kiwee_fetch",
     "literature_search",
     "literature_fetch",
-    "literature_fetch_pdf",
-    "gpatents_fetch",
 )
 PRISM_MCP_TOOLS = tuple(
     f"mcp__prism-search__{name}" for name in PRISM_MCP_TOOL_NAMES
@@ -339,6 +344,7 @@ EmitFn = Callable[[str, dict], Awaitable[None]]
 class Provider(abc.ABC):
     id: str = ""
     display_name: str = ""
+    install_hint: str = ""
 
     # 이 Provider 가 실제로 강제할 수 있는 도구 정책. 기본은 '도구 없음' 뿐이다.
     # 도구를 목록으로 제한하는 플래그가 있는 Provider 만 넓힌다.

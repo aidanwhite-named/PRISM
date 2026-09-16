@@ -188,18 +188,6 @@ def run_env(mcp_servers: dict | None) -> dict[str, str]:
     return {key: str(env[key]) for key in RUN_ENV_KEYS if key in env}
 
 
-def is_schema_dir(path: str) -> bool:
-    """이 경로가 prism-search 스키마 폴더 그 자체인가. 상위·하위·형제 폴더는 아니다."""
-    if not path:
-        return False
-    try:
-        target = Path(path).resolve()
-        root = schema_dir().resolve()
-    except (OSError, ValueError, RuntimeError):
-        return False
-    return str(target).casefold() == str(root).casefold()
-
-
 def schema_read_tool(path: str) -> str | None:
     """이 경로가 prism-search 도구 스키마 파일이면 도구 이름."""
     if not path:

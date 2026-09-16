@@ -1041,13 +1041,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           <a href="#/settings">기본값 변경</a>
         </div>
 
-        {selectedProvider?.capabilities?.read_only === false && (
-          <div className="notice warn">
-            <strong>읽기 전용 보장 없음</strong>
-            <div>이 실행 도구의 파일 쓰기·명령 실행을 PRISM이 사전에 차단하지 못합니다. 도구 호출 후 위반을 탐지합니다.</div>
-          </div>
-        )}
-
         {searching ? (
           <>
             {!searchAvailable && providerId && (

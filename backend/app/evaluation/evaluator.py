@@ -340,8 +340,7 @@ def evaluate(
             if policy.content_read_tools:
                 scope_note = (
                     " " + ", ".join(policy.content_read_tools) + " 은 이 실행에서 "
-                    "가져온 페이지 저장본·MCP 결과 파일·prism-search 도구 스키마를 "
-                    "가리키는 호출만 인정합니다."
+                    "가져온 페이지의 저장본을 읽는 호출만 인정합니다."
                 )
             errors.append(
                 "허용되지 않은 도구가 호출되었습니다: "

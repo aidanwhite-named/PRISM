@@ -23,7 +23,6 @@ _TOOL_INPUT_KEYS = {
     "mcp__prism-search__kiwee_fetch": ("publication_number", "constituent"),
     "mcp__prism-search__literature_search": ("query", "max_results", "source", "openalex_mode", "cites_doi"),
     "mcp__prism-search__literature_fetch": ("doi", "constituent"),
-    "mcp__prism-search__literature_fetch_pdf": ("doi", "page_from", "page_to"),
 }
 _MAX_INPUT_VALUE = 500
 # 한 실행에서 남기는 도구 호출 기록 상한. 감사 기록이 DB 를 밀어내지 않게 한다.

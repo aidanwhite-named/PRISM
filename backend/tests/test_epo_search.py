@@ -790,17 +790,16 @@ def test_weekly_quota_is_four_decimal_gigabytes() -> None:
     assert epo_quota.WEEKLY_QUOTA_BYTES < 4 * 1024 * 1024 * 1024
 
 
-def test_hourly_usage_is_observed_but_never_blocks(store) -> None:
-    """시간당 상한 설정은 2026-09-15 걷어냈다. 관측값만 남는다."""
+def test_hourly_limit_is_observe_only_by_default(store) -> None:
     ledger = epo_quota.QuotaLedger(
         state=epo_quota.QuotaState(
             week=epo_quota.week_key(), ops_hourly_bytes=10**9
         )
     )
-    ledger.check()
-    snapshot = ledger.snapshot()
-    assert snapshot["ops_hourly_bytes"] == 10**9
-    assert "hourly_limit_bytes" not in snapshot
+    ledger.check()      # 기본값 0 = 차단하지 않음
+    ledger.hourly_limit = 1000
+    with pytest.raises(epo_quota.QuotaExceeded, match="시간당"):
+        ledger.check()
 
 
 def test_overloaded_with_green_services_does_not_stop_the_channel(store) -> None:

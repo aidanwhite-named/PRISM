@@ -72,6 +72,8 @@ SETTING_CONSUMER_SECRET = "epo_consumer_secret"
 SETTING_QUOTA_STATE = "epo_quota_state"
 # 네트워크 시간 예산. 채널 전체 벽시계와 다른 축이다(모듈 주석 참조).
 SETTING_HTTP_BUDGET = "epo_http_budget_seconds"
+# 시간당 사용량 상한. 0 = 관측만 하고 차단하지 않음.
+SETTING_HOURLY_LIMIT = "epo_hourly_quota_bytes"
 # 한 실행에서 상세 조회할 후보 수 상한.
 SETTING_MAX_DETAIL = "epo_max_detail_fetches"
 
@@ -280,6 +282,7 @@ class EpoOpsBackend(PatentSearchBackend):
         )
         self._ledger = epo_quota.QuotaLedger(
             state=epo_quota.QuotaState.from_dict(values.get(SETTING_QUOTA_STATE)),
+            hourly_limit=_positive_int(values.get(SETTING_HOURLY_LIMIT), 0),
         )
 
     @property

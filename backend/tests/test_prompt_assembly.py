@@ -242,15 +242,6 @@ def test_output_rules_are_attached_to_a_prompt_that_never_mentions_them() -> Non
     assert "[PRISM_CITATION_MAPPING_V1]" in result.user_message
 
 
-def test_mapping_block_is_requested_before_the_component_block() -> None:
-    """긴 보고서가 출력 한도에 닿아도 번호 유지 정보를 먼저 받는다."""
-    rules = analysis_protocol.INSTRUCTIONS
-    assert rules.index("[PRISM_CITATION_MAPPING_V1]") < rules.index(
-        "[PRISM_COMPONENT_ANALYSIS_V1]"
-    )
-    assert "문헌 매핑 블록을 맨 마지막에 미루지 마라" in rules
-
-
 def test_output_rules_are_not_attached_twice() -> None:
     """이미 규칙을 갖고 있는 프롬프트에는 붙이지 않는다.
 

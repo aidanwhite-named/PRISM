@@ -312,6 +312,7 @@ def _retrieval_response(message: str) -> str:
 class DeterministicTestProvider(Provider):
     id = "test"
     display_name = "Deterministic test provider"
+    install_hint = "자동 테스트 전용 Provider 입니다."
 
     def __init__(self) -> None:
         self._cancelled: set[str] = set()
@@ -337,6 +338,7 @@ class DeterministicTestProvider(Provider):
                 "native_pdf": False,
             },
             notes=["실제 모델을 호출하지 않습니다. 실행 흐름 검증용입니다."],
+            install_hint=self.install_hint,
         )
 
     async def cancel(self, job_id: str) -> bool:
@@ -529,6 +531,7 @@ class DeterministicSearchProvider(Provider):
 
     id = "test-search"
     display_name = "Deterministic search provider"
+    install_hint = "자동 테스트 전용 Provider 입니다."
     supported_tool_policies = frozenset({"no_tools", "web_search"})
     search_tool_policy = WEB_SEARCH
 
@@ -547,6 +550,7 @@ class DeterministicSearchProvider(Provider):
             auth_state=AuthState.NOT_APPLICABLE,
             capabilities={"tool_allowlist": True, "web_search": True},
             notes=["실제 모델을 호출하지 않습니다."],
+            install_hint=self.install_hint,
         )
 
     async def cancel(self, job_id: str) -> bool:

@@ -391,11 +391,12 @@ def test_tool_uncontrollable_providers_no_longer_need_approval(client) -> None:
     """사전 동의 관문을 걷어냈다. 설치·로그인만 끝나면 바로 쓸 수 있다.
 
     예전에는 Settings 의 체크박스를 켜야만 usable 이 되었다. 매번 같은 화면을
-    넘기게 만들 뿐이라 없앴다. 설정 화면의 위험 고지 문구도 2026-09-15 걷어냈다.
+    넘기게 만들 뿐이라 없앴다. 위험 고지는 Provider 상세에 그대로 남는다.
     """
     for pid in ("agy", "codex"):
         data = client.get(f"/api/providers/{pid}").json()
-        assert "experimental" not in data and "risks" not in data, pid
+        assert data["experimental"] is True, pid
+        assert data["risks"], f"{pid} 위험 고지가 비어 있습니다."
         # 관문이 사라졌으므로 usable 은 설치·인증 상태와 같아야 한다.
         assert data["usable"] == data["runnable"], pid
         assert "opted_in" not in data, f"{pid} 에 폐기한 필드가 남아 있습니다."
@@ -412,6 +413,8 @@ def test_the_execution_gate_is_gone_from_the_code() -> None:
 
     assert not hasattr(registry, "is_allowed")
     assert not hasattr(registry, "apply_optin")
+    # 화면 문구용 목록은 남는다. 실행을 막는 데 쓰지 않을 뿐이다.
+    assert registry.TOOL_UNCONTROLLABLE_PROVIDERS == frozenset({"agy", "codex"})
 
 
 def test_retired_optin_setting_is_rejected_and_hidden(client) -> None:
@@ -547,25 +550,31 @@ def test_each_job_kind_resolves_its_own_default_tool(client, monkeypatch) -> Non
         )
 
 
-def test_removed_settings_warnings_stay_gone(client) -> None:
-    """2026-09-15 걷어낸 경고 문구: 도구 차단 불가·의미 검색·Kiwee 미구현."""
+def test_warning_names_the_search_tool_when_it_differs(client) -> None:
     data = client.put(
         "/api/settings",
-        json={"values": {
-            "default_provider": "claude", "search_provider": "agy",
-            "retrieval_semantic_enabled": True, "kiwee_integration_enabled": True,
-        }},
+        json={"values": {"default_provider": "claude", "search_provider": "agy"}},
     ).json()
     try:
-        text = " ".join(data["warnings"])
-        assert "끄는 수단이 없습니다" not in text
-        assert "의미 검색이 켜져 있습니다" not in text
-        assert "Kiwee" not in text
+        assert any(
+            "유사문헌 검색 실행 도구(agy)" in note for note in data["warnings"]
+        )
+        assert not any("구성대비 분석 실행 도구" in note for note in data["warnings"])
     finally:
         client.put(
             "/api/settings",
-            json={"values": {
-                "default_provider": "", "search_provider": "",
-                "retrieval_semantic_enabled": False, "kiwee_integration_enabled": False,
-            }},
+            json={"values": {"default_provider": "", "search_provider": ""}},
         )
+
+
+def test_warning_follows_the_selected_provider_not_a_gate(client) -> None:
+    """경고는 '켜 두었는가'가 아니라 '지금 무엇으로 실행하는가'를 본다."""
+    data = client.put(
+        "/api/settings", json={"values": {"default_provider": "agy"}}
+    ).json()
+    assert any("셸·파일 도구를 끄는 수단이 없습니다" in note for note in data["warnings"])
+
+    data = client.put(
+        "/api/settings", json={"values": {"default_provider": "claude"}}
+    ).json()
+    assert not any("끄는 수단이 없습니다" in note for note in data["warnings"])

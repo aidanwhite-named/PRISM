@@ -4,7 +4,7 @@
 agy 1.1.15 를 실제로 실행해서 계약을 확인했다.
 
   실행 : agy --input-format stream-json --output-format stream-json
-             --disable-slash-commands --sandbox --print-timeout Ns [--model M]
+             --disable-slash-commands [--model M]
   입력 : {"event":"user","message":{"role":"user","content":"..."}}  (stdin)
   출력 : {"event":"init"|"step_update"|"result", ...}
 
@@ -76,20 +76,34 @@ from .resolver import ExecutableKind, ResolvedExecutable, resolve_simple
 # allowlist 로 환경을 새로 만들면서 걷어내기 때문에 여기서 명시적으로 얹는다.
 _CHILD_ENV_EXTRA = {"AGY_CLI_DISABLE_AUTO_UPDATE": "true"}
 
-# --print-timeout 을 PRISM 마감보다 이만큼 길게 준다(build_args 참고).
-_PRINT_TIMEOUT_GRACE_SECONDS = 60
-# agy 가 자체 대기 상한에 걸렸을 때 stderr 에 남기는 문구(1.2.2 실측).
-_PRINT_TIMEOUT_MARKER = "print timeout after"
-
-
-def print_timeout_hit(stderr: str | None) -> bool:
-    """agy 가 자체 print 대기 상한에 걸려 진행 중인 턴을 버렸는가."""
-    return _PRINT_TIMEOUT_MARKER in (stderr or "").casefold()
-
 
 def build_agy_env() -> dict[str, str]:
     """agy 자식 프로세스용 환경. probe·실행·로그인 도우미가 모두 이것을 쓴다."""
     return build_child_env(_CHILD_ENV_EXTRA)
+
+
+# 이 Provider 를 켜기 전에 사용자가 알아야 할 것. Settings 에 그대로 표시된다.
+RISKS = (
+    "도구를 끄는 플래그가 없습니다. run_command, write_to_file 을 포함해 수십 개 "
+    "도구가 활성 상태로 실행됩니다.",
+    "PRISM 은 도구 호출을 '탐지'해서 실패로 기록할 뿐, 호출 자체를 '차단'하지 "
+    "못합니다. 실패로 표시되는 시점에는 이미 파일 쓰기나 명령 실행이 끝난 뒤일 수 "
+    "있습니다. 이건 fail-closed 가 아니라 사후 탐지입니다.",
+    "실측(agy 1.1.15): 파일 쓰기와 셸 명령을 요청했을 때 도구 호출이 시도됐고 "
+    "PRISM 이 탐지해 실패 처리했으며 디스크에는 변화가 없었습니다. 다만 이는 세 "
+    "가지 시나리오를 확인한 것일 뿐이고, 차단은 agy 자신의 승인 정책에 의존하며 "
+    "PRISM 이 보장하는 경계가 아닙니다.",
+    "도구 호출 탐지는 이벤트 이름에 기반합니다. 관찰하지 못한 이름이 있으면 "
+    "놓칠 수 있습니다.",
+    "read_url_content 는 가져온 페이지를 파일로만 돌려줍니다. 그 파일을 읽는 "
+    "view_file 호출은 경로가 이번 대화의 산출물이고 단계 번호가 성공한 "
+    "read_url_content 와 일치할 때만 정상 열람으로 인정합니다. 다른 경로·다른 "
+    "대화·일반 로컬 파일은 위반으로 남습니다. 이 판정 역시 호출이 끝난 뒤에 "
+    "이뤄지는 사후 감사이며 읽기 자체를 막지는 못합니다.",
+    "시스템 프롬프트를 분리할 수 없어 PRISM 런타임 컨텍스트가 사용자 메시지에 "
+    "포함됩니다. 첨부 문서와 같은 층위라 프롬프트 인젝션 방어가 약합니다.",
+    "신뢰할 수 없는 출처의 문서 분석에는 사용하지 마십시오.",
+)
 
 
 _KNOWN_INSTALL_DIRS = (
@@ -185,16 +199,6 @@ def audit_content_reads(state, policy) -> None:
         summary = call.get("input")
         if not isinstance(summary, dict):
             summary = {}
-        # 스키마를 읽기 전에 그 폴더 목록부터 보기도 한다(job c4246521 실측).
-        # 폴더 목록은 파일 본문을 읽지 않으므로 이 폴더 그 자체만 연다.
-        # list_dir 에 인정되는 경로는 이것뿐이다.
-        if call.get("name") == "list_dir":
-            in_scope = bool(mcp_tools) and agy_mcp.is_schema_dir(
-                str(summary.get("path") or "")
-            )
-            call["scope_ok"] = in_scope
-            call["scope"] = "mcp_schema_dir" if in_scope else "out_of_scope"
-            continue
         # MCP 도구를 부르기 전에 agy 가 풀어 둔 도구 스키마를 읽는다(실측).
         # 이번 실행에 허용한 prism-search 도구의 스키마만 통과시키고, 본문
         # 열람(content_read)으로는 올리지 않는다.
@@ -293,6 +297,11 @@ class AgyCliProvider(Provider):
     # 자르는 것을 막지 못하고, 잘린 실행은 종료 코드 0 으로 "성공"해 버린다.
     # CLI 자체의 잘림 지점이 실측으로 바뀌었을 때만 이 값을 조정한다.
     max_input_bytes = 180_000
+    install_hint = (
+        "agy CLI 를 설치하고 로그인하십시오. 설치되어 있으면 `agy models` 가 "
+        "모델 목록을 반환합니다. PRISM 은 API Key 를 입력받지 않고 CLI 에 저장된 "
+        "로그인 세션만 사용합니다."
+    )
 
     def __init__(self, executable_override: str | None = None) -> None:
         self._override = executable_override or None
@@ -308,6 +317,9 @@ class AgyCliProvider(Provider):
         result = ProbeResult(
             provider=self.id,
             display_name=self.display_name,
+            install_hint=self.install_hint,
+            experimental=True,
+            risks=list(RISKS),
             capabilities={
                 "non_interactive": True,
                 "stream_json": True,
@@ -316,7 +328,6 @@ class AgyCliProvider(Provider):
                 "system_prompt_override": False,
                 # 도구를 끄는 플래그가 없다.
                 "tools_disabled": False,
-                "read_only": False,
                 # 실측(1.1.17): search_web 는 request-review 모드의 비대화형
                 # 실행에서도 정상 완료된다. 다른 도구 노출은 제한할 수 없다.
                 "web_search": True,
@@ -362,22 +373,22 @@ class AgyCliProvider(Provider):
         # 때문에, 지운 사람은 자기가 지웠다는 사실조차 확인할 수 없다. 자동
         # 적용은 일회성 마이그레이션 한 번뿐이고(settings_service), 그 뒤로
         # 다시 넣는 것은 사용자가 버튼을 눌렀을 때만이다.
-        # 판정은 read_url(*) 하나로 한다. 그것이 있으면 호스트 목록은 의미가 없다.
         state = agy_permissions.read_state()
         if state.error:
-            result.notes.append(f"페이지 열람 권한을 읽지 못했습니다: {state.error}")
+            result.notes.append(f"페이지 열람 허용 목록을 읽지 못했습니다: {state.error}")
         elif not state.exists:
             result.notes.append(
-                "agy 설정 파일이 없습니다. 설정 화면에서 「권장 설정 다시 적용」을 "
-                "누르십시오."
+                "페이지 열람 허용 목록 파일이 없습니다. 권장 출처를 넣으려면 "
+                "설정 화면에서 「권장 목록 다시 적용」을 누르십시오."
             )
-        elif state.wildcard:
-            result.notes.append("페이지 열람 권한: 모든 주소 허용 (read_url(*)).")
+        elif state.missing:
+            result.notes.append(
+                "페이지 열람 허용 목록에 없는 권장 출처: " + ", ".join(state.missing)
+            )
         else:
             result.notes.append(
-                "페이지 열람 권한에 read_url(*) 가 없습니다. 목록 밖 주소를 열면 "
-                "검색 실행이 중단됩니다. 설정 화면에서 「권장 설정 다시 적용」을 "
-                "누르십시오."
+                f"페이지 열람 허용 목록에 권장 논문 출처 "
+                f"{len(state.applied)}곳이 모두 있습니다."
             )
 
         # 인증 확인. 모델 추론을 돌리지 않으므로 토큰 사용량이 발생하지 않는다.
@@ -412,13 +423,6 @@ class AgyCliProvider(Provider):
             # 방어 심화용. 터미널 제한을 켜지만 이것만으로 도구가
             # 차단되지는 않는다. 안전 경계로 취급하지 않는다.
             "--sandbox",
-            # agy 는 print 모드 대기에 자체 상한(기본 5분)이 있고, 넘기면 진행 중인
-            # 턴을 버린 채 빈 응답과 status SUCCESS 로 끝낸다. 실측(2026-09-15 job
-            # c4246521): 297초에 "print timeout after 5m0s with turn in progress"
-            # 가 stderr 에 찍히고 검색 결과가 통째로 사라졌다. 마감은 PRISM 이
-            # 쥐어야 타임아웃으로 정직하게 기록되므로 agy 쪽은 조금 더 길게 둔다.
-            "--print-timeout",
-            f"{request.timeout_seconds + _PRINT_TIMEOUT_GRACE_SECONDS}s",
         ]
         if request.model:
             args += ["--model", request.model]
@@ -611,15 +615,6 @@ class AgyCliProvider(Provider):
         if run.timed_out and state.saw_result and state.final_text.strip():
             outcome.timed_out = False
             outcome.completed_without_exit = True
-        # agy 가 자체 대기 상한으로 턴을 버리면 status SUCCESS·빈 응답으로 끝난다.
-        # 그대로 두면 사용자에게는 뒤따르는 엉뚱한 판정(도구 위반·검색 미수행)이
-        # 원인처럼 보인다. 결과가 없을 때만 시간 초과로 기록한다.
-        if print_timeout_hit(run.stderr) and not state.final_text.strip():
-            outcome.timed_out = True
-            outcome.errors.append(
-                "agy 의 응답 대기 상한(--print-timeout)에 걸려 진행 중이던 응답이 "
-                "버려졌습니다."
-            )
         outcome.result_text = state.final_text
         outcome.usage = state.usage
         outcome.is_error = state.is_error

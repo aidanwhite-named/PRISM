@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 from . import search_dates, search_channels, search_manifest, settings_service
 from .config import PATHS
-from .search_passages import passages
 from .db import session_scope
 from .patent_search import get_backend, epo_cql
 from .patent_search.base import PatentSearchError, PatentSearchQuery
@@ -55,21 +54,6 @@ def error_response(exc, name, arguments, secrets=()):
     value = {"error_code": getattr(exc, "fault_code", "") or type(exc).__name__,
              "detail": scrub(str(exc), *secrets)[:500]}
     args = arguments if isinstance(arguments, dict) else {}
-    if name == "epo_search" and isinstance(exc, (ValueError, epo_cql.CqlError)):
-        value["not_evidence_of_absence"] = True
-        value["recovery"] = {
-            "next_step": "Correct the arguments and retry. Put type/op/items directly inside query; do not wrap them in query.group. max_results must be an integer from 1 to 20. Use begin for another page. Preserve the intended search terms.",
-            "example_arguments": {"query": {"type": "group", "op": "or", "items": [
-                {"type": "term", "field": "ta", "value": "image matching", "match": "all"},
-                {"type": "term", "field": "ta", "value": "image alignment", "match": "all"},
-            ]}, "max_results": 20},
-        }
-    if name == "gpatents_fetch":
-        value["requested_identifier"] = args.get("publication_number", "")
-        value["not_evidence_of_absence"] = True
-    if name == "literature_fetch_pdf":
-        value["requested_identifier"] = args.get("doi", "")
-        value["not_evidence_of_absence"] = True
     if name == "epo_fetch":
         value["requested_identifier"] = args.get("publication_number", "")
         value["requested_constituent"] = args.get("constituent", "claims")
@@ -88,20 +72,7 @@ def error_response(exc, name, arguments, secrets=()):
     return value
 
 
-def _has_ct_kind_code(node) -> bool:
-    import re
-    if not isinstance(node, dict):
-        return False
-    if node.get("type") == "term" and node.get("field") == "ct":
-        val = str(node.get("value") or "").strip()
-        if re.search(r"[A-Za-z]\d?$", val):
-            return True
-    if node.get("type") == "group":
-        return any(_has_ct_kind_code(item) for item in node.get("items", []))
-    return False
-
-
-def epo_search_advice(result, begin=1, query_node=None):
+def epo_search_advice(result, begin=1):
     """Expose page sampling, not an estimate of technical recall."""
     coverage = result["coverage"]
     returned, total = coverage["returned_records"], coverage.get("total_results")
@@ -115,11 +86,6 @@ def epo_search_advice(result, begin=1, query_node=None):
     if total and returned and total > returned * 10:
         warnings.append({"code": "broad_query_sample", "artifact_id": result.get("raw_artifact_id", ""),
                          "detail": "Only a small page was read. Inspect date bias; refine technical relations, combine observed IPC/CPC with terms, partition the date range, or read another page. Do not infer absence from this page."})
-    if (total == 0 or returned == 0) and query_node and _has_ct_kind_code(query_node):
-        warnings.append({
-            "code": "ct_kind_code_zero_results",
-            "detail": "ct(피인용) 질의에 종류코드(예: A, B1 등)가 포함되어 0건이 반환되었을 수 있습니다. OPS ct 필드는 종류코드 없이 번호만 사용해야 합니다(예: JP2009070340A -> JP2009070340). 피인용 문헌 부재가 아닐 수 있습니다."
-        })
     result["search_warnings"] = warnings
     return result
 
@@ -156,14 +122,10 @@ class SearchTools:
 
     def tool_definitions(self):
         statuses = self.statuses()
-        tools = [_CAPABILITIES] + [
-            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIWEE_SEARCH, _KIWEE_FETCH,
-                              _GPATENTS_FETCH)
+        return [_CAPABILITIES] + [
+            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIWEE_SEARCH, _KIWEE_FETCH)
             if statuses[tool["name"].split("_")[0]]["status"] == "available"
         ]
-        if statuses.get("literature", {}).get("status") == "available" and self.values.get("literature_oa_pdf_enabled", True):
-            tools.append(_LITERATURE_FETCH_PDF)
-        return tools
 
     def call(self, name: str, arguments: dict) -> dict:
         row = {"id": str(uuid.uuid4()), "tool": name, "arguments": arguments, "sequence": self.calls}
@@ -216,10 +178,6 @@ class SearchTools:
     def _execute(self, name, arguments):
         if name == "epo_search":
             return self._epo_search(arguments)
-        if name == "gpatents_fetch":
-            return self._gpatents_fetch(arguments)
-        if name == "literature_fetch_pdf":
-            return self._literature_fetch_pdf(arguments)
         backend_id = name.split("_")[0]
         if name.endswith("_fetch"):
             return self._fetch(backend_id, arguments, "doi" if backend_id == "literature" else "publication_number")
@@ -246,7 +204,7 @@ class SearchTools:
         paging = {"begin": begin} if begin != 1 else {}
         response = self._backend("epo").search_structured(node, max_results=arguments.get("max_results", 10), **paging)
         return epo_search_advice({**_response(response, scope="bibliographic_search"), "cql": cql,
-                "normalized_classifications": normalized, "publication_cutoff": self.cutoff or None}, begin, query_node=arguments["query"])
+                "normalized_classifications": normalized, "publication_cutoff": self.cutoff or None}, begin)
 
     def _plain_search(self, backend_id, arguments):
         query = arguments["query"]
@@ -268,97 +226,6 @@ class SearchTools:
         return {**_response(response, scope="bibliographic_search"), "query": query,
                 "publication_cutoff": self.cutoff or None}
 
-    def _gpatents_fetch(self, arguments):
-        """원문 페이지 조회. 같은 문헌은 받은 페이지를 다시 읽고, 새 페이지 수는 센다.
-
-        상한은 **새로 받은 페이지**에만 건다. 이미 받은 문헌의 다른 구역(명세서·인용)을
-        읽는 것은 요청을 만들지 않으므로 막을 이유가 없다. 404·429 같은 실패도 요청을
-        보낸 것이므로 센다.
-        """
-        from .patent_search import gpatents_backend
-
-        backend = self._backend("gpatents")
-        number = arguments["publication_number"]
-        constituent = arguments.get("constituent", "claims")
-        key = search_manifest.identity_key(number)
-        cached, fetched = "", 0
-        for row in search_manifest.read_tool_journal(self.work_dir):
-            if row.get("tool") != "gpatents_fetch" or row.get("state") != "completed":
-                continue
-            result = row.get("result") or {}
-            if row.get("ok") is True:
-                if result.get("network_fetch"):
-                    fetched += 1
-                if (not cached and result.get("raw_artifact_id")
-                        and search_manifest.identity_key(result.get("requested_identifier", "")) == key):
-                    cached = result["raw_artifact_id"]
-            elif str(row.get("error_code") or "") in _GPATENTS_REQUEST_ERRORS:
-                fetched += 1
-        if not cached and fetched >= backend.max_fetches_per_run:
-            raise gpatents_backend.GooglePatentsFetchLimit(
-                f"gpatents_fetch_limit: 이 실행에서 새로 받을 수 있는 페이지 "
-                f"{backend.max_fetches_per_run}건을 다 썼습니다. 이미 받은 문헌은 계속 조회할 수 있습니다."
-            )
-        response = backend.fetch_document(number, constituent, cached_artifact_id=cached)
-        result = _response(response, scope=constituent)
-        result["requested_identifier"] = number
-        result["identifier_matched"] = any(
-            search_manifest.identity_key(record["document_number"]) == key for record in result["records"]
-        )
-        result["network_fetch"] = not cached
-        result["source_notice"] = (
-            "Google Patents 원문 페이지(비공식 출처). 특허청 공식 문서가 아닙니다. "
-            "[claim N]·[NNNN]은 청구항·문단 번호 표시입니다."
-        )
-        return result
-
-    def _literature_fetch_pdf(self, arguments):
-        """OA 원문 PDF 조회. 같은 문헌은 받은 PDF 를 다시 읽고, 새 PDF 수는 센다.
-
-        상한은 **새로 받은 PDF**에만 건다. 이미 받은 문헌의 다른 페이지 범위를
-        읽는 것은 요청을 만들지 않으므로 막을 이유가 없다. 404·429 같은 실패도
-        요청을 보낸 것이므로 센다.
-        """
-        from .patent_search import oa_pdf, literature_client
-
-        backend = self._backend("literature")
-        doi = arguments["doi"]
-        key = literature_client.normalize_doi(doi)
-        page_from = arguments.get("page_from", 1)
-        page_to = arguments.get("page_to")
-        cached, fetched = "", 0
-        for row in search_manifest.read_tool_journal(self.work_dir):
-            if row.get("tool") != "literature_fetch_pdf" or row.get("state") != "completed":
-                continue
-            result = row.get("result") or {}
-            if row.get("ok") is True:
-                if result.get("network_fetch"):
-                    fetched += 1
-                if (not cached and result.get("raw_artifact_id")
-                        and search_manifest.identity_key(doi=result.get("requested_identifier", "")) == search_manifest.identity_key(doi=key)):
-                    cached = result["raw_artifact_id"]
-            elif str(row.get("error_code") or "") in _LITERATURE_PDF_REQUEST_ERRORS:
-                fetched += 1
-        if not cached and fetched >= backend.max_pdf_fetches_per_run:
-            raise oa_pdf.OaPdfFetchLimit(
-                f"oa_pdf_fetch_limit: 이 실행에서 새로 받을 수 있는 PDF "
-                f"{backend.max_pdf_fetches_per_run}건을 다 썼습니다. 이미 받은 문헌은 계속 조회할 수 있습니다."
-            )
-        response = backend.fetch_pdf(doi, page_from=page_from, page_to=page_to, cached_artifact_id=cached)
-        first, last = oa_pdf.page_span(page_from, page_to)
-        result = _response(response, scope=f"oa_pdf/{first}-{last}")
-        result["requested_identifier"] = doi
-        result["identifier_matched"] = any(
-            search_manifest.identity_key(doi=record["document_number"]) == search_manifest.identity_key(doi=key)
-            for record in result["records"]
-        )
-        result["network_fetch"] = not cached
-        result["source_notice"] = (
-            "OpenAlex OA 사본 PDF (비공식 출처 — 저자 원고일 수 있습니다). "
-            "[p.N] 은 페이지 번호 표시입니다."
-        )
-        return result
-
     def _fetch(self, backend_id, arguments, identifier_key):
         identifier = arguments[identifier_key]
         constituent = arguments.get("constituent", "abstract" if backend_id == "literature" else "claims")
@@ -370,43 +237,29 @@ class SearchTools:
         result["identifier_matched"] = any(identity(record["document_number"]) == identity(identifier) for record in result["records"])
         return result
 
-def _validate(value, schema, depth=0, path="arguments"):
+def _validate(value, schema, depth=0):
     if depth > 12:
         raise ValueError("arguments_too_deep")
-    if "anyOf" in schema:
-        # CQL nodes are a tagged union; selecting the branch preserves the useful
-        # error path instead of returning a generic 'no variant matched'.
-        kind = value.get("type", "term") if isinstance(value, dict) else None
-        branch = next((item for item in schema["anyOf"]
-                       if kind in item.get("properties", {}).get("type", {}).get("enum", [])), None)
-        if branch is None:
-            raise ValueError(f"invalid_cql_type: {path}.type must be term, group or date_range")
-        return _validate(value, branch, depth, path)
     kind = schema.get("type")
     if kind == "object":
         if not isinstance(value, dict):
-            raise ValueError(f"expected_object: {path}")
+            raise ValueError("expected_object")
         props = schema.get("properties", {})
         if schema.get("additionalProperties") is False and set(value) - set(props):
-            raise ValueError(f"unknown_argument: {path}: {', '.join(sorted(set(value) - set(props)))}")
+            raise ValueError("unknown_argument")
         if set(schema.get("required", [])) - set(value):
-            raise ValueError(f"missing_argument: {path}: {', '.join(sorted(set(schema.get('required', [])) - set(value)))}")
+            raise ValueError("missing_argument")
         for key, item in value.items():
             if key in props:
-                _validate(item, props[key], depth + 1, f"{path}.{key}")
+                _validate(item, props[key], depth + 1)
     elif kind == "string":
         if not isinstance(value, str) or not schema.get("minLength", 1) <= len(value) <= schema.get("maxLength", 500):
-            raise ValueError(f"invalid_string: {path}")
+            raise ValueError("invalid_string")
     elif kind == "integer":
         if type(value) is not int or not schema.get("minimum", 1) <= value <= schema.get("maximum", 20):
-            raise ValueError(f"invalid_integer: {path} must be an integer from {schema.get('minimum', 1)} to {schema.get('maximum', 20)}")
-    elif kind == "array":
-        if not isinstance(value, list) or not schema.get("minItems", 0) <= len(value) <= schema.get("maxItems", 20):
-            raise ValueError(f"invalid_array: {path}")
-        for index, item in enumerate(value):
-            _validate(item, schema["items"], depth + 1, f"{path}[{index}]")
+            raise ValueError("invalid_integer")
     if "enum" in schema and value not in schema["enum"]:
-        raise ValueError(f"invalid_enum: {path}; allowed: {schema['enum']}")
+        raise ValueError("invalid_enum")
 
 def _query_node(raw: Any, depth=0):
     if depth > epo_cql.MAX_DEPTH or not isinstance(raw, dict):
@@ -506,7 +359,6 @@ def _record(record, *, compact=False) -> dict:
         "publication_date": publication_date,
         "fields": fields,
         "evidence_refs": evidence,
-        "evidence_passages": passages(record.doc_number, fields, evidence),
         "truncated_fields": [name for name, field in record.fields.items() if name in selected and len(field.value) > limit],
         "omitted_fields": [name for name in record.fields if name not in selected],
     }
@@ -527,46 +379,21 @@ def _tool(name: str, description: str, properties: dict, required: list[str]) ->
     }
 
 
-def _query_schema(depth=1):
-    """Finite CQL schema: clients see the actual structure, not a free object."""
-    def node(properties, required):
-        return {"type": "object", "properties": properties,
-                "required": required, "additionalProperties": False}
-    variants = [node({
-        "type": {"type": "string", "enum": ["term"]},
-        "field": {"type": "string", "enum": list(epo_cql.TEXT_FIELDS + epo_cql.IDENTIFIER_FIELDS + epo_cql.CLASSIFICATION_FIELDS)},
-        "value": {"type": "string", "minLength": 1, "maxLength": epo_cql.MAX_VALUE_CHARS},
-        "match": {"type": "string", "enum": list(epo_cql.MATCH_KINDS)},
-    }, ["field", "value"]), node({
-        "type": {"type": "string", "enum": ["date_range"]},
-        "field": {"type": "string", "enum": list(epo_cql.DATE_FIELDS)},
-        "begin": {"type": "string", "minLength": 8, "maxLength": 8},
-        "end": {"type": "string", "minLength": 8, "maxLength": 8},
-    }, ["type", "begin", "end"])]
-    if depth < epo_cql.MAX_DEPTH:
-        variants.append(node({
-            "type": {"type": "string", "enum": ["group"]},
-            "op": {"type": "string", "enum": list(epo_cql.OPERATORS)},
-            "items": {"type": "array", "minItems": 1, "maxItems": epo_cql.MAX_TERMS,
-                      "items": _query_schema(depth + 1)},
-        }, ["type", "op", "items"]))
-    return {"anyOf": variants}
-
-
 _QUERY_SCHEMA = {
-    **_query_schema(),
-    "description": 'Term: {type:"term",field:"ta",value:"image matching",match:"all"}. Group: {type:"group",op:"and"|"or"|"not",items:[nodes]}. Term fields: ti,ab,ta,txt,pa,in,pn,ap,pr,ct,ipc,cpc,cl. ct finds documents citing a publication number (forward citations), e.g. {type:"term",field:"ct",value:"JP2009070340"}. IMPORTANT: Do NOT include kind codes (e.g. A, B1) in ct; OPS requires exact number without kind code, and kind codes yield 0 results. Match: all/any/exact. Publication-date node: {type:"date_range",field:"pd",begin:"19000101",end:"20240131"}. A date-limited query may omit unknown dates; choose whether an additional unrestricted query is needed. Maximum nesting: 3.',
+    "type": "object",
+    "description": 'Term: {type:"term",field:"ta",value:"image matching",match:"all"}. Group: {type:"group",op:"and"|"or"|"not",items:[nodes]}. Term fields: ti,ab,ta,txt,pa,in,pn,ap,pr,ipc,cpc,cl. Match: all/any/exact. Publication-date node: {type:"date_range",field:"pd",begin:"19000101",end:"20240131"}. A date-limited query may omit unknown dates; choose whether an additional unrestricted query is needed. Maximum nesting: 3.',
+    "additionalProperties": True,
 }
 _EPO_SEARCH = _tool(
     "epo_search",
-    "Search EPO OPS with structured CQL. Provider-default order is not relevance ranking. Inspect coverage/date range and broad_query_sample warnings. Use observed ipc/cpc or applicant (pa) plus technical terms, date_range partitions, or begin for subsequent pages. From a strong candidate, field ct lists later documents citing it (exact number ONLY, without kind codes like A/B1; kind codes yield 0 results). Keep each OR branch technically specific; match=any splits words with OR. Returns actual CQL and artifact references.",
+    "Search EPO OPS with structured CQL. Provider-default order is not relevance ranking. Inspect coverage/date range and broad_query_sample warnings. Use observed ipc/cpc plus technical terms, date_range partitions, or begin for subsequent pages. Keep each OR branch technically specific; match=any splits words with OR. Returns actual CQL and artifact references.",
     {"query": _QUERY_SCHEMA, "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
      "begin": {"type": "integer", "minimum": 1, "maximum": 2000}},
     ["query"],
 )
 _EPO_FETCH = _tool(
     "epo_fetch",
-    "Fetch an EPO publication constituent: abstract, claims, description, biblio or family. biblio includes references_cited (backward citations with cited-by/phase/category) when OPS has them; they are often absent for JP. US claims/description are not supplied by OPS; use biblio/abstract and a source page or identified family for full text. Scope failure is not publication absence. EntityNotFound may require number-format verification; never silently drop a fetched candidate.",
+    "Fetch an EPO publication constituent: abstract, claims, description, biblio or family. US claims/description are not supplied by OPS; use biblio/abstract and a source page or identified family for full text. Scope failure is not publication absence. EntityNotFound may require number-format verification; never silently drop a fetched candidate.",
     {"publication_number": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "claims", "description", "biblio", "family"]}},
     ["publication_number"],
 )
@@ -588,36 +415,8 @@ _LITERATURE_FETCH = _tool(
     {"doi": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "biblio"]}},
     ["doi"],
 )
-_LITERATURE_FETCH_PDF = _tool(
-    "literature_fetch_pdf",
-    "Fetch and preserve the open-access (OA) full-text PDF (unofficial copy, e.g. preprint or accepted manuscript) for a DOI via OpenAlex best_oa_location, and extract text for a page range. Paced at human speed (several seconds per fetch; run has a small page cap; fetch only promising candidates). Subsequent calls on the same DOI reuse the preserved PDF without a network request. Use exact continuous text from pdf_text as support_text or verbatim_excerpt with the returned evidence_refs. [p.N] marks page numbers in pdf_text. page_from defaults to 1; page_to defaults to page_from + 7 (max 12 pages per call). Closed-access publications raise OaPdfNotAvailable, which is not evidence of absence.",
-    {
-        "doi": {"type": "string", "minLength": 3, "maxLength": 200},
-        "page_from": {"type": "integer", "minimum": 1, "maximum": 200},
-        "page_to": {"type": "integer", "minimum": 1, "maximum": 200},
-    },
-    ["doi"],
-)
-# 요청을 실제로 보낸 뒤 실패한 경우. 실행당 새 PDF 상한에 센다.
-_LITERATURE_PDF_REQUEST_ERRORS = frozenset({
-    "OaPdfNotAvailable",
-    "OaPdfNotFound",
-    "OaPdfRateLimited",
-    "OaPdfHttpError",
-    "OaPdfNotPdf",
-    "OaPdfTooLarge",
-})
 _KIWEE_SEARCH = _tool("kiwee_search", "Search the configured Kiwee patent backend.", {"query": {"type": "string"}, "max_results": {"type": "integer"}}, ["query"])
 _KIWEE_FETCH = _tool("kiwee_fetch", "Fetch a document from the configured Kiwee backend.", {"publication_number": {"type": "string"}, "constituent": {"type": "string"}}, ["publication_number"])
-_GPATENTS_FETCH = _tool(
-    "gpatents_fetch",
-    "Fetch and preserve the Google Patents page (UNOFFICIAL source, not a patent office document) for one publication number with kind code, e.g. JP2009070340A. PRISM builds the URL from the number (original-language page) and paces requests at human speed, so each new page takes several seconds and a run has a small page cap; fetch only promising candidates. Another constituent of an already fetched number reuses the preserved page. constituent: claims (default), description (up to 40000 chars), abstract, citations (patent citations and cited-by with * = examiner cited). Text is the original-language text; [claim N] and [NNNN] mark claim and paragraph numbers. Use exact continuous text from page_claims/page_description/page_abstract as support_text/verbatim_excerpt with the returned evidence_refs. 404 means the page is unavailable, not that the publication does not exist.",
-    {"publication_number": {"type": "string", "minLength": 6, "maxLength": 40},
-     "constituent": {"type": "string", "enum": ["claims", "description", "abstract", "citations"]}},
-    ["publication_number"],
-)
-# 요청을 실제로 보낸 뒤 실패한 경우. 실행당 새 페이지 상한에 센다.
-_GPATENTS_REQUEST_ERRORS = frozenset({"GooglePatentsNotFound", "GooglePatentsRateLimited", "GooglePatentsHttpError"})
 _CAPABILITIES = _tool("search_capabilities", "Report which PRISM search tools are enabled and configured without making a network request.", {}, [])
 
 

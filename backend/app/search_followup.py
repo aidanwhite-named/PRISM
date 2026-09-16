@@ -26,21 +26,9 @@ def retrieval_plan(verified, journal, availability, allowed):
             continue
         source = 'literature' if c.get('doi') else 'epo'
         tool = source + '_fetch'
-        key = sm.identity_key(c.get('doc_number', ''), c.get('doi', ''))
-        # 청구항 대응을 적었는데 본문 근거가 없는 특허는 원문 페이지를 먼저 받는다.
-        # OPS 는 US·CN·JP 청구항을 주지 않는다. 페이지 조회는 사람 속도라 느리므로
-        # 문헌당 한 번만 계획하고, 이미 시도했으면 다시 두드리지 않는다.
-        scope = c.get('verification_scope') or {}
-        if (source == 'epo' and c.get('mapping')
-                and 'verified' not in (scope.get('claims'), scope.get('page_text'))
-                and availability.get('gpatents', {}).get('status') == 'available'
-                and 'mcp__prism-search__gpatents_fetch' in allowed
-                and not any(row.get('tool') == 'gpatents_fetch'
-                            and sm.identity_key((row.get('arguments') or {}).get('publication_number', '')) == key
-                            for row in journal)):
-            plan.append(('gpatents_fetch', {'publication_number': c['doc_number'], 'constituent': 'claims'}))
         if availability.get(source, {}).get('status') != 'available' or 'mcp__prism-search__' + tool not in allowed:
             continue
+        key = sm.identity_key(c.get('doc_number', ''), c.get('doi', ''))
         attempted = set()
         for row in journal:
             args = row.get('arguments') or {}
