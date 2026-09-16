@@ -433,18 +433,17 @@ export default function SettingsPage() {
     }
   };
 
-  // 권장 열람 허용 목록 재적용. PRISM 이 이 파일을 자동으로 고치는 것은 설치당
+  // 권장 열람 권한 재적용. PRISM 이 이 파일을 자동으로 고치는 것은 설치당
   // 한 번뿐이므로, 그 뒤에 다시 넣는 유일한 경로가 이 버튼이다.
   const applyAgyPermissions = async () => {
     setApplyingAgy(true);
     try {
       const updated = await api.applyAgyPermissions();
       setSettings(updated);
-      const missing = updated.agy_permissions?.missing?.length ?? 0;
       notify(
-        missing === 0
-          ? "권장 논문 출처를 허용 목록에 적용했습니다."
-          : "일부 권장 출처를 적용하지 못했습니다. 아래 상태를 확인하십시오.",
+        updated.agy_permissions?.wildcard
+          ? "모든 주소 열람 허용을 적용했습니다."
+          : "read_url(*) 를 적용하지 못했습니다. 아래 상태를 확인하십시오.",
       );
     } catch (e) {
       setError((e as Error).message);
@@ -1141,113 +1140,61 @@ export default function SettingsPage() {
 
       <div className="card settings-agy-permissions">
         <div className="split" style={{ marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>논문 페이지 열람 허용 목록 (agy)</h2>
+          <h2 style={{ margin: 0 }}>agy 페이지 열람 권한</h2>
           <button
             className="btn small"
             onClick={applyAgyPermissions}
             disabled={applyingAgy}
           >
-            {applyingAgy ? "적용 중…" : "권장 목록 다시 적용"}
+            {applyingAgy ? "적용 중…" : "권장 설정 다시 적용"}
           </button>
         </div>
+        {/* JSX 는 줄바꿈을 공백 하나로 바꾼다. 문장은 띄어쓰기 자리에서만 끊는다. */}
         <p className="muted settings-integration-copy">
-          agy 는 승인 창을 띄울 수 없는 실행에서 허용 목록에 없는 주소를 자동으로
-          거부하고, <b>그 자리에서 실행 전체를 빈 응답으로 종료합니다.</b> 이미
-          끝난 검색 결과와 감사 블록까지 함께 사라집니다. 그래서 PRISM 은{" "}
-          <code>permissions.allow</code> 에 <code>read_url(*)</code> 를 넣어
-          Codex·Claude 와 같이 어떤 주소든 열 수 있게 합니다. 이 규칙은 페이지
-          열람 도구에만 적용되고 명령 실행·파일 쓰기의 승인은 그대로입니다. 연
-          주소는 실행 기록의 감사 블록에 남습니다.
+          agy 는 허용되지 않은 주소를 열려고 하면 검색 실행 전체를 중단합니다.
+          그래서 PRISM 은 agy 전역 설정에 <code>read_url(*)</code> 를 넣어 모든
+          주소를 열 수 있게 합니다. 명령 실행·파일 쓰기 승인은 그대로입니다.
         </p>
         <p className="muted settings-integration-copy">
-          이 파일은 agy <b>전역</b> 설정이라 PRISM 밖에서 agy 를 쓸 때도 같은
-          규칙이 적용됩니다.
-        </p>
-        <p className="muted settings-integration-copy">
-          <b>자동 적용은 설치당 한 번뿐입니다.</b> 그 뒤로 PRISM 은 이 파일을 읽기만
-          하며, Provider 를 다시 검사해도 목록을 고치지 않습니다 — 여기서 호스트를
-          지운 것은 그러기로 한 선택이고, 프로그램이 되살릴 일이 아니기 때문입니다.
-          나중에 권장 목록이 늘어나도 <b>그때 새로 추가된 호스트만</b> 넣습니다.
-          지우신 항목은 그대로 둡니다. 전체 목록을 다시 넣는 유일한 방법이 위
-          버튼입니다. 어느 경우에도 기존 항목을 덮어쓰지 않습니다.
+          자동 적용은 설치당 한 번뿐이고, 직접 지운 항목은 되살리지 않습니다.
+          다시 넣으려면 위 버튼을 누르십시오.
         </p>
         {agyPermissions ? (
           <>
-            <div className="faint break" style={{ marginBottom: 8 }}>
-              설정 파일: <span className="mono-text">{agyPermissions.path}</span>
-            </div>
             {agyPermissions.error ? (
               <div className="notice danger">
-                <strong>허용 목록을 읽지 못했습니다</strong>
+                <strong>설정 파일을 읽지 못했습니다</strong>
                 <div>{agyPermissions.error}</div>
               </div>
             ) : !agyPermissions.exists ? (
               <div className="notice info">
-                설정 파일이 아직 없습니다. agy 를 한 번 실행하면 만들어지고, 그때
-                PRISM 이 권장 호스트를 한 번 넣습니다. 지금 바로 만들려면 위의
-                「권장 목록 다시 적용」을 누르십시오.
+                설정 파일이 아직 없습니다. agy 를 처음 실행하면 만들어지고, 지금
+                만들려면 위 버튼을 누르십시오.
+              </div>
+            ) : agyPermissions.wildcard ? (
+              <div className="notice ok">
+                <strong>모든 주소 열람 허용</strong>
               </div>
             ) : (
-              <>
-                <div className="pill-row" style={{ marginBottom: 8 }}>
-                  {agyPermissions.recommended.map((host) => {
-                    const applied = agyPermissions.applied.includes(host);
-                    return (
-                      <span
-                        key={host}
-                        className={`pill ${applied ? "ok" : "warn"}`}
-                        title={
-                          applied
-                            ? "적용됨 — 이 호스트는 지금 열 수 있습니다."
-                            : "아직 없습니다. agy 를 다시 검사하면 추가합니다."
-                        }
-                      >
-                        {applied ? "적용됨" : "미적용"} · {host}
-                      </span>
-                    );
-                  })}
+              <div className="notice warn">
+                <strong>read_url(*) 가 없습니다</strong>
+                <div>
+                  목록 밖 주소를 열면 검색 실행이 중단됩니다. 지금 열 수 있는
+                  호스트: {agyPermissions.allowed_hosts.join(", ") || "없음"}
                 </div>
-                {agyPermissions.missing.length > 0 && (
-                  <div className="notice info">
-                    적용되지 않은 권장 호스트가 {agyPermissions.missing.length}곳
-                    있습니다. 직접 지우신 것이라면 그대로 두십시오 — PRISM 은 다시
-                    넣지 않습니다. 넣으려면 위의 <b>권장 목록 다시 적용</b>을
-                    누르십시오.
-                  </div>
-                )}
-                {agyPermissions.wildcard ? (
-                  <div className="notice ok">
-                    <strong>모든 주소 열람 허용 (read_url(*))</strong>
-                    <div>
-                      목록 밖 주소 때문에 검색 실행이 종료되지 않습니다.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="notice warn">
-                    <strong>read_url(*) 가 없습니다</strong>
-                    <div>
-                      아래 호스트만 열 수 있고, 목록 밖 주소를 열려고 하면 실행
-                      전체가 종료됩니다. 넣으려면 위의 <b>권장 목록 다시 적용</b>을
-                      누르십시오.
-                    </div>
-                  </div>
-                )}
-                <div className="faint" style={{ marginTop: 8 }}>
-                  허용은 접근 권한일 뿐 열람 성공을 보장하지 않습니다. 로그인·
-                  유료벽·봇 차단이 걸리면 그 문헌을 미검증 후보로 남기고 나머지
-                  검색을 계속하도록 <b>모델에게 지시합니다.</b> PRISM 이 강제할
-                  수 있는 동작은 아닙니다 — 모델이 이 지시를 무시하면 그 실행은
-                  실패로 기록됩니다.
-                </div>
-                <div className="faint break" style={{ marginTop: 8 }}>
-                  이 파일에 등록된 전체 호스트({agyPermissions.allowed_hosts.length}
-                  곳): {agyPermissions.allowed_hosts.join(", ") || "없음"}
-                </div>
-              </>
+              </div>
             )}
+            <div className="faint" style={{ marginTop: 8 }}>
+              허용은 접근 권한일 뿐 열람 성공을 보장하지 않습니다. 유료벽·봇
+              차단으로 열지 못한 문헌은 미검증 후보로 남기도록 모델에게
+              지시하며, PRISM 이 강제하지는 않습니다.
+            </div>
+            <div className="faint break" style={{ marginTop: 4 }}>
+              설정 파일: <span className="mono-text">{agyPermissions.path}</span>
+            </div>
           </>
         ) : (
-          <div className="faint">허용 목록 정보를 받지 못했습니다.</div>
+          <div className="faint">열람 권한 정보를 받지 못했습니다.</div>
         )}
       </div>
 

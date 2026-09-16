@@ -84,31 +84,27 @@ def test_shipped_search_prompt_is_a_strategy_not_a_contract() -> None:
     ):
         assert mark not in body, mark
 
-    # 전략이 다루어야 하는 네 가지는 그대로 있다.
-    for heading in (
-        "중시할 기술적 특징",
-        "검색 범위와 확장 방식",
-        "후보 우선순위와 평가 관점",
-        "동의어·영문어·IPC·CPC 활용 전략",
+    for phrase in (
+        "후출원·후공개 문헌도", "원문 직접 발췌", "외국어 문헌의 한국어 번역",
+        "A. 전체 구조와 핵심 특징이 모두 강하게 유사",
+        "신규성·진보성 판단은 하지 말고",
     ):
-        assert heading in body
+        assert phrase in body
 
 
-def test_the_order_contract_moved_into_the_program() -> None:
-    """후보 순서는 공식 검증 대상 선택에 쓰이므로 계약이다.
+def test_assembly_preserves_user_body_without_extra_search_strategy() -> None:
+    from app.config import SEARCH_RUNTIME_CONTEXT
 
-    예전에는 이 문장이 사용자 프롬프트에 있었다. 그러면 전략을 고치는 것만으로
-    뒤따르는 검증의 우선순위 규칙이 사라진다. 이제 PRISM 이 매 실행에 붙인다.
-    """
-    contract = search_contract.preamble()
-    assert "재정렬하지 않는다" in contract
-    assert "같은 실행 안에서 LLM이 선택한다" in contract
-    assert "비용이나 출처별 슬롯" in contract
-
-    # 조립된 본문에도 실제로 들어간다.
-    rendered = search_prompt.compose(search_prompt.load().body, CLAIM).body
-    assert "## 후보 목록의 순서" in rendered
-    assert "## 분류 그룹의 뜻" in rendered
+    body = search_prompt.load().body
+    rendered = search_prompt.compose(body, CLAIM).body
+    assert rendered.startswith(body.rstrip() + "\n\n" + search_contract.SECTION_HEADER)
+    assert rendered.count("A. 전체 구조와 핵심 특징이 모두 강하게 유사") == 1
+    assert "## 후보 목록의 순서" not in rendered
+    assert "## 분류 그룹의 뜻" not in rendered
+    for removed in ("EPO·논문 MCP를 우선", "각 OR 분기", "핵심 관계별 짧은 질의"):
+        assert removed not in SEARCH_RUNTIME_CONTEXT
+    assert "evidence_ref" in SEARCH_RUNTIME_CONTEXT
+    assert "group:null" in SEARCH_RUNTIME_CONTEXT
 
 
 def search_manifest_capability(prompt) -> bool:

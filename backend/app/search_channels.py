@@ -33,7 +33,9 @@ MCP_CHANNELS = ("epo", "kiwee", "literature", "gpatents")
 CHANNEL_ACTIONS = {
     "epo": ("search", "fetch"),
     "kiwee": ("search", "fetch"),
-    "literature": ("search", "fetch"),
+    # fetch_pdf 는 OA 사본 PDF 본문이다. 서지·초록(fetch)과 다른 근거이므로
+    # 도구도 따로 센다.
+    "literature": ("search", "fetch", "fetch_pdf"),
     "gpatents": ("fetch",),
 }
 _CHECK_HINT = "설정 화면에서 「검색 도구 확인」을 누르면 실제로 한 번 불러 확인합니다."

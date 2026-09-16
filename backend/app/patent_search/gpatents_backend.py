@@ -32,19 +32,13 @@ Google 은 특허청이 아니다. 여기서 확인된 발췌는 "원문 페이�
 
 from __future__ import annotations
 
-import json
-import os
-import random
 import re
-import time
 from collections.abc import Callable, Mapping
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-from . import artifacts, gpatents_parser
+from . import artifacts, gpatents_parser, pace
 from .base import (
     BackendStatus,
     EvidenceRef,
@@ -64,12 +58,12 @@ SETTING_MAX_FETCHES = "gpatents_max_fetches_per_run"
 BACKEND_ID = "gpatents"
 PAGE_BASE_URL = "https://patents.google.com/patent/"
 
-DEFAULT_MIN_INTERVAL_SECONDS = 6
+DEFAULT_MIN_INTERVAL_SECONDS = pace.DEFAULT_MIN_INTERVAL_SECONDS
 DEFAULT_MAX_FETCHES_PER_RUN = 12
-JITTER_SECONDS = 2.0
-BLOCK_SECONDS = 600
+JITTER_SECONDS = pace.JITTER_SECONDS
+BLOCK_SECONDS = pace.BLOCK_SECONDS
 REQUEST_TIMEOUT_SECONDS = 30
-LOCK_WAIT_SECONDS = 180
+LOCK_WAIT_SECONDS = pace.LOCK_WAIT_SECONDS
 USER_AGENT = "Mozilla/5.0 (compatible; PRISM patent review; single-document fetch)"
 
 CONSTITUENTS = ("claims", "description", "abstract", "citations")
@@ -159,108 +153,18 @@ def _live_transport(url: str, timeout: float) -> PageResponse:
         session.close()
 
 
-class HumanPaceGate:
-    """프로세스를 넘어 요청 간격을 지키는 잠금.
+class HumanPaceGate(pace.HumanPaceGate):
+    """이 채널의 사람 속도 게이트.
 
-    잠금을 쥔 채 기다리고 요청한다. 다른 프로세스는 잠금이 풀릴 때까지 기다리므로
-    두 요청이 간격 안에 겹치지 않는다.
+    간격·잠금·정지 로직은 pace 모듈 하나뿐이다. 두 벌 두면 한쪽만 고쳐지는 날이
+    오고, 그때 조용히 빨라지는 쪽이 남의 서버를 두드린다. 여기서 고정하는 것은
+    상태 파일 이름과 거절 예외뿐이다.
     """
 
-    def __init__(
-        self,
-        state_dir: Path,
-        *,
-        min_interval: float = DEFAULT_MIN_INTERVAL_SECONDS,
-        jitter: float = JITTER_SECONDS,
-        clock: Callable[[], float] = time.time,
-        sleep: Callable[[float], None] = time.sleep,
-        rng: Callable[[], float] = random.random,
-    ) -> None:
-        self.state_dir = Path(state_dir)
-        self.min_interval = float(min_interval)
-        self.jitter = float(jitter)
-        self._clock = clock
-        self._sleep = sleep
-        self._rng = rng
-
-    @property
-    def _state_path(self) -> Path:
-        return self.state_dir / "gpatents-pace.json"
-
-    @contextmanager
-    def _locked(self):
-        self.state_dir.mkdir(parents=True, exist_ok=True)
-        path = self.state_dir / "gpatents-pace.lock"
-        with path.open("a+b") as handle:
-            if path.stat().st_size == 0:
-                handle.write(b"0")
-                handle.flush()
-            deadline = time.monotonic() + LOCK_WAIT_SECONDS
-            while True:
-                try:
-                    handle.seek(0)
-                    if os.name == "nt":
-                        import msvcrt
-
-                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-                    else:
-                        import fcntl
-
-                        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except OSError:
-                    if time.monotonic() >= deadline:
-                        raise GooglePatentsRateLimited(
-                            "gpatents_pace_lock_timeout: 다른 조회가 끝나기를 기다리다 시간이 지났습니다."
-                        )
-                    time.sleep(0.2)
-            try:
-                yield
-            finally:
-                handle.seek(0)
-                if os.name == "nt":
-                    import msvcrt
-
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(handle, fcntl.LOCK_UN)
-
-    def _read_state(self) -> dict:
-        try:
-            value = json.loads(self._state_path.read_text(encoding="utf-8"))
-            return value if isinstance(value, dict) else {}
-        except (OSError, ValueError):
-            return {}
-
-    def _write_state(self, state: dict) -> None:
-        tmp = self._state_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state), encoding="utf-8")
-        tmp.replace(self._state_path)
-
-    def run(self, request: Callable[[], PageResponse]) -> PageResponse:
-        with self._locked():
-            state = self._read_state()
-            now = self._clock()
-            blocked_until = float(state.get("blocked_until") or 0)
-            if blocked_until > now:
-                raise GooglePatentsRateLimited(
-                    "gpatents_rate_limited: Google 이 최근 요청을 거절해 "
-                    f"{int(blocked_until - now)}초 동안 조회를 멈춥니다. 문헌 부재가 아닙니다."
-                )
-            wait = float(state.get("last_request") or 0) + self.min_interval + self.jitter * self._rng() - now
-            if wait > 0:
-                self._sleep(wait)
-            try:
-                response = request()
-            finally:
-                state["last_request"] = self._clock()
-                self._write_state(state)
-            if response.status in (429, 503):
-                state["blocked_until"] = self._clock() + BLOCK_SECONDS
-                self._write_state(state)
-            return response
+    def __init__(self, state_dir, **options) -> None:
+        options.setdefault("name", "gpatents")
+        options.setdefault("error_class", GooglePatentsRateLimited)
+        super().__init__(state_dir, **options)
 
 
 class GooglePatentsPageBackend(PatentSearchBackend):

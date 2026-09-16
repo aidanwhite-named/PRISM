@@ -490,4 +490,5 @@ def test_the_shipped_default_is_a_strategy_and_still_runs(client) -> None:
 
     message = next(text for text in _sent_messages() if "<CLAIM_TEXT>" in text)
     assert "# PRISM 조립 데이터 구간" in message
-    assert "## 분류 그룹의 뜻" in message
+    assert "A. 전체 구조와 핵심 특징이 모두 강하게 유사" in message
+    assert "## 분류 그룹의 뜻" not in message

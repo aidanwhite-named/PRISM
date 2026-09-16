@@ -373,6 +373,46 @@ def tools_store(tmp_path):
     return artifacts.ArtifactStore(tmp_path / "evidence")
 
 
+def test_response_path_reference_is_bound_to_delivered_field_with_audit(tmp_path, monkeypatch):
+    journal, result, _ = _page_journal(tmp_path, monkeypatch)
+    excerpt = "前記第１の制限は、単調減少する制限を含む。"
+    data, _ = _candidate(result, support_text=excerpt, verbatim_excerpt=excerpt)
+    row = data["candidates"][0]["mapping"][0]
+    canonical = dict(row["evidence_ref"])
+    row["evidence_ref"]["field_path"] = "records/0/fields/page_claims"
+    verified = sv.verify(data, {}, journal, store=tools_store(tmp_path))["candidates"][0]
+    output = verified["mapping"][0]
+    assert output["support_verified"] and output["page_quote_verified"]
+    assert not output["quote_verified"]  # page still is not official text
+    assert output["evidence_ref"] == row["evidence_ref"]
+    assert output["evidence_ref_resolution"]["reported"] == row["evidence_ref"]
+    assert output["evidence_ref_resolution"]["resolved"] == canonical
+    assert output["source_location"] == "청구항 2"
+
+
+@pytest.mark.parametrize("mutation", ["artifact", "profile", "index", "field", "document", "undelivered", "tampered", "paraphrase"])
+def test_response_path_repair_never_bypasses_provenance(tmp_path, monkeypatch, mutation):
+    journal, result, _ = _page_journal(tmp_path, monkeypatch)
+    excerpt = "前記第１の制限は、単調減少する制限を含む。"
+    data, _ = _candidate(result, support_text=excerpt, verbatim_excerpt=excerpt)
+    c = data["candidates"][0]
+    row = c["mapping"][0]
+    ref = row["evidence_ref"]
+    ref["field_path"] = "records/0/fields/page_claims"
+    if mutation == "artifact": ref["artifact_id"] = "0" * 64
+    if mutation == "profile": ref["profile_id"] = "epo_ops_exchange_xml_v1"
+    if mutation == "index": ref["field_path"] = "records/1/fields/page_claims"
+    if mutation == "field": ref["field_path"] = "records/0/fields/page_description"
+    if mutation == "document": c["doc_number"] = "JP7475618A"
+    if mutation == "undelivered": journal = []
+    if mutation == "tampered": tools_store(tmp_path)._path(ref["artifact_id"]).write_bytes(b"tampered")
+    if mutation == "paraphrase":
+        row["support_text"] = row["verbatim_excerpt"] = "前記第１の制限は ... 単調減少する制限を含む。"
+    output = sv.verify(data, {}, journal, store=tools_store(tmp_path))["candidates"][0]["mapping"][0]
+    assert not output["support_verified"] and not output["page_quote_verified"]
+    assert not output["quote_verified"]
+
+
 def test_followup_plans_one_page_fetch_for_patent_mapping_without_text() -> None:
     verified = {"candidates": [
         {"doc_number": "US9208613B2", "mapping": [{"feature": "F"}], "verification_issues": [],

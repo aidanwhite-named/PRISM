@@ -245,6 +245,7 @@ PRISM_MCP_TOOL_NAMES = (
     "kiwee_fetch",
     "literature_search",
     "literature_fetch",
+    "literature_fetch_pdf",
     "gpatents_fetch",
 )
 PRISM_MCP_TOOLS = tuple(

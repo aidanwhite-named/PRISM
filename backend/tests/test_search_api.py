@@ -137,7 +137,7 @@ def test_final_prompt_carries_claim_inside_the_boundary(client) -> None:
 
     # 검색 실행의 시스템 프롬프트는 신뢰 경계이자 증거 등급 계약이다.
     assert "WebFetch" in system
-    assert "원문 확인이 불가능하면" in system
+    assert "확인하지 못한 날짜·발췌·번역·위치는 빈 문자열" in system
     # 첨부 분석용 런타임 컨텍스트가 섞이면 안 된다.
     assert "별도의 도구는 제공되지 않습니다" not in text
 

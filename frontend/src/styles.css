@@ -769,7 +769,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .page-settings > .settings-kiwee,
 .page-settings > .settings-epo,
 .page-settings > .settings-literature,
-.page-settings > .settings-agy-permissions { grid-column: 1 / -1; }
+.page-settings > .settings-agy-permissions { grid-column: 1 / -1; word-break: keep-all; }
 .settings-integration-copy { max-width: 900px; }
 .settings-limit-grid {
   display: grid;

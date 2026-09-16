@@ -96,6 +96,7 @@ _MCP_INPUT_KEYS = {
     "kiwee_fetch": ("publication_number", "constituent"),
     "literature_search": ("query", "max_results", "source", "openalex_mode", "cites_doi"),
     "literature_fetch": ("doi", "constituent"),
+    "literature_fetch_pdf": ("doi", "page_from", "page_to"),
 }
 _MAX_STRUCTURED_INPUT = 2000
 

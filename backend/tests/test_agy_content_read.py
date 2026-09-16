@@ -325,8 +325,8 @@ def test_agy_context_tells_the_model_that_fetch_returns_a_path() -> None:
 
 def test_agy_context_keeps_model_explanations_separate_from_quotes():
     from app.config import AGY_SEARCH_RUNTIME_CONTEXT as text
-    assert "직접 인용을 주장하지" in text
-    assert "기술적 설명을 남길 수" in text
+    assert "확인하지 못한 날짜·발췌·번역·위치는 빈 문자열" in text
+    assert "설명은 counterpart/similar/different/note로 구분" in text
 
 
 def test_agy_context_does_not_demand_reading_every_candidate() -> None:
@@ -336,7 +336,7 @@ def test_agy_context_does_not_demand_reading_every_candidate() -> None:
     """
     from app.config import AGY_SEARCH_RUNTIME_CONTEXT as text
 
-    assert "모든 후보를 다 열어야 한다는 뜻이 아닙니다" in text
+    assert "원문 미확인 문헌을 참고로 남길 때는 group:null" in text
 
 
 def test_agy_context_contains_no_other_providers_native_tool_names():

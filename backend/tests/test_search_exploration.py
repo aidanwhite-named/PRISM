@@ -118,8 +118,8 @@ def test_page_metadata_and_warning_do_not_rewrite_query():
     assert result["search_warnings"][0]["code"] == "broad_query_sample"
     assert result["cql"] == 'ta all "robot arm"'
     for begin in (0, 2001, True):
-        with pytest.raises(ValueError):
-            _validate({"query": {}, "begin": begin}, _EPO_SEARCH["inputSchema"])
+        with pytest.raises(ValueError, match="arguments.begin"):
+            _validate({"query": {"field": "ta", "value": "robot arm"}, "begin": begin}, _EPO_SEARCH["inputSchema"])
 
 
 @pytest.mark.parametrize("code", ["CLIENT.InvalidCountryCode", "SERVER.EntityNotFound"])

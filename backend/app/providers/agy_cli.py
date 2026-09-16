@@ -362,22 +362,22 @@ class AgyCliProvider(Provider):
         # 때문에, 지운 사람은 자기가 지웠다는 사실조차 확인할 수 없다. 자동
         # 적용은 일회성 마이그레이션 한 번뿐이고(settings_service), 그 뒤로
         # 다시 넣는 것은 사용자가 버튼을 눌렀을 때만이다.
+        # 판정은 read_url(*) 하나로 한다. 그것이 있으면 호스트 목록은 의미가 없다.
         state = agy_permissions.read_state()
         if state.error:
-            result.notes.append(f"페이지 열람 허용 목록을 읽지 못했습니다: {state.error}")
+            result.notes.append(f"페이지 열람 권한을 읽지 못했습니다: {state.error}")
         elif not state.exists:
             result.notes.append(
-                "페이지 열람 허용 목록 파일이 없습니다. 권장 출처를 넣으려면 "
-                "설정 화면에서 「권장 목록 다시 적용」을 누르십시오."
+                "agy 설정 파일이 없습니다. 설정 화면에서 「권장 설정 다시 적용」을 "
+                "누르십시오."
             )
-        elif state.missing:
-            result.notes.append(
-                "페이지 열람 허용 목록에 없는 권장 출처: " + ", ".join(state.missing)
-            )
+        elif state.wildcard:
+            result.notes.append("페이지 열람 권한: 모든 주소 허용 (read_url(*)).")
         else:
             result.notes.append(
-                f"페이지 열람 허용 목록에 권장 논문 출처 "
-                f"{len(state.applied)}곳이 모두 있습니다."
+                "페이지 열람 권한에 read_url(*) 가 없습니다. 목록 밖 주소를 열면 "
+                "검색 실행이 중단됩니다. 설정 화면에서 「권장 설정 다시 적용」을 "
+                "누르십시오."
             )
 
         # 인증 확인. 모델 추론을 돌리지 않으므로 토큰 사용량이 발생하지 않는다.

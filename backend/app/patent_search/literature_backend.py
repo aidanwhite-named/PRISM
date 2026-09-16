@@ -30,7 +30,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
-from . import artifacts, literature_client, literature_parser, openalex_client
+from . import artifacts, literature_client, literature_parser, oa_pdf, openalex_client
 from .base import (
     BackendStatus,
     EvidenceRef,
@@ -64,7 +64,8 @@ _TOTAL_READERS = {
 # 읽힌다. 받을 수 없는 것을 받으려 시도하지 않는다.
 CONSTITUENTS = ("abstract", "biblio")
 
-_READY_DETAIL = "Crossref·Europe PMC·OpenAlex 조회 준비됨"
+_READY_DETAIL = "OpenAlex·Crossref·Europe PMC 조회 준비됨"
+_OA_PDF_DETAIL = " · OA 원문 PDF 조회 켜짐(사람 속도)"
 _OPENALEX_NO_KEY_DETAIL = " (OpenAlex API 키 없음 — 일일 무료 한도가 작습니다)"
 _DISABLED_DETAIL = "비특허문헌 연동이 꺼져 있습니다."
 
@@ -75,10 +76,17 @@ class LiteratureBackend(PatentSearchBackend):
     id = BACKEND_ID
     display_name = "Crossref · Europe PMC · OpenAlex"
 
-    def __init__(self, client=None, store=None, openalex=None) -> None:
+    def __init__(self, client=None, store=None, openalex=None, oa_pdf_client=None) -> None:
         self._client = client
         self._store = store
         self._openalex = openalex
+        # OA PDF 채널. 전송을 주입하지 않은 테스트가 실제 요청을 보내지 못하도록
+        # conftest 가 oa_pdf._live_transport 를 막는다.
+        self._oa_client = oa_pdf_client
+        self._oa_pdf_enabled = True
+        self._oa_pdf_interval = oa_pdf.DEFAULT_MIN_INTERVAL_SECONDS
+        self.max_pdf_fetches_per_run = oa_pdf.DEFAULT_MAX_FETCHES_PER_RUN
+        self._pdf_fetches = 0
         # OpenAlex 는 설정을 거친 실제 백엔드(get_backend)이거나 클라이언트를 직접
         # 넘긴 경우에만 기본 검색에 넣는다. 전송을 주입하지 않은 테스트가 조용히
         # 세 번째 호출을 만들어 실패 소스로 기록되지 않게 하기 위해서다.
@@ -103,6 +111,13 @@ class LiteratureBackend(PatentSearchBackend):
         )
         self._openalex_key = str(values.get(SETTING_OPENALEX_KEY) or "").strip()
         self._use_openalex = True
+        self._oa_pdf_enabled = bool(values.get(oa_pdf.SETTING_ENABLED, True))
+        self._oa_pdf_interval = _positive_int(
+            values.get(oa_pdf.SETTING_MIN_INTERVAL), oa_pdf.DEFAULT_MIN_INTERVAL_SECONDS
+        )
+        self.max_pdf_fetches_per_run = _positive_int(
+            values.get(oa_pdf.SETTING_MAX_FETCHES), oa_pdf.DEFAULT_MAX_FETCHES_PER_RUN
+        )
         if self._client is not None:
             self._client.mailto = self._mailto
             self._client.http_budget_seconds = self._http_budget
@@ -114,6 +129,8 @@ class LiteratureBackend(PatentSearchBackend):
         detail = _READY_DETAIL
         if self._use_openalex and not self._openalex_key:
             detail += _OPENALEX_NO_KEY_DETAIL
+        if self._oa_pdf_enabled:
+            detail += _OA_PDF_DETAIL
         return BackendStatus(
             backend_id=self.id,
             display_name=self.display_name,
@@ -136,8 +153,12 @@ class LiteratureBackend(PatentSearchBackend):
         )
         base["search_calls"] = self._search_calls
         base["detail_fetches"] = self._detail_fetches
+        base["pdf_fetches"] = self._pdf_fetches
+        base["max_pdf_fetches_per_run"] = self.max_pdf_fetches_per_run
         if self._openalex is not None:
             base["openalex"] = self._openalex.usage()
+        if self._oa_client is not None:
+            base["oa_pdf"] = self._oa_client.usage()
         return base
 
     # --- 내부 자원 -------------------------------------------------------
@@ -156,6 +177,12 @@ class LiteratureBackend(PatentSearchBackend):
                 http_budget_seconds=self._http_budget,
             )
         return self._openalex
+
+    def _require_oa_pdf(self) -> oa_pdf.OaPdfClient:
+        if self._oa_client is None:
+            self._oa_client = oa_pdf.OaPdfClient(min_interval=self._oa_pdf_interval)
+        self._oa_client.min_interval = float(self._oa_pdf_interval)
+        return self._oa_client
 
     def _require_store(self) -> artifacts.ArtifactStore:
         if self._store is None:
@@ -197,13 +224,21 @@ class LiteratureBackend(PatentSearchBackend):
         store = self._require_store()
         rows = max(1, min(int(query.max_results or 0) or self._max_results,
                           literature_client.MAX_ROWS_PER_QUERY))
-        known = (literature_client.SOURCE_CROSSREF, literature_client.SOURCE_EUROPEPMC, SOURCE_OPENALEX)
+        # OpenAlex 를 먼저 묻는다(사용자 결정, 2026-09-16). 수록 범위가 가장 넓고
+        # IEEE·Elsevier 초록과 arXiv 를 함께 들고 있어, 한 곳만 살아남는 실행에서
+        # 남는 편이 유리하다. Crossref·Europe PMC 는 그다음이며 실패는 서로를
+        # 막지 않는다.
+        known = (SOURCE_OPENALEX, literature_client.SOURCE_CROSSREF, literature_client.SOURCE_EUROPEPMC)
         if cites_doi:
             if sources and tuple(sources) != (SOURCE_OPENALEX,):
                 raise PatentSearchError("인용 확장(cites_doi)은 OpenAlex 에서만 됩니다.")
             sources = (SOURCE_OPENALEX,)
         if sources is None:
-            wanted = known if self._use_openalex else known[:2]
+            wanted = (
+                known
+                if self._use_openalex
+                else (literature_client.SOURCE_CROSSREF, literature_client.SOURCE_EUROPEPMC)
+            )
         else:
             unknown = set(sources) - set(known)
             if unknown:
@@ -211,6 +246,11 @@ class LiteratureBackend(PatentSearchBackend):
             wanted = tuple(source for source in known if source in sources)
 
         plan = []
+        if SOURCE_OPENALEX in wanted:
+            openalex = self._require_openalex()
+            plan.append((SOURCE_OPENALEX,
+                         lambda text, n: self._openalex_search(openalex, store, text, n, openalex_mode, cites_doi),
+                         literature_parser.read_openalex_results))
         if literature_client.SOURCE_CROSSREF in wanted:
             client = self._require_client()
             plan.append((literature_client.SOURCE_CROSSREF,
@@ -221,11 +261,6 @@ class LiteratureBackend(PatentSearchBackend):
             plan.append((literature_client.SOURCE_EUROPEPMC,
                          lambda text, n: client.search_europepmc(text, rows=n),
                          literature_parser.read_europepmc_results))
-        if SOURCE_OPENALEX in wanted:
-            openalex = self._require_openalex()
-            plan.append((SOURCE_OPENALEX,
-                         lambda text, n: self._openalex_search(openalex, store, text, n, openalex_mode, cites_doi),
-                         literature_parser.read_openalex_results))
 
         records: list[PatentRecord] = []
         # 중복은 **한 DB 안에서만** 없앤다. 두 DB 가 같은 문헌을 돌려준 사실은
@@ -366,13 +401,15 @@ class LiteratureBackend(PatentSearchBackend):
             if self._use_openalex else None
         )
         if constituent == "biblio":
-            plan = (crossref, openalex)
+            plan = (openalex, crossref)
         elif arxiv_doi:
             # arXiv DOI 는 DataCite 소속이라 Europe PMC 에 거의 없고 Crossref 는
             # 404 다. 초록을 가진 OpenAlex 를 먼저 본다.
             plan = (openalex, crossref)
         else:
-            plan = (europepmc, openalex, crossref)
+            # OpenAlex 를 먼저 본다. Europe PMC 는 생의학 색인이라 이 분야 논문이
+            # 드물고, Crossref 는 IEEE·Elsevier 초록을 갖고 있지 않다.
+            plan = (openalex, europepmc, crossref)
         plan = tuple(step for step in plan if step is not None)
 
         last: PatentSearchResponse | None = None
@@ -445,8 +482,103 @@ class LiteratureBackend(PatentSearchBackend):
             raise PatentSearchError("조회 계획이 비어 있습니다.")
         return replace(last, notes=tuple(notes), failed_sources=tuple(failed))
 
+    # --- 원문 확보 (OA 사본 PDF) ------------------------------------------
+    def fetch_pdf(
+        self,
+        doi: str,
+        *,
+        page_from: int = 1,
+        page_to: int | None = None,
+        cached_artifact_id: str = "",
+    ) -> PatentSearchResponse:
+        """OA 사본 PDF 의 한 페이지 범위를 받아 보존하고 레코드로 돌려준다.
 
-def _first_europepmc(body: bytes):
+        주소는 PRISM 이 고른다 — DOI 로 OpenAlex 단건을 받아 그 응답 안의 OA
+        주소만 쓴다(oa_pdf 모듈 주석). **기준 응답도 보존한다**: "이 PDF 를 왜 이
+        논문의 본문이라고 하는가"의 근거가 그 응답이다.
+
+        받지 못하는 것은 실패로 남긴다. OA 주소가 없는 것(유료 문헌), 403·봇 차단,
+        PDF 가 아닌 응답은 모두 "그런 논문이 없다"가 아니다.
+        """
+        if not self._oa_pdf_enabled:
+            raise oa_pdf.OaPdfError(
+                "literature_oa_pdf_disabled: 논문 OA PDF 조회가 설정에서 꺼져 있습니다."
+            )
+        key = literature_client.normalize_doi(doi)
+        first, last = oa_pdf.page_span(page_from, page_to)
+        store = self._require_store()
+        notes: list[str] = []
+        url = ""
+        status = 200
+
+        if cached_artifact_id and store.exists(cached_artifact_id):
+            body = store.read(cached_artifact_id)
+            artifact_id = cached_artifact_id
+            notes.append("같은 실행에서 이미 받은 PDF 를 다시 읽었습니다(재요청 없음).")
+        else:
+            seed = self._require_openalex().fetch(key)
+            self._detail_fetches += 1
+            # 기준 응답을 먼저 보존한다. 주소를 고른 근거가 사라지지 않게 한다.
+            store.put(seed.body)
+            if getattr(seed, "no_results", False) or getattr(seed, "status", 0) == 404:
+                raise oa_pdf.OaPdfNotAvailable(
+                    f"oa_pdf_not_available: OpenAlex 에 {key} 레코드가 없어 OA 주소를 "
+                    "고를 수 없습니다. 문헌 부재의 증거가 아닙니다."
+                )
+            work = literature_parser.read_openalex_work(seed.body)
+            if work is None or work.doi != key:
+                raise oa_pdf.OaPdfError(
+                    "oa_pdf_identifier_mismatch: OpenAlex 응답의 DOI 가 요청한 값과 "
+                    f"다릅니다: {(work.doi if work else '없음')!r} != {key!r}"
+                )
+            url = oa_pdf.select_pdf_url(seed.body)
+            if not url:
+                raise oa_pdf.OaPdfNotAvailable(
+                    f"oa_pdf_not_available: {key} 에 공개된 OA PDF 주소가 없습니다"
+                    "(유료 문헌이거나 OA 사본이 등록되지 않았습니다). 문헌 부재가 아닙니다."
+                )
+            response = self._require_oa_pdf().fetch(url)
+            self._pdf_fetches += 1
+            status = int(response.status or 0)
+            body = response.body
+            artifact_id = store.put(body)
+            url = response.url or url
+
+        text = oa_pdf.read_pages(body, first, last)
+        pages = oa_pdf.page_count(body)
+        note = "\n".join(
+            [
+                "논문 OA 사본 PDF (비공식 사본일 수 있음 — 게재본이 아니라 저자 원고일 수 있습니다).",
+                f"주소: {url}" if url else "주소: 이 실행에서 이미 받은 사본",
+                f"전체 {pages}쪽 중 {first}-{min(last, pages)}쪽. [p.N] 은 페이지 번호 표시입니다.",
+            ]
+        )
+        fields = {
+            oa_pdf.TEXT_FIELD: FieldValue(
+                value=text,
+                evidence=EvidenceRef(
+                    artifact_id=artifact_id,
+                    field_path=oa_pdf.field_path(first, last),
+                    profile_id=oa_pdf.PROFILE_OA_PDF_TEXT,
+                ),
+            ),
+            # 출처 안내는 근거가 아니라 표시다. 아티팩트 참조를 붙이지 않는다.
+            oa_pdf.NOTE_FIELD: FieldValue(value=note),
+        }
+        return PatentSearchResponse(
+            # 제목은 이 PDF 에서 뽑은 값이 아니다. literature_fetch 의 서지가 준다.
+            records=(PatentRecord(doc_number=key, title="", fields=fields, source_url=url or f"https://doi.org/{key}"),),
+            total_found=1,
+            raw_artifact_id=artifact_id,
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+            http_status=status,
+            request_url=url,
+            notes=tuple(notes),
+        )
+
+
+def _first_europepmc(body: bytes):  # noqa: D401 - 아래 fetch_pdf 뒤에 붙은 보조 함수
+
     works = literature_parser.read_europepmc_results(body)
     return works[0] if works else None
 

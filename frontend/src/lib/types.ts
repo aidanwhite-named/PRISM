@@ -276,20 +276,30 @@ export interface GapSearchFocus {
 export type SearchGroup = "A" | "B" | "C" | null;
 export type SearchEvidenceLevel = "search_snippet_only" | "source_page_reviewed" |
   "official_bibliographic" | "official_abstract" | "source_page_text_verified" |
-  "official_claims" | "official_full_text";
+  "oa_pdf_text_verified" | "official_claims" | "official_full_text";
 export type SearchVerificationIssue = "publication_date_unverified" | "title_unverified" | "title_mismatch" | "applicant_unverified" | "applicant_mismatch" | "identifier_unverified" | "identifier_invalid" |
-  "identifier_mismatch" | "source_not_read" | "quote_unverified" | "support_unverified" |
+  "identifier_mismatch" | "source_not_read" | "quote_unverified" | "support_unverified" | "passage_unverified" |
   "duplicate_group_conflict" | "publication_date_conflict" | "source_conflict";
 export interface SearchMappingRow {
   feature: string; degree: string; counterpart: string; similar: string; different: string;
   support_text: string; support_verified: boolean; quote_verified: boolean;
   verbatim_excerpt: string; translation: string; source_location: string;
   evidence_ref: { artifact_id: string; field_path: string; profile_id: string } | null;
-  /** PRISM 이 보존한 Google Patents 페이지에서 글자 그대로 확인됨 (비공식 출처). */
+  evidence_passage_id?: string;
+  passage_resolution?: {
+    passage_id: string; start: number; end: number; restored_fields: string[];
+    evidence_ref: { artifact_id: string; field_path: string; profile_id: string };
+  };
+  evidence_ref_resolution?: {
+    reason: "delivered_response_path";
+    reported: { artifact_id: string; field_path: string; profile_id: string };
+    resolved: { artifact_id: string; field_path: string; profile_id: string };
+  };
+  /** PRISM 이 보존한 Google Patents 페이지 또는 논문 OA PDF 에서 글자 그대로 확인됨 (비공식 출처). */
   page_quote_verified?: boolean;
-  /** 근거 필드의 출처: google_patents_page | preserved_response | "" */
+  /** 근거 필드의 출처: google_patents_page | oa_pdf | preserved_response | "" */
   support_origin?: string;
-  /** 페이지 번호 표시에서 PRISM 이 계산한 근거 위치 (예: 청구항 2). */
+  /** 번호 표시에서 PRISM 이 계산한 근거 위치 (예: 청구항 2, 논문 p.12). */
   support_location?: string;
 }
 export interface SearchCandidate {

@@ -108,6 +108,12 @@ def render(manifest: dict) -> str:
             lines += ["", "확인 사항: " + cell(" / ".join(ISSUE_LABELS.get(x, x) for x in issues))]
         rows = item.get("mapping") or []
         if rows:
+            selected = sum(bool(row.get("passage_resolution") and row.get("support_verified")) for row in rows)
+            if selected:
+                lines += ["", f"근거 {selected}개는 AI가 선택한 구간을 PRISM이 보존 원문에서 직접 가져왔습니다."]
+            resolved = sum(bool(row.get("evidence_ref_resolution")) for row in rows)
+            if resolved:
+                lines += ["", f"근거 참조 {resolved}개는 동일 문헌의 보존 응답 경로와 대조해 연결했습니다. 원래 참조와 연결 내역은 검색 감사 기록에 남아 있습니다."]
             lines += ["", "| 청구항 구성 | LLM 대응 판단 | 유사점 / 차이점 | 근거 대조 |",
                       "| --- | --- | --- | --- |"]
             excerpts = []
@@ -116,6 +122,10 @@ def render(manifest: dict) -> str:
                     evidence = "모델 설명 / 미검증"
                 elif row.get("support_origin") == "google_patents_page":
                     evidence = "원문 페이지 대조 확인 (Google Patents, 비공식)"
+                    if row.get("support_location"):
+                        evidence += " · " + str(row["support_location"])
+                elif row.get("support_origin") == "oa_pdf":
+                    evidence = "논문 원문 PDF 대조 확인 (OA 사본)"
                     if row.get("support_location"):
                         evidence += " · " + str(row["support_location"])
                 else:
@@ -128,7 +138,12 @@ def render(manifest: dict) -> str:
                     excerpts.append(row)
             # 표 안에 넣으면 행이 끊긴다. 발췌는 표 뒤에 모은다.
             for row in excerpts:
-                label = "확인된 원문" if row.get("quote_verified") else "원문 페이지 발췌 (비공식 출처)"
+                if row.get("quote_verified"):
+                    label = "확인된 원문"
+                elif row.get("support_origin") == "oa_pdf":
+                    label = "논문 원문 PDF 발췌 (OA 사본)"
+                else:
+                    label = "원문 페이지 발췌 (비공식 출처)"
                 where = f" [{row['source_location']}]" if row.get("source_location") else ""
                 lines += ["", f"{label}{cell(where)} · {cell(row.get('feature'))}: " + cell(row["verbatim_excerpt"])]
                 if row.get("translation"):

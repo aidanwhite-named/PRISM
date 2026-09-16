@@ -406,8 +406,8 @@ async def test_the_provider_probe_never_writes_the_file(settings_file):
 
     assert settings_file.read_bytes() == before
     assert _backups(settings_file) == []
-    # 읽기는 한다. 빠진 권장 출처를 알려 주는 것까지가 검사의 몫이다.
-    assert any("권장 출처" in note for note in result.notes)
+    # 읽기는 한다. read_url(*) 가 빠졌다고 알려 주는 것까지가 검사의 몫이다.
+    assert any("read_url(*) 가 없습니다" in note for note in result.notes)
 
 
 def test_the_apply_endpoint_merges_and_reports_the_new_state(

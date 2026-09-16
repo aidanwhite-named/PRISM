@@ -18,13 +18,19 @@ const LEVELS: Record<string, string> = {
 };
 function supportLabel(row: { support_verified: boolean; support_origin?: string; support_location?: string }): string {
   if (!row.support_verified) return "근거 문장 자동 대조 미완료";
-  if (row.support_origin !== "google_patents_page") return "보존 응답과 일치";
-  return "원문 페이지 대조 확인 (Google Patents, 비공식)" + (row.support_location ? ` · ${row.support_location}` : "");
+  if (row.support_origin === "google_patents_page") {
+    return "원문 페이지 대조 확인 (Google Patents, 비공식)" + (row.support_location ? ` · ${row.support_location}` : "");
+  }
+  if (row.support_origin === "oa_pdf") {
+    return "논문 원문 PDF 대조 확인 (OA 사본)" + (row.support_location ? ` · ${row.support_location}` : "");
+  }
+  return "보존 응답과 일치";
 }
 const ISSUES: Record<string, string> = {
   identifier_unverified: "식별 미확인", identifier_invalid: "식별자 형식 오류",
   identifier_mismatch: "문헌 식별자 불일치", source_not_read: "본문 열람 미확인",
   quote_unverified: "직접 인용 검증 불가", support_unverified: "근거 문장 대조 미확인",
+  passage_unverified: "선택한 발췌 구간 대조 미확인",
   duplicate_group_conflict: "중복 후보 그룹 충돌", publication_date_conflict: "공개일 출처 충돌",
   source_conflict: "출처 간 필드 내용 차이",
   publication_date_unverified: "공개일 대조 미확인",
@@ -103,8 +109,10 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
             <td>{row.feature}</td><td>{row.counterpart || row.degree}</td>
             <td><p>{row.similar}</p><p>차이: {row.different || "미기재"}</p></td>
             <td><strong>{supportLabel(row)}</strong><p>{row.support_text}</p>
+              {row.passage_resolution && row.support_verified && <small>AI가 선택한 구간을 PRISM이 보존 원문에서 직접 가져왔습니다.</small>}
+              {row.evidence_ref_resolution && <small>동일 문헌의 보존 응답 경로와 대조해 근거 참조를 연결했습니다. 원래 참조는 감사 기록에 보존됩니다.</small>}
               {(row.quote_verified || row.page_quote_verified) && row.verbatim_excerpt && <blockquote>
-                <small>{row.quote_verified ? "확인된 원문" : "원문 페이지 발췌 (비공식 출처)"}{row.source_location ? ` · ${row.source_location}` : ""}</small>
+                <small>{row.quote_verified ? "확인된 원문" : row.support_origin === "oa_pdf" ? "논문 원문 PDF 발췌 (OA 사본)" : "원문 페이지 발췌 (비공식 출처)"}{row.source_location ? ` · ${row.source_location}` : ""}</small>
                 <p>{row.verbatim_excerpt}</p>
                 {row.translation && <p><small>번역 (LLM 작성, 원문 대조 대상 아님)</small><br />{row.translation}</p>}
               </blockquote>}

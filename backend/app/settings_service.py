@@ -56,6 +56,9 @@ EDITABLE_KEYS = frozenset(
         "gpatents_page_enabled",
         "gpatents_min_interval_seconds",
         "gpatents_max_fetches_per_run",
+        "literature_oa_pdf_enabled",
+        "literature_oa_pdf_min_interval_seconds",
+        "literature_oa_pdf_max_fetches_per_run",
         # epo_quota_state 는 일부러 없다. PRISM 이 관측해 적는 값이라
         # 사용자가 PUT 으로 고칠 수 있으면 사용량을 0 으로 되돌릴 수 있다.
             # 근거 패키지의 페이지 확장.
@@ -150,6 +153,8 @@ _INT_KEYS = frozenset(
         "literature_http_budget_seconds",
         "gpatents_min_interval_seconds",
         "gpatents_max_fetches_per_run",
+        "literature_oa_pdf_min_interval_seconds",
+        "literature_oa_pdf_max_fetches_per_run",
     }
 )
 
@@ -180,6 +185,9 @@ _LIMITS = {
     # 사람 속도 계약. 3초보다 짧게 두면 사람이 읽는 속도가 아니다.
     "gpatents_min_interval_seconds": (3, 60),
     "gpatents_max_fetches_per_run": (1, 40),
+    # 논문 OA PDF 도 같은 사람 속도 계약이다. 한 건이 수 MB 라 실행당 상한은 더 작다.
+    "literature_oa_pdf_min_interval_seconds": (3, 60),
+    "literature_oa_pdf_max_fetches_per_run": (1, 20),
 }
 
 # 인용발명 문헌 전달 방식. enums.RetrievalMode 와 같은 값이며, 여기서 import
@@ -705,6 +713,7 @@ def _coerce(key: str, value: Any) -> Any:
         "kiwee_integration_enabled",
         "epo_integration_enabled",
         "gpatents_page_enabled",
+        "literature_oa_pdf_enabled",
     ):
         return bool(value)
     if key in _CREDENTIAL_KEYS:
