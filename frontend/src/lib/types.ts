@@ -314,6 +314,7 @@ export interface SearchManifestV14 {
   tool_availability: Record<string, { status: "available" | "disabled" | "not_configured" |
     "not_implemented" | "unsupported_transport" | "not_registered" | "unverified" | "unreachable"; detail: string }>;
   tool_journal: Record<string, unknown>[];
+  retained_records?: { document_number: string; doi: string; title: string; url: string; scopes: string[]; call_ids: string[] }[];
   observed: { tool_calls: Record<string, unknown>[]; tool_call_counts: Record<string, number>;
     search_queries: string[]; search_call_count: number; attempted_fetch_urls: string[]; succeeded_fetch_urls: string[]; url_lookup_attempts: string[]; tool_failures: unknown[]; unknown_tool_outcomes: unknown[] };
   llm_output: unknown;
@@ -546,7 +547,8 @@ export interface Job {
   /** 이 실행에 적용한 검색 기준일(YYYY-MM-DD). null 이면 날짜 조건 없이
    *  검색했다는 뜻이며, 이 기능 이전의 실행도 모두 null 이다. */
   search_cutoff_date?: string | null;
-  search_depth?: "quick" | "standard" | "deep";
+  /** 새 검색은 deep으로 고정한다. 과거 이력에는 이전 값이 남을 수 있다. */
+  search_depth?: string;
   /** 인용발명 문헌을 어떻게 전달했는가. 값이 없는 과거 실행은 full_inline. */
   delivery_plan: DeliveryPlan;
   delivery_manifest?: DeliveryManifest | null;
@@ -627,7 +629,6 @@ export interface AppSettings {
     search_reasoning_effort?: Record<string, string>;
     keep_raw_output: boolean;
     fail_on_tool_use: boolean;
-    max_search_tool_calls: number;
     /** 인용발명 전달 방식 정책. auto = 넣을 수 있는 만큼 넓게. */
     retrieval_mode: "auto" | "full" | "retrieval";
     retrieval_max_rounds: number;

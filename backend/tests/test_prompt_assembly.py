@@ -261,6 +261,14 @@ def test_search_assembly_does_not_carry_the_analysis_output_rules() -> None:
     assert "PRISM_CITATION_MAPPING_V1" not in result.user_message
 
 
+def test_partial_protocol_still_receives_the_missing_mapping_contract():
+    text = analysis_protocol.apply("분석 규칙 [PRISM_COMPONENT_ANALYSIS_V1]")
+    assert text.count("[PRISM_COMPONENT_ANALYSIS_V1]") == 1
+    assert text.count("[PRISM_CITATION_MAPPING_V1]") == 1
+    assert "문헌번호 확인 불가" in text
+    assert "블록 전체를 생략한다" not in text
+
+
 def test_the_attached_rules_parse_with_the_real_parsers() -> None:
     """규칙에 실린 예시가 실제 파서를 통과한다.
 

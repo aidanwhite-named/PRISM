@@ -47,6 +47,14 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     </nav>
     <p>A/B/C는 LLM의 기술적 판단입니다. 증거 확보 수준은 별도로 표시합니다.</p>
     {data.error && <p role="alert">미완료: {data.error}</p>}
+    {!!data.retained_records?.length && <section aria-label="중단 전에 확보한 문헌">
+      <h2>중단 전에 확보한 문헌 · {data.retained_records.length}건</h2>
+      <p>조회된 자료 목록입니다. 최종 후보 선정·유사도 판단은 완료되지 않았습니다.</p>
+      <ul>{data.retained_records.map((item, index) => <li key={index}>
+        {item.document_number || item.doi} · {item.title} · {item.scopes.join(", ")}
+        {linkableUrl(item.url) && <> · <a href={linkableUrl(item.url)!} target="_blank" rel="noreferrer">문헌 보기</a></>}
+      </li>)}</ul>
+    </section>}
     {data.verification_followup?.usage_complete === false && <p>토큰 사용량은 확인된 단계만 집계한 값입니다. 중단된 단계의 사용량은 포함되지 않을 수 있습니다.</p>}
     {data.status === "verification_incomplete" && <p role="alert">검색 실행 종료 · 검증 미완료</p>}
     {audit && <section aria-label="탐색 종료 감사">

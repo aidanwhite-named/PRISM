@@ -150,7 +150,9 @@ class JobCreate(BaseModel):
     # 이 필드를 모르는 기존 클라이언트는 보내지 않으므로 None 이 되고, 그때의
     # 동작은 이 기능이 없던 때와 같다. 비어 있다고 오늘 날짜를 채우지 않는다.
     search_cutoff_date: str | None = None
-    search_depth: Literal["quick", "standard", "deep"] = "standard"
+    # 유사문헌 검색은 발견·패밀리 확인까지 가능한 deep 실행만 새로 만든다.
+    # 저장된 과거 작업의 값은 JobOut에서 문자열로 보존한다.
+    search_depth: Literal["deep"] = "deep"
 
     @field_validator("search_cutoff_date")
     @classmethod
@@ -284,7 +286,8 @@ class JobOut(BaseModel):
     # 이 실행에 적용한 검색 기준일. null 이면 날짜 조건 없이 검색했다는 뜻이며,
     # 이 기능 이전의 실행도 모두 null 이다.
     search_cutoff_date: str | None = None
-    search_depth: Literal["quick", "standard", "deep"] = "standard"
+    # 과거 이력의 quick/standard 표기를 바꾸지 않기 위해 출력은 문자열이다.
+    search_depth: str = "deep"
     # 인용발명 문헌을 어떻게 전달했는가. 값이 없는 과거 실행은 full_inline.
     delivery_plan: str = "full_inline"
     # 그 판정의 근거와 실제 전송 크기. 이 기능 이전 실행은 null 이며, 화면은

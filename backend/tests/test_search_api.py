@@ -238,11 +238,7 @@ def test_missing_audit_block_fails_instead_of_shipping_unverified_prose(client) 
 
 
 def test_tool_call_budget_stops_the_run(client) -> None:
-    client.put("/api/settings", json={"values": {"max_search_tool_calls": 3}})
-    try:
-        job = wait_for_job(client, _start(client, claim=f"{CLAIM}\nSEARCH_BUDGET")["id"])
-    finally:
-        client.put("/api/settings", json={"values": {"max_search_tool_calls": 40}})
+    job = wait_for_job(client, _start(client, claim=f"{CLAIM}\nSEARCH_BUDGET")["id"])
     assert job["status"] == JobStatus.FAILED
     assert job["error_code"] == ErrorCode.SEARCH_BUDGET_EXCEEDED
 

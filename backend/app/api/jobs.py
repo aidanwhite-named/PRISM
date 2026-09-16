@@ -19,6 +19,8 @@ from .. import (
     job_assembly,
     retrieval,
     search_channels,
+    search_budget,
+    search_report,
     settings_service,
 )
 from ..config import PATHS
@@ -289,6 +291,13 @@ def _resolve_included(item: IngestedFile, selected: set[str] | None) -> Ingested
 
 
 def _job_out(job: ExecutionJob) -> JobOut:
+    resolved_mapping, resolved_mapping_error = citation_mapping.resolved_for_job(job)
+    manifest = job.search_manifest
+    result_text = job.result_text
+    if manifest and manifest.get("version") == 14 and manifest.get("error") and "retained_records" not in manifest:
+        manifest = {**manifest, "retained_records": search_budget.retained_records(manifest.get("tool_journal") or [])}
+        if manifest["retained_records"] and not result_text:
+            result_text = search_report.render(manifest)
     return JobOut(
         id=job.id,
         status=job.status,
@@ -305,10 +314,10 @@ def _job_out(job: ExecutionJob) -> JobOut:
         followup_instruction=job.followup_instruction or "",
         prior_claim_text=job.prior_claim_text or "",
         prior_report=job.prior_report or "",
-        citation_mapping=job.citation_mapping,
+        citation_mapping=resolved_mapping,
         prior_citation_mapping=job.prior_citation_mapping,
         prompt_capabilities=list(job.prompt_capabilities or []),
-        citation_mapping_error=job.citation_mapping_error,
+        citation_mapping_error=resolved_mapping_error,
         analysis_manifest=job.analysis_manifest,
         report_context=job.report_context.manifest if job.report_context else None,
         analysis_manifest_error=job.analysis_manifest_error,
@@ -325,11 +334,11 @@ def _job_out(job: ExecutionJob) -> JobOut:
             if job.job_kind != JobKind.SIMILARITY_SEARCH
             else None
         ),
-        search_manifest=job.search_manifest,
+        search_manifest=manifest,
         search_manifest_error=job.search_manifest_error,
         search_focus=job.search_focus,
         search_cutoff_date=job.search_cutoff_date or None,
-        search_depth=job.search_depth or "standard",
+        search_depth=job.search_depth or "deep",
         delivery_plan=job.delivery_plan or DeliveryPlan.FULL_INLINE,
         delivery_manifest=job.delivery_manifest,
         retrieval_manifest=job.retrieval_manifest,
@@ -347,7 +356,7 @@ def _job_out(job: ExecutionJob) -> JobOut:
         errors=job.errors or [],
         permission_denials=job.permission_denials or [],
         usage=job.usage,
-        result_text=job.result_text,
+        result_text=result_text,
         attachments=[
             {
                 "attachment_id": a.id,
@@ -787,6 +796,7 @@ async def create_job(payload: JobCreate, session: Session = Depends(get_db)) -> 
         source_job = session.get(ExecutionJob, payload.source_job_id)
         if source_job is None:
             raise HTTPException(404, "이어받을 원본 실행을 찾을 수 없습니다.")
+        source_job.citation_mapping, source_job.citation_mapping_error = citation_mapping.resolved_for_job(source_job)
         if relation == RelationType.CONTINUED and not (
             source_job.result_text or ""
         ).strip():
@@ -1033,13 +1043,14 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
     prior_report = ""
     prior_mapping = None
     if source_job is not None:
+        resolved_mapping, _ = citation_mapping.resolved_for_job(source_job)
         relation = RelationType(payload.relation_type) if payload.relation_type else None
         # 물려받는 자료도 실제 실행과 같이 센다. 복제 전이라 원본 행을 그대로
         # 읽지만 본문 길이는 같다.
         attachments.extend(row_to_ingested(row) for row in source_job.attachments)
         if relation is not None and relation.inherits_mapping:
             prior_claim_text = inherited_claim_text(source_job)
-            prior_mapping = source_job.prior_citation_mapping or source_job.citation_mapping
+            prior_mapping = resolved_mapping or source_job.prior_citation_mapping
         if relation is RelationType.CONTINUED:
             prior_report = source_job.result_text or ""
 
@@ -1082,6 +1093,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
             # 구간도 preflight 에서 같이 붙인다.
             search_cutoff=payload.search_cutoff_date or "",
             search_tool_status=search_channels.availability(values, provider_id),
+            search_call_limit=search_channels.execution_limits(values, payload.search_depth)[0],
             search_prompt_id=search_prompt_id or SEARCH_PROMPT_ID,
             followup_instruction=payload.followup_instruction or "",
             prior_claim_text=prior_claim_text,

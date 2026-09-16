@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from . import search_dates, search_channels, search_manifest, settings_service
+from . import search_dates, search_channels, search_manifest, settings_service, search_budget
 from .config import PATHS
 from .db import session_scope
 from .patent_search import get_backend, epo_cql
@@ -61,7 +61,7 @@ def error_response(exc, name, arguments, secrets=()):
         if value["error_code"] == "CLIENT.InvalidCountryCode":
             value["recovery"] = {
                 "reason": "Requested constituent is unsupported for this country; not a missing publication.",
-                "suggested_constituents": ["biblio", "abstract", "family"],
+                "suggested_constituents": ["biblio", "abstract"],
                 "next_step": "Try an unattempted bibliographic/abstract scope. For claims use a source page or an identified family publication; keep identities separate.",
             }
         elif value["error_code"] == "SERVER.EntityNotFound":
@@ -120,6 +120,14 @@ class SearchTools:
     def statuses(self):
         return search_channels.availability(self.values)
 
+    def budget(self):
+        try:
+            native = json.loads((self.work_dir / search_budget.NATIVE_COUNT_FILE).read_text(encoding="utf-8"))
+            native = max(0, int(native))
+        except (OSError, ValueError, TypeError):
+            native = 0
+        return search_budget.budget_status(self.calls + native, self.max_calls)
+
     def tool_definitions(self):
         statuses = self.statuses()
         return [_CAPABILITIES] + [
@@ -129,7 +137,7 @@ class SearchTools:
 
     def call(self, name: str, arguments: dict) -> dict:
         row = {"id": str(uuid.uuid4()), "tool": name, "arguments": arguments, "sequence": self.calls}
-        if self.calls >= self.max_calls:
+        if self.budget()["remaining"] <= 0:
             self._record({**row, "state": "rejected", "ok": False, "error_code": "tool_call_limit_exceeded"})
             raise ToolLimitExceeded("tool_call_limit_exceeded")
         self.calls += 1
@@ -140,6 +148,11 @@ class SearchTools:
             if definition is None:
                 raise ValueError("tool_unavailable")
             _validate(arguments, definition["inputSchema"])
+            if name != "search_capabilities" and self.budget()["used"] > self.budget()["finalize_at"]:
+                result = {"records": [], "budget": self.budget(), "budget_stopped": True,
+                          "not_evidence_of_absence": True}
+                self._record({**row, "state": "completed", "ok": True, "result": result})
+                return result
             if name.endswith("_fetch"):
                 expected = {**arguments, "constituent": arguments.get("constituent", "abstract" if name == "literature_fetch" else "claims")}
                 for previous in reversed(search_manifest.read_tool_journal(self.work_dir)):
@@ -151,6 +164,7 @@ class SearchTools:
                             and result.get("records") and not result.get("failed_sources")
                             and result.get("identifier_matched") is not False):
                         result = copy.deepcopy(result)
+                        result["budget"] = self.budget()
                         result["reused_from_call_id"] = previous["id"]
                         self._record({**row, "state": "completed", "ok": True, "result": result})
                         return result
@@ -172,6 +186,7 @@ class SearchTools:
             self._record({**row, "state": "completed", "ok": False,
                           **error_response(exc, name, arguments, self.secrets)})
             raise
+        result["budget"] = self.budget()
         self._record({**row, "state": "completed", "ok": True, "result": result})
         return result
 
@@ -257,7 +272,7 @@ def _validate(value, schema, depth=0):
             raise ValueError("invalid_string")
     elif kind == "integer":
         if type(value) is not int or not schema.get("minimum", 1) <= value <= schema.get("maximum", 20):
-            raise ValueError("invalid_integer")
+            raise ValueError(f"invalid_integer: expected integer in {schema.get('minimum', 1)}..{schema.get('maximum', 20)}, received {value!r}")
     if "enum" in schema and value not in schema["enum"]:
         raise ValueError("invalid_enum")
 
@@ -393,8 +408,8 @@ _EPO_SEARCH = _tool(
 )
 _EPO_FETCH = _tool(
     "epo_fetch",
-    "Fetch an EPO publication constituent: abstract, claims, description, biblio or family. US claims/description are not supplied by OPS; use biblio/abstract and a source page or identified family for full text. Scope failure is not publication absence. EntityNotFound may require number-format verification; never silently drop a fetched candidate.",
-    {"publication_number": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "claims", "description", "biblio", "family"]}},
+    "Fetch an EPO publication constituent: abstract, claims, description or biblio. The family endpoint is not supported by this tool. US claims/description are not supplied by OPS; use biblio/abstract and a source page or identified family publication for full text. Scope failure is not publication absence. EntityNotFound may require number-format verification; never silently drop a fetched candidate.",
+    {"publication_number": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "claims", "description", "biblio"]}},
     ["publication_number"],
 )
 # literature_search 의 source 값 -> 백엔드 출처. 없으면(None) 쓸 수 있는 곳 전부다.
@@ -468,6 +483,7 @@ def main():
                 except Exception as exc:
                     value = error_response(exc, str(params.get("name") or ""), params.get("arguments", {}), tools.secrets)
                     error = True
+                value["budget"] = tools.budget()
                 _reply(request_id, {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}],
                                     "structuredContent": value, "isError": error})
             else:

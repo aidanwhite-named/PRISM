@@ -217,9 +217,17 @@ def cell(value) -> str:
         text = text.replace(char, "\\" + char)
     return text.replace("\r", " ").replace("\n", " ")
 
-DEPTH_LIMITS = {"quick": (15, 300), "standard": (40, 900), "deep": (80, 1800)}
-def execution_limits(values: dict, depth: str = "standard") -> tuple[int, int]:
-    """Presets only bound total calls/time, never channels or candidates."""
-    calls, seconds = DEPTH_LIMITS.get(depth, DEPTH_LIMITS["standard"])
-    return (min(calls, max(1, int(values.get("max_search_tool_calls", 40)))),
-            min(seconds, max(1, int(values.get("default_timeout_seconds", 900)))))
+# 유사문헌 검색은 넓은 탐색 뒤에 후보·패밀리를 확인할 시간이 필요한 하나의
+# 실행 방식만 제공한다. 빠른/기본 프리셋은 정작 상세 조회 직전에 끝나는 경우가
+# 많아 제거했다. 이 값은 분석 작업의 전역 timeout 설정과 별개다.
+SEARCH_CALL_LIMIT = 80
+SEARCH_TIMEOUT_SECONDS = 300
+
+
+def execution_limits(values: dict, depth: str = "deep") -> tuple[int, int]:
+    """All new similarity searches use the fixed deep-search allowance.
+
+    ``depth``와 ``values`` 인자는 과거 실행을 읽는 호출 경로 호환을 위해서만
+    남긴다. 설정값이나 옛 quick/standard 값으로 새 검색의 범위를 줄이지 않는다.
+    """
+    return SEARCH_CALL_LIMIT, SEARCH_TIMEOUT_SECONDS

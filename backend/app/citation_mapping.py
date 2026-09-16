@@ -15,9 +15,10 @@ PRISM 은 그것만 읽어서 검증한 뒤 저장한다.
 
 여기에는 두 가지 원칙이 걸려 있다.
 
-1. PRISM 은 보고서를 해석하지 않는다.
-   Markdown 표를 파싱하면 사용자가 출력 형식을 조금만 바꿔도 조용히 깨진다.
-   대신 버전이 붙은 전용 블록을 쓴다. 이건 분석이 아니라 프로토콜이다.
+1. PRISM 은 분석 판단을 해석하지 않는다.
+   버전이 붙은 전용 블록을 우선 사용한다. 블록이 누락된 과거 보고서는 정해진
+   매핑표와 첨부 파일명이 정확히 일대일 대응할 때만 번호를 복구한다.
+   모호한 표·파일명·번호는 추정하지 않는다.
 
 2. 모델에게 UUID 나 sha256 을 옮겨 적게 하지 않는다.
    32자 UUID 와 64자 해시는 모델이 틀리는 종류의 값이다. PRISM 이 첨부마다
@@ -33,6 +34,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from dataclasses import dataclass
 
 # 프롬프트가 메타데이터에 선언해야 이 기능이 켜진다.
@@ -221,6 +223,72 @@ def rebind(mapping: dict | None, attachments) -> dict:
 
     rebound.sort(key=lambda row: row["citation_number"])
     return {"version": MAPPING_VERSION, "items": rebound}
+
+
+def source_headers(attachments) -> dict[str, list[str]]:
+    """Bounded first-page header lines keyed by the attachment's content hash."""
+    headers = {}
+    for item in attachments:
+        if not item.included or item.role != "CITATION" or not item.read_ok or not item.normalized_text_path:
+            continue
+        try:
+            with Path(item.normalized_text_path).open(encoding="utf-8") as handle:
+                lines = handle.read(1500).splitlines()[:12]
+            headers[item.sha256] = [" ".join(line.split()) for line in lines if len(line.strip()) >= 20]
+        except (OSError, UnicodeError):
+            continue
+    return headers
+
+
+def recover_report_table(text: str, aliases: dict[str, AliasedAttachment], headers=None) -> dict:
+    """Recover only an explicit table with exact, unique attached filenames.
+
+    This repairs omitted protocol blocks in older reports; it never infers a
+    citation number from attachment order or document similarity. A title-only
+    table may match an exact first-page header line of one attached source.
+    Malformed protocol blocks must still be reported, not bypassed.
+    """
+    if _OPEN in text or _CLOSE in text:
+        raise MappingError("기존 매핑 블록이 있어 표로 대체하지 않습니다.")
+    tables = re.findall(r"(?m)^\|\s*인용발명\s*\|\s*문헌명 또는 파일명\s*\|\s*고유 문헌번호\s*\|\s*\n((?:\|[^\n]*\|[^\S\n]*\n?)+)", text)
+    if len(tables) != 1:
+        raise MappingError("정확히 복구할 수 있는 문헌 매핑 테이블이 없습니다.")
+    entries = []
+    for line in tables[0].splitlines():
+        cells = [cell.strip().strip("`*") for cell in line.strip().strip("|").split("|")]
+        if all(re.fullmatch(r"[:\-\s]+", cell) for cell in cells):
+            continue
+        if len(cells) != 3 or not re.fullmatch(r"인용발명\s+[1-9]\d*", cells[0]):
+            raise MappingError("문헌 매핑 표의 행을 명확히 읽을 수 없습니다.")
+        matches = [alias for alias, source in aliases.items()
+                   if cells[1] == source.original_filename or cells[1].endswith("(" + source.original_filename + ")")]
+        if not matches and len(cells[1]) >= 20:
+            matches = [alias for alias, source in aliases.items()
+                       if " ".join(cells[1].split()) in (headers or {}).get(source.sha256, [])]
+        if len(matches) != 1 or not cells[2]:
+            raise MappingError("표의 파일명과 첨부가 일대일로 일치하지 않습니다.")
+        entries.append({"citation_number": int(cells[0].split()[-1]),
+                        "attachment": matches[0], "document_number": cells[2]})
+    referenced = {int(n) for n in re.findall(r"인용발명\s+(\d+)", text)}
+    if referenced != {entry["citation_number"] for entry in entries}:
+        raise MappingError("보고서의 인용발명 번호가 표와 일치하지 않습니다.")
+    result = parse(_OPEN + json.dumps({"items": entries}, ensure_ascii=False) + _CLOSE, aliases)
+    result["recovery_source"] = "exact_source_report_table"
+    return result
+
+
+def resolved_for_job(job) -> tuple[dict | None, str | None]:
+    """Read-only compatibility for existing completed analysis records."""
+    if job.citation_mapping or job.job_kind == "similarity_search" or job.status != "SUCCEEDED":
+        return job.citation_mapping, job.citation_mapping_error
+    if job.citation_mapping_error not in (None, "보고서에서 문헌 매핑 블록을 찾지 못했습니다."):
+        return None, job.citation_mapping_error
+    aliases = {f"ATT-{i:02d}": AliasedAttachment(f"ATT-{i:02d}", a.id, a.sha256, a.original_filename)
+               for i, a in enumerate(job.attachments, 1) if a.included and a.role == "CITATION"}
+    try:
+        return recover_report_table(job.result_text or "", aliases, source_headers(job.attachments)), None
+    except MappingError:
+        return None, job.citation_mapping_error
 
 
 def render(mapping: dict | None, aliases: dict[str, AliasedAttachment]) -> str:

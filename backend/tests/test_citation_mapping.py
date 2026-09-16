@@ -123,6 +123,57 @@ def _block(items: list[dict]) -> str:
     return f"\n[PRISM_CITATION_MAPPING_V1]\n{payload}\n[/PRISM_CITATION_MAPPING_V1]\n"
 
 
+def test_exact_filename_table_recovers_unknown_paper_without_reordering():
+    from app.citation_mapping import recover_report_table
+    text = """## 1. 문헌 매핑 테이블
+| 인용발명 | 문헌명 또는 파일명 | 고유 문헌번호 |
+|---|---|---|
+| 인용발명 1 | Paper title (b.pdf) | 문헌번호 확인 불가 |
+| 인용발명 2 | a.pdf | EP1234567A1 |
+
+인용발명 1을 검토했다.
+"""
+    recovered = recover_report_table(text, _aliases("a.pdf", "b.pdf"))
+    assert [r["attachment_id"] for r in recovered["items"]] == ["id-2", "id-1"]
+    assert recovered["items"][0]["document_number"] == "문헌번호 확인 불가"
+    for invalid in [text.replace("b.pdf", "missing.pdf"), text + "인용발명 3", text + _block([])]:
+        with pytest.raises(MappingError):
+            recover_report_table(invalid, _aliases("a.pdf", "b.pdf"))
+    with pytest.raises(MappingError):
+        recover_report_table(text, _aliases("a.pdf", "b.pdf", "b.pdf"))
+    title = "Parametrization and range of motion of the ball-and-socket joint"
+    title_only = text.replace("Paper title (b.pdf)", title)
+    mapping = recover_report_table(title_only, _aliases("a.pdf", "b.pdf"), {"sha-2": [title]})
+    assert mapping["items"][0]["attachment_id"] == "id-2"
+    with pytest.raises(MappingError):
+        recover_report_table(title_only, _aliases("a.pdf", "b.pdf"), {"sha-1": [title], "sha-2": [title]})
+
+
+def test_existing_report_mapping_is_recovered_for_history_and_followup(client, capable_prompt):
+    from app.db import session_scope
+    from app.models import ExecutionJob
+    parent = _run(client, capable_prompt, batch_id=_upload(client, "paper.txt", "patent.txt"))
+    with session_scope() as session:
+        source = session.get(ExecutionJob, parent["id"])
+        source.citation_mapping = None
+        source.citation_mapping_error = "보고서에서 문헌 매핑 블록을 찾지 못했습니다."
+        source.result_text = """| 인용발명 | 문헌명 또는 파일명 | 고유 문헌번호 |
+|---|---|---|
+| 인용발명 1 | Title (paper.txt) | 문헌번호 확인 불가 |
+| 인용발명 2 | patent.txt | EP1234567A1 |
+"""
+    loaded = client.get(f"/api/history/{parent['id']}").json()
+    assert loaded["citation_mapping_error"] is None
+    assert len(loaded["citation_mapping"]["items"]) == 2
+    preview = client.post("/api/jobs/preflight", json={"prompt_id": capable_prompt["id"], "provider": "test", "source_job_id": parent["id"], "relation_type": "MAPPED", "claim_text": "청구항 2. 추가 구성"})
+    assert preview.status_code == 200, preview.text
+    assert not preview.json()["blocked"]
+    child = _run(client, capable_prompt, source_job_id=parent["id"], relation_type="MAPPED", claim_text="청구항 2. 제1항에 있어서, 추가 구성")
+    assert child["prior_citation_mapping"]["items"][0]["document_number"] == "문헌번호 확인 불가"
+    assert child["prior_report"] == ""
+    assert child["prior_citation_mapping"]["items"][0]["attachment_id"] != loaded["citation_mapping"]["items"][0]["attachment_id"]
+
+
 def test_parse_fills_identifiers_that_the_model_never_wrote() -> None:
     aliases = _aliases("a.pdf", "b.pdf")
     report = "보고서 본문" + _block(

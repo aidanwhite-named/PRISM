@@ -112,12 +112,19 @@ afterEach(() => {
 });
 
 describe("종속항 추가 분석", () => {
+  it("빈 매핑으로 후속 실행을 시작하지 않는다", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.historyItem).mockResolvedValueOnce({ ...job, citation_mapping: { version: 1, items: [] } } as unknown as Job);
+    window.location.hash = `#/analysis?job=${JOB_ID}`;
+    render(<RunSessionProvider><HashRouter><RunPage kind="patent_analysis" /></HashRouter></RunSessionProvider>);
+    expect((await screen.findByRole("button", { name: "종속항 추가 분석" }) as HTMLButtonElement).disabled).toBe(true);
+  });
   it("빈 종속항 칸으로 시작하고 요청사항 없이 종속항을 분석 대상으로 보낸다", async () => {
     const { api } = await import("../lib/api");
     const source = {
       ...job,
       claim_text: "청구항 12. 독립항 본문",
-      citation_mapping: { version: 1, items: [] },
+      citation_mapping: { version: 1, items: [{ citation_number: 1, attachment_id: "a1", attachment_sha256: "hash", filename: "인용.pdf", document_number: "문헌번호 확인 불가" }] },
       attachments: [{ attachment_id: "a1", original_filename: "인용.pdf", included: true, read_ok: true, char_count: 100, role: "CITATION" }],
     } as unknown as Job;
     vi.mocked(api.historyItem).mockResolvedValueOnce(source);

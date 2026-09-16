@@ -554,6 +554,7 @@ def assemble_job(
     # 빼지 않는다. 빼면 모델이 오늘 날짜를 기준으로 삼는다.
     search_cutoff: str = "",
     search_tool_status: dict | None = None,
+    search_call_limit: int = 40,
     # 이 실행이 고른 검색 전략 프롬프트의 id. 오류 메시지와 감사 기록이 어떤
     # 프롬프트였는지 말할 수 있어야 한다 — 이제 하나가 아니다.
     search_prompt_id: str = search_prompt.SEARCH_PROMPT_ID,
@@ -760,6 +761,8 @@ def assemble_job(
         search_context = with_agy_allowlist(search_context, agy_allowed_hosts)
     if search_tool_status is not None:
         search_context += "\n[이 실행의 도구 상태]\n" + json.dumps(search_tool_status, ensure_ascii=False)
+    from .search_budget import prompt as budget_prompt
+    search_context += budget_prompt(search_call_limit)
     lane = assemble_search(
         search_prompt_body=rendered.body, runtime_context=search_context,
         max_chars=max_chars, attachments=[spec] if spec else [],

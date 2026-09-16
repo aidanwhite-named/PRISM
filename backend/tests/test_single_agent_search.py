@@ -216,15 +216,14 @@ def test_api_skips_web_reread_when_provenance_transport_is_unavailable(client, m
 
 def test_search_depth_reaches_job_and_execution_limits(client):
     created = client.post("/api/jobs", json={"job_kind": "similarity_search",
-        "provider": "test-search", "claim_text": "청구항 1. 센서를 포함하는 장치",
-        "search_depth": "quick"}).json()
+        "provider": "test-search", "claim_text": "청구항 1. 센서를 포함하는 장치"}).json()
     job = wait_for_job(client, created["id"])
     assert job["status"] == "SUCCEEDED", job["errors"]
-    assert job["search_depth"] == "quick"
+    assert job["search_depth"] == "deep"
     assert job["search_manifest"]["limits"] == {
-        "depth": "quick", "max_tool_calls": 15, "timeout_seconds": 300}
+        "depth": "deep", "max_tool_calls": 80, "timeout_seconds": 300}
     invalid = client.post("/api/jobs", json={"job_kind": "similarity_search",
-        "provider": "test-search", "claim_text": "청구항 1. 센서", "search_depth": "unbounded"})
+        "provider": "test-search", "claim_text": "청구항 1. 센서", "search_depth": "standard"})
     assert invalid.status_code == 422
 
 @pytest.mark.parametrize("payload", [
@@ -236,12 +235,9 @@ def test_ambiguous_or_invalid_auxiliary_json_is_rejected(payload):
     with pytest.raises(sm.SearchLogError):
         sm.parse(payload)
 
-def test_presets_only_limit_total_calls_and_time():
-    assert search_channels.execution_limits({"max_search_tool_calls": 200,
-        "default_timeout_seconds": 3600}, "deep") == (80, 1800)
+def test_similarity_search_has_one_fixed_deep_limit():
     assert search_channels.execution_limits({"max_search_tool_calls": 8,
-        "default_timeout_seconds": 90}, "deep") == (8, 90)
-    assert search_channels.execution_limits({}, "quick") == (15, 300)
+        "default_timeout_seconds": 90}, "quick") == (80, 300)
 
 def test_backend_instance_is_reused_for_cumulative_budgets(tmp_path, monkeypatch):
     from app import search_mcp_server as mcp

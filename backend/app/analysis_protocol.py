@@ -57,7 +57,7 @@ INSTRUCTIONS = f"""# PRISM 기계 판독 블록
 
 ## 문헌 매핑 블록
 
-보고서 맨 마지막에 한 번만 출력한다. 번호를 부여한 모든 문헌에 대해 `citation_number`는 표의 번호, `attachment`는 첨부의 `ATT-02`형 자료 번호, `document_number`는 확인된 고유 문헌번호를 쓴다. UUID·해시는 쓰지 않으며 문헌번호 미확인 시 블록 전체를 생략한다. 한 줄 JSON이며 코드펜스를 쓰지 않는다.
+보고서 맨 마지막에 한 번만 출력한다. 번호를 부여한 모든 문헌에 대해 `citation_number`는 표의 번호, `attachment`는 첨부의 `ATT-02`형 자료 번호, `document_number`는 확인된 고유 문헌번호를 쓴다. UUID·해시는 쓰지 않는다. 논문처럼 고유 문헌번호를 확인하지 못한 경우 `document_number`에 `문헌번호 확인 불가`를 쓰고, 첨부 번호로 문헌을 연결한다. 문헌번호가 없다는 이유로 항목이나 블록을 생략하지 않는다. 한 줄 JSON이며 코드펜스를 쓰지 않는다.
 
 {_MAPPING_OPEN}
 {{"items":[{{"citation_number":1,"attachment":"ATT-02","document_number":"KR10-1234567"}}]}}
@@ -78,6 +78,16 @@ def apply(master_prompt: str) -> str:
     따르는 프롬프트일수록 깨지는 셈이다. 옛 프롬프트 파일과 사용자가 직접 적어
     둔 프롬프트가 여기에 해당한다.
     """
-    if declares_blocks(master_prompt):
-        return master_prompt
-    return master_prompt.rstrip() + "\n\n" + INSTRUCTIONS
+    if not declares_blocks(master_prompt):
+        return master_prompt.rstrip() + "\n\n" + INSTRUCTIONS
+    component, mapping = INSTRUCTIONS.split("## 문헌 매핑 블록", 1)
+    result = master_prompt.rstrip()
+    if _COMPONENT_OPEN not in master_prompt:
+        result += "\n\n" + component
+    if _MAPPING_OPEN not in master_prompt:
+        result += "\n\n## 문헌 매핑 블록" + mapping
+    else:
+        result += ("\n\n문헌 매핑 출력 보완: 문헌번호가 없는 논문도 attachment로 연결하고 "
+                   "document_number에 '문헌번호 확인 불가'를 쓴다. 문헌번호 미확인을 이유로 "
+                   "매핑을 생략하라는 규칙 대신 모든 번호–첨부 대응을 보존한다.")
+    return result

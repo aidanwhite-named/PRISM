@@ -116,7 +116,7 @@ class ExecutionJob(Base):
     # 그것이 이 칸의 기본값이다. 비어 있다고 실행일을 채워 넣지 않는다 —
     # 그러면 같은 청구항의 검색 범위가 실행한 날짜에 따라 달라진다.
     search_cutoff_date = Column(String(10), nullable=True)
-    search_depth = Column(String(16), nullable=True, default="standard")
+    search_depth = Column(String(16), nullable=True, default="deep")
 
     provider = Column(String(30), nullable=False)
     model = Column(String(80), nullable=True)

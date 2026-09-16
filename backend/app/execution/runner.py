@@ -37,6 +37,7 @@ from .. import (
     settings_service,
 )
 from ..config import PATHS
+from .. import search_budget as search_limits
 from ..db import session_scope
 from ..enums import DeliveryPlan, ErrorCode, JobKind, JobStatus, RetrievalMode
 from ..evaluation.evaluator import Verdict, evaluate
@@ -364,7 +365,9 @@ class JobRunner:
             # 선택적 검색 기준일. 빈 문자열이면 **날짜 조건이 없다**는 뜻이고,
             # 여기서 오늘 날짜로 채우지 않는다.
             search_cutoff = search_dates.normalize_cutoff(job.search_cutoff_date)
-            search_depth = job.search_depth or "standard"
+            # 새 작업은 API가 deep만 만들며, 큐에 남아 있던 옛 작업도 같은
+            # 검색 계약으로 실행한다. 이력 조회의 원래 표기는 바꾸지 않는다.
+            search_depth = "deep" if job_kind is JobKind.SIMILARITY_SEARCH else (job.search_depth or "deep")
             output_mode = job.output_mode
             work_dir = Path(job.work_dir) if job.work_dir else PATHS.run_dir(job_id)
             # 「분석에 포함」을 푼 자료는 여기서 빠진다. preflight 가 크기를
@@ -403,7 +406,7 @@ class JobRunner:
 
         # Provider 를 만든 뒤 그 Provider 가 선언한 검색 정책으로 교체한다.
         tool_policy: ToolPolicy = NO_TOOLS
-        search_budget = int(values.get("max_search_tool_calls", 40))
+        search_budget = 0
         if job_kind is JobKind.SIMILARITY_SEARCH:
             search_budget, timeout = search_channels.execution_limits(values, search_depth)
 
@@ -497,6 +500,7 @@ class JobRunner:
                     focus_text=render_search_focus(search_focus),
                     search_cutoff=search_cutoff,
                     search_tool_status=search_channels.availability(values, provider_id),
+                    search_call_limit=search_budget,
                     search_prompt_id=prompt_id or search_prompt.SEARCH_PROMPT_ID,
                     followup_instruction=followup_instruction,
                     prior_claim_text=prior_claim_text,
@@ -731,6 +735,7 @@ class JobRunner:
             # 필요한 것은 "얼마나 받았는가"이고, 보고서는 블록을 걷어낸 최종
             # 결과 하나로 충분하다. 원문은 stdout.log 에 그대로 남는다.
             received = 0
+            native_calls: set[str] = set()
 
             async def emit(event_type: str, payload: dict) -> None:
                 nonlocal received
@@ -744,6 +749,14 @@ class JobRunner:
                     return
                 if event_type not in ("tool_use", "tool_use_resolved"):
                     return
+                if not str(payload.get("name") or "").startswith("mcp__prism-search__"):
+                    call_id = str(payload.get("id") or "")
+                    if call_id and call_id not in native_calls:
+                        native_calls.add(call_id)
+                        counter = work_dir / search_limits.NATIVE_COUNT_FILE
+                        temporary = counter.with_suffix(".tmp")
+                        temporary.write_text(json.dumps(len(native_calls)), encoding="utf-8")
+                        temporary.replace(counter)
                 counts_as = _progress_counts_as(event_type, payload)
                 name = str(payload.get("name") or "")
                 if not counts_as and name not in (
@@ -914,9 +927,8 @@ class JobRunner:
                 observed = search_manifest.observed(outcome.tool_calls, outcome.tool_uses)
                 try:
                     partial_search = (
-                        (verdict.status == JobStatus.CANCELLED or verdict.error_code == ErrorCode.TIMED_OUT)
-                        and verification_followup
-                        and verification_followup.get("initial_output_preserved")
+                        verdict.status == JobStatus.CANCELLED
+                        or verdict.error_code in (ErrorCode.TIMED_OUT, ErrorCode.SEARCH_BUDGET_EXCEEDED)
                     )
                     if verdict.status != JobStatus.SUCCEEDED and not partial_search:
                         raise search_manifest.SearchLogError(
@@ -928,7 +940,7 @@ class JobRunner:
                     reported, notes = search_manifest.parse(outcome.result_text, observed)
                     reported = search_verification.verify(reported, observed, journal)
                     if partial_search:
-                        manifest_error = "검색이 중단되어 최초 완료 단계의 후보를 부분 결과로 보존했습니다."
+                        manifest_error = "검색이 중단되어 작성된 후보를 부분 결과로 보존했습니다. 추가 확인이 필요합니다."
                 except search_manifest.SearchLogError as exc:
                     manifest_error = str(exc)
                 date_filter = search_dates.filter_candidates(reported, search_cutoff)
@@ -959,7 +971,7 @@ class JobRunner:
                     quality=quality, verification_followup=verification_followup,
                 )
                 if reported is None:
-                    outcome.result_text = ""
+                    outcome.result_text = search_report.render(manifest) if manifest.get("retained_records") else ""
                     if verdict.status == JobStatus.SUCCEEDED:
                         verdict = Verdict(
                             JobStatus.FAILED, ErrorCode.INVALID_OUTPUT,
@@ -994,6 +1006,13 @@ class JobRunner:
                     )
                 except citation_mapping.MappingError as exc:
                     mapping_error = str(exc)
+                    if verdict.status == JobStatus.SUCCEEDED:
+                        try:
+                            mapping = citation_mapping.recover_report_table(
+                                outcome.result_text, assembled.aliases, citation_mapping.source_headers(attachments))
+                            mapping_error = None
+                        except citation_mapping.MappingError:
+                            pass
                 # 사람이 받아 갈 보고서에는 프로토콜 블록을 남기지 않는다.
                 # 원문은 stdout.log 에 그대로 있다.
                 outcome.result_text = citation_mapping.strip_block(outcome.result_text)

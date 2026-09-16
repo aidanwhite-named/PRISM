@@ -92,6 +92,8 @@ def test_shipped_search_prompt_is_a_strategy_not_a_contract() -> None:
         "동의어·영문어·IPC·CPC 활용 전략",
     ):
         assert heading in body
+    assert "정확 관계 문구" in body
+    assert "패밀리 추적" in body
 
 
 def test_the_order_contract_moved_into_the_program() -> None:

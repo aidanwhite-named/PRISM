@@ -12,6 +12,7 @@ from .enums import JobStatus
 from .evaluation.evaluator import evaluate
 from .providers.base import NO_TOOLS
 from .search_mcp_server import SearchTools
+from .search_budget import budget_status
 
 
 def retrieval_plan(verified, journal, availability, allowed):
@@ -85,7 +86,7 @@ async def run(provider, request, initial, emit, *, attachments, fail_on_tool_use
     native = sum(not str(c.get('name', '')).startswith('mcp__prism-search__') for c in initial.tool_calls)
     mcp_used = sum(r.get('state') == 'started' for r in journal)
     used = max(len(initial.tool_calls), native + mcp_used)
-    calls_left = max(0, request.tool_policy.max_tool_calls - used)
+    calls_left = max(0, budget_status(used, request.tool_policy.max_tool_calls)['finalize_at'] - used)
     plan = retrieval_plan(verified, journal, availability, request.tool_policy.mcp_tools)[:min(4, calls_left)]
     lookup_deadline = min(deadline, time.monotonic() + 30)
     tools = None
@@ -93,7 +94,7 @@ async def run(provider, request, initial, emit, *, attachments, fail_on_tool_use
         if cancelled() or time.monotonic() >= lookup_deadline:
             break
         if tools is None:
-            tools = SearchTools(work_dir=request.work_dir, max_calls=mcp_used + calls_left)
+            tools = SearchTools(work_dir=request.work_dir, max_calls=request.tool_policy.max_tool_calls)
         await emit('stage', {'stage': 'metadata_completion', 'message': '미시도 서지·원문 항목 확인 중'})
         try:
             await asyncio.to_thread(tools.call, name, args)

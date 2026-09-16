@@ -26,6 +26,13 @@ def render(manifest: dict) -> str:
     elif data.get("status") != "complete":
         lines += ["검색이 완료되지 않았습니다. 최종 후보 보고서가 아닙니다.", cell(data.get("error")), ""]
     quality = data.get("quality")
+    retained = data.get("retained_records") or []
+    if retained:
+        lines += ["## 중단 전에 확보한 문헌", "",
+                  "조회된 자료 목록입니다. 최종 후보 선정·유사도 판단은 완료되지 않았습니다.", ""]
+        for item in retained:
+            lines.append(f"- {cell(item.get('document_number') or item.get('doi'))} · {cell(item.get('title'))} · {_link(item.get('url'))} · 조회 항목: {cell(', '.join(item['scopes']))}")
+        lines.append("")
     if (data.get("verification_followup") or {}).get("usage_complete") is False:
         lines += ["토큰 사용량은 확인된 단계만 집계했습니다. 중단된 단계의 사용량은 미확정입니다.", ""]
     if quality:

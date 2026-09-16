@@ -222,11 +222,12 @@ def build(*, claim_text, provider="", model="", prompt_id="", prompt_name="",
           search_focus=None, started_at=None, completed_at=None, tool_calls=None,
           tool_uses=None, observed_section=None, tool_journal=None,
           tool_availability=None, reported=None, notes=None, error=None,
-          date_filter=None, max_tool_calls_total=40, timeout_seconds=900, usage=None,
-          raw_output="", search_depth="standard", claim_boundary_neutralized=False, spec_boundary_neutralized=False,
+          date_filter=None, max_tool_calls_total=80, timeout_seconds=300, usage=None,
+          raw_output="", search_depth="deep", claim_boundary_neutralized=False, spec_boundary_neutralized=False,
           focus_boundary_neutralized=False, template_mode="", strategy_boundary_neutralized=False,
           tool_policy_name="", allowed_tools=(), mcp_tools=(), advertised_tools_enforced=False,
           quality=None, verification_followup=None) -> dict:
+    from .search_budget import retained_records
     try:
         llm_output = parse_payload(raw_output) if raw_output else None
     except SearchLogError:
@@ -251,6 +252,7 @@ def build(*, claim_text, provider="", model="", prompt_id="", prompt_name="",
         "tool_availability": tool_availability or {}, "tool_journal": tool_journal or [],
         "observed": observed_section or observed(tool_calls, tool_uses),
         "llm_output": llm_output, "reported": reported,
+        "retained_records": retained_records(tool_journal or []) if error else [],
         "date_filter": date_filter or {}, "usage": usage,
         "normalization_notes": list(notes or []), "error": error,
     }

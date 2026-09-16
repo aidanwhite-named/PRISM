@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from ..config import PATHS
+from .. import citation_mapping
 from ..db import get_db
 from ..enums import JobKind
 from ..models import Attachment, ExecutionJob
@@ -83,7 +84,7 @@ def _history_item(row: ExecutionJob, descendant_count: int = 0) -> HistoryItem:
         source_job_id=row.source_job_id,
         source_job_label=row.source_job_label or "",
         relation_type=row.relation_type,
-        has_citation_mapping=bool((row.citation_mapping or {}).get("items")),
+        has_citation_mapping=bool((citation_mapping.resolved_for_job(row)[0] or {}).get("items")),
         descendant_count=descendant_count,
         delivery_plan=row.delivery_plan or "full_inline",
     )

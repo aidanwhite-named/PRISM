@@ -360,10 +360,6 @@ DEFAULTS: dict[str, object] = {
     "keep_raw_output": True,
     # 도구를 끌 수 없는 Provider 라도, 실제 도구 호출이 발생하면 실패로 본다.
     "fail_on_tool_use": True,
-    # 유사 문헌 검색 한 건에서 허용하는 도구 호출 총 횟수. 넘으면 PRISM 이
-    # 프로세스를 끊고 SEARCH_BUDGET_EXCEEDED 로 실패시킨다. 프롬프트의
-    # 검색 라운드 수는 LLM이 결정하며 PRISM은 전체 호출 수만 제한한다.
-    "max_search_tool_calls": 40,
     # 인용발명 문헌을 최종 분석 모델에게 어떻게 전달할 것인가.
     #
     #   auto      기본값. 자료 전체를 손실 없이 전달할 수 있으면 그렇게 하고,

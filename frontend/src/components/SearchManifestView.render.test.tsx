@@ -24,6 +24,15 @@ function current(): SearchManifestV14 {
   };
 }
 describe("single-agent audit", () => {
+  it("shows retained documents after budget exhaustion without inventing candidates", () => {
+    const data = current(); data.reported = null; data.status = "incomplete";
+    data.error = "호출 상한 초과";
+    data.retained_records = [{ document_number: "EP123A1", doi: "", title: "확보한 문헌", url: "https://example.com/patent", scopes: ["abstract"], call_ids: ["1"] }];
+    render(<SearchResults data={data} />);
+    expect(screen.getByRole("region", { name: "중단 전에 확보한 문헌" }).textContent).toContain("EP123A1");
+    expect(screen.getByRole("link", { name: "문헌 보기" }).getAttribute("href")).toBe("https://example.com/patent");
+    expect(document.querySelectorAll(".search-result-candidate")).toHaveLength(0);
+  });
   it("shows lost leads and missing stopping rationale without inserting a candidate", () => {
     const data = current(); data.status = "search_incomplete";
     data.quality = { execution_status: "complete", verification_status: "complete", search_coverage: "not_established",

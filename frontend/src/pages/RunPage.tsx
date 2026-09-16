@@ -234,7 +234,8 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const [searchPromptId, setSearchPromptId] = useState("");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [promptId, setPromptId] = useState("");
-  const [searchDepth, setSearchDepth] = useState<"quick" | "standard" | "deep">("standard");
+  // 유사문헌 검색은 정확 관계·패밀리 확인까지 수행하는 단일 deep 실행이다.
+  const searchDepth = "deep" as const;
   // 빈 문자열 = 지정 안 함. 제한된 안전성 Provider 가 자동으로 선택되면
   // 사용자가 위험을 확인하지 않은 채 실행하게 된다.
   // 두 작업은 기본 도구를 따로 둔다. 분석 화면에서도 검색 도구가 필요하다 —
@@ -1093,15 +1094,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               </section>
             )}
 
-            <label>검색 깊이
-              <select aria-label="검색 깊이" value={searchDepth} disabled={running}
-                onChange={(e) => setSearchDepth(e.target.value as typeof searchDepth)}>
-                <option value="quick">빠르게 — 최대 15회 / 5분</option>
-                <option value="standard">기본 — 최대 40회 / 15분</option>
-                <option value="deep">심층 — 최대 80회 / 30분</option>
-              </select>
-              <span className="hint">환경설정의 전체 상한이 더 낮으면 그 상한을 적용합니다. 후보 수·출처별 할당량은 정하지 않습니다.</span>
-            </label>
+            <div className="notice info search-depth-notice">
+              심층 검색 · 최대 80회 / 5분
+              <div className="hint">정확 관계 문구 탐색, 패밀리 추적, 유력 후보의 상세 확인을 같은 실행에서 수행합니다.</div>
+            </div>
             <section className="input-panel claim-panel search-panel-input">
               <div className="input-panel-head">
                 <span className="input-step">{searchPrompts.length >= 2 ? 2 : 1}</span>
@@ -1666,9 +1662,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
                   <button
                     className="btn small"
                     onClick={() => startFollowUp("MAPPED")}
-                    disabled={!job.citation_mapping}
+                    disabled={!job.citation_mapping?.items?.length}
                     title={
-                      job.citation_mapping
+                      job.citation_mapping?.items?.length
                         ? "인용발명 번호와 이전 청구항만 물려받습니다. 이전 보고서는 전달하지 않으므로 유사도와 발췌문은 자료에서 다시 판단합니다."
                         : job.citation_mapping_error
                           ? `문헌 매핑을 읽지 못했습니다: ${job.citation_mapping_error}`
@@ -1692,6 +1688,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
                   >
                     {RELATION_LABEL.REANALYZED}
                   </button>
+                  {!job.citation_mapping?.items?.length && <p className="hint">
+                    종속항 추가 분석에는 기존 인용발명 번호와 첨부의 연결이 필요합니다.
+                    {job.citation_mapping_error || "확인된 문헌 매핑이 없습니다."}
+                  </p>}
                 </>
               )}
               {job.job_kind !== "similarity_search" && !running && lineage && (

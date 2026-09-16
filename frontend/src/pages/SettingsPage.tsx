@@ -1011,10 +1011,7 @@ export default function SettingsPage() {
 
       <div className="card settings-run-limits">
         <h2>전체 실행 상한</h2>
-        <p className="hint">검색 깊이 프리셋도 이 상한을 넘지 않습니다. 시간 상한은 분석 작업에도 적용됩니다.</p>
-        <NumberField label="검색 도구 호출 총 상한" value={v.max_search_tool_calls}
-          hint="1–200. 후보 수나 출처별 슬롯을 정하지 않습니다."
-          onSave={(n) => saveValue("max_search_tool_calls", n)} />
+        <p className="hint">유사문헌 검색은 80회·5분 심층 실행으로 고정됩니다. 아래 시간 상한은 구성대비 분석 작업에 적용됩니다.</p>
         <NumberField label="실행 제한시간 (초)" value={v.default_timeout_seconds}
           hint="전체 실행의 제한시간입니다."
           onSave={(n) => saveValue("default_timeout_seconds", n)} />
