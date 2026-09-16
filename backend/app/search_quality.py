@@ -42,7 +42,10 @@ def assess(reported, observed, journal, availability, *, execution_error=None, o
         if call.get("ok") is False or call.get("state") == "incomplete":
             code = call.get("error_code") or call.get("error") or "unknown_failure"
             constraints.append({"source": call.get("tool") or call.get("name", "journal"),
-                                "reason": "limit_exhausted" if "limit" in str(code).lower() or "quota" in str(code).lower() else "access_failed",
+                                "reason": "limit_exhausted" if str(code).lower() in {
+                                    "tool_call_limit_exceeded", "quota_exceeded", "quotexceeded",
+                                    "quotaexceeded", "opsbudgetexceeded", "literaturebudgetexceeded",
+                                    "search_budget_exceeded"} else "access_failed",
                                 "detail": str(code)})
     for flag, reason in (("timed_out", "timeout"), ("tool_budget_exceeded", "limit_exhausted"),
                          ("content_read_budget_exceeded", "limit_exhausted"), ("rate_limited", "rate_limited"),

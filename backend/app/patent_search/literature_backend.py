@@ -243,7 +243,7 @@ class LiteratureBackend(PatentSearchBackend):
         for source, call_fn, read_fn in plan:
             try:
                 call = call_fn(query.text, rows)
-            except literature_client.LiteratureError as exc:
+            except (literature_client.LiteratureError, ImportError) as exc:
                 # 한쪽이 죽어도 다른 쪽 결과를 버리지 않는다. 조용히 넘기지도
                 # 않는다 — 무엇이 실패했는지 notes 와 failed_sources 에 남는다.
                 notes.append(f"{source} 검색 실패: {exc}")
@@ -384,7 +384,7 @@ class LiteratureBackend(PatentSearchBackend):
         for source, call_fn, read_fn in plan:
             try:
                 call = call_fn(key)
-            except literature_client.LiteratureError as exc:
+            except (literature_client.LiteratureError, ImportError) as exc:
                 if source != SOURCE_OPENALEX and partial is None:
                     raise
                 # OpenAlex 한도 소진(429)이 Crossref·Europe PMC 경로까지 막지 않게

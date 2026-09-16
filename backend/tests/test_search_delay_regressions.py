@@ -5,6 +5,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+pytestmark = pytest.mark.usefixtures("legacy_search")
 
 from app import search_followup, search_manifest as sm, search_verification as sv
 from app.search_mcp_server import SearchTools, _record, _LITERATURE_FETCH

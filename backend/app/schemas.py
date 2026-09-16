@@ -152,7 +152,7 @@ class JobCreate(BaseModel):
     search_cutoff_date: str | None = None
     # 유사문헌 검색은 발견·패밀리 확인까지 가능한 deep 실행만 새로 만든다.
     # 저장된 과거 작업의 값은 JobOut에서 문자열로 보존한다.
-    search_depth: Literal["deep"] = "deep"
+    search_depth: Literal["fast", "deep", "exhaustive"] = "deep"
 
     @field_validator("search_cutoff_date")
     @classmethod

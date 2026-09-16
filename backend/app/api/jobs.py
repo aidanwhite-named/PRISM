@@ -294,6 +294,11 @@ def _job_out(job: ExecutionJob) -> JobOut:
     resolved_mapping, resolved_mapping_error = citation_mapping.resolved_for_job(job)
     manifest = job.search_manifest
     result_text = job.result_text
+    if manifest and isinstance(manifest.get('engine'), dict):
+        # Render historical A/B/C documents with the current X/Y/Z presentation.
+        # Stored retrieval order and original execution artifacts remain audit records.
+        from ..search_engine.report import render
+        result_text = render(manifest['engine'])
     if manifest and manifest.get("version") == 14 and manifest.get("error") and "retained_records" not in manifest:
         manifest = {**manifest, "retained_records": search_budget.retained_records(manifest.get("tool_journal") or [])}
         if manifest["retained_records"] and not result_text:
@@ -692,8 +697,8 @@ async def _create_search_job(
     search_policy = provider.search_tool_policy if provider is not None else None
     if (
         provider is None
-        or search_policy is None
-        or not provider.supports_tool_policy(search_policy)
+        or (not values.get("progressive_search_enabled", True) and (
+            search_policy is None or not provider.supports_tool_policy(search_policy)))
     ):
         raise HTTPException(
             400,
@@ -1065,6 +1070,28 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
         else None
     )
     byte_budget = getattr(provider, "max_input_bytes", None)
+    if job_kind is JobKind.SIMILARITY_SEARCH and values.get("progressive_search_enabled", True):
+        from ..search_engine.planner import PLAN_SYSTEM
+        from ..search_engine.models import Limits
+        specification = ""
+        for attachment in attachments:
+            if not attachment.read_ok or not attachment.normalized_text_path:
+                return PreflightOut(job_kind=job_kind.value, provider=provider_id, lanes=[], chars=0,
+                    bytes=0, blocked=True, error="명세서 본문을 읽지 못했습니다.")
+            specification += Path(attachment.normalized_text_path).read_text(encoding="utf-8") + "\n"
+        payload_text = json.dumps({"claim": payload.claim_text or "", "specification": specification[:6000],
+                                   "focus": None, "search_strategy": prompt_body}, ensure_ascii=False)
+        size = (provider.payload_bytes(PLAN_SYSTEM, payload_text) if provider else
+                len((PLAN_SYSTEM + payload_text).encode("utf-8")))
+        limits = Limits.for_depth(payload.search_depth, values)
+        chars = len(PLAN_SYSTEM) + len(payload_text)
+        over_bytes = bool(byte_budget and size > byte_budget)
+        over_chars = bool(max_chars and chars > max_chars)
+        return PreflightOut(job_kind=job_kind.value, provider=provider_id,
+            lanes=[PreflightLane(id="claim_plan", chars=chars, bytes=size)], chars=chars, bytes=size,
+            char_budget=max_chars, byte_budget=byte_budget, over_bytes=over_bytes, over_chars=over_chars,
+            blocked=over_bytes or over_chars, delivery_plan="progressive_search",
+            message=f"최대 {limits.seconds}초 · 검색 질의 {limits.queries}개. 후보를 먼저 표시하고 필요한 원문만 검증합니다.")
     tool_policy = getattr(provider, "search_tool_policy", None)
     tool_policy_name = getattr(tool_policy, "name", "") or ""
     # 예산은 runner 가 쓰는 것과 **같은 함수**로 만든다. 로컬 검색의 크기는

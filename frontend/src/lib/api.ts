@@ -180,7 +180,7 @@ export const api = {
      *  없다. 비었다고 오늘 날짜를 채워 보내지 않는다 — 그러면 같은 청구항의
      *  검색 범위가 실행한 날에 따라 달라진다. */
     search_cutoff_date?: string | null;
-    search_depth?: "deep";
+    search_depth?: "fast" | "deep" | "exhaustive";
   }) => request<Job>("/api/jobs", { method: "POST", body: JSON.stringify(body) }),
   /** 실행하지 않고 최종 조립 프롬프트의 크기만 받아 온다. 작업을 만들지 않고
    *  Provider 도 부르지 않는다. */
@@ -190,6 +190,7 @@ export const api = {
     prompt_id?: string | null;
     provider?: string | null;
     claim_text?: string;
+    search_depth?: "fast" | "deep" | "exhaustive";
     batch_id?: string | null;
     /** createJob 과 같은 목록을 보내야 안내한 크기와 실제 실행이 일치한다. */
     selected_attachment_ids?: string[] | null;

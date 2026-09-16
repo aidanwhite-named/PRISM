@@ -1,6 +1,7 @@
 import json
 
 import pytest
+pytestmark = pytest.mark.usefixtures("legacy_search")
 
 from app import search_budget
 from app.search_mcp_server import SearchTools, ToolLimitExceeded, _EPO_FETCH, _LITERATURE_FETCH
@@ -42,8 +43,8 @@ def test_interrupted_search_keeps_records_without_final_json(client, monkeypatch
     from app.providers.base import ExecutionOutcome
 
     async def execute(self, request, emit):
-        assert "최대 40회" in request.system_prompt
-        assert "36회" in request.system_prompt
+        assert "최대 80회" in request.system_prompt
+        assert "76회" in request.system_prompt
         (request.work_dir / "search_tool_calls.jsonl").write_text(json.dumps(journal()[0]), encoding="utf-8")
         return ExecutionOutcome(tool_policy=request.tool_policy, **{flag: True})
 

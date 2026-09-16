@@ -431,6 +431,9 @@ DEFAULTS: dict[str, object] = {
     # 없다. 켜도 라이브러리·모델이 없으면 키워드 검색만으로 진행하고 그 사실을
     # 보고서와 실행 기록에 남긴다. docs/adr-0001-local-retrieval.md 참조.
     "retrieval_semantic_enabled": False,
+    "progressive_search_enabled": True,
+    "progressive_search_web_enabled": True,
+    "progressive_search_limits": {},
     # Kiwee 특허 검색 연동. 기본 꺼짐. 켜도 지금은 연동 지점(모듈)만 준비된
     # 상태라 실제 외부 검색은 수행하지 않는다. app.patent_search 참조.
     "kiwee_integration_enabled": False,

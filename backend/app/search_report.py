@@ -15,6 +15,9 @@ def _link(raw) -> str:
     return "[문헌 보기](" + quote(str(raw), safe=":/?&=%#@+;,~.-_") + ")"
 
 def render(manifest: dict) -> str:
+    if manifest.get("engine"):
+        from .search_engine.report import render as render_engine
+        return render_engine(manifest["engine"])
     data = view(manifest)
     lines = ["# 유사문헌 검색 결과", ""]
     if data.get("legacy"):

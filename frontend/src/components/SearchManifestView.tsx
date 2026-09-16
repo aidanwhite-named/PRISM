@@ -1,5 +1,7 @@
 /** Read-only audit. Technical groups never depend on evidence levels. */
 import type { Job, SearchManifestV14 } from "../lib/types";
+import ProgressiveSearchResults from "./ProgressiveSearchResults";
+import { documentCategory } from "../lib/searchCategories";
 
 export function linkableUrl(raw?: string): string | null {
   const text = (raw ?? "").trim();
@@ -34,6 +36,7 @@ const REASONS: Record<string, string> = {
 };
 const REVIEW_LABELS: Record<string, string> = { stop_reason: "종료 이유", expansion_summary: "확장 결과", sampling_review: "페이지 편향 보완 내역" };
 export function SearchResults({ data }: { data: SearchManifestV14 }) {
+  if (data.engine) return <ProgressiveSearchResults data={data.engine} />;
   const candidates = data.reported?.candidates ?? [];
   const audit = data.quality?.search_audit;
   const groups = ["A", "B", "C", null] as const;
@@ -41,11 +44,11 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     <nav className="search-group-nav" aria-label="문헌 그룹">
       {groups.filter(group => group || candidates.some(item => item.group === null)).map(group =>
         <a key={group ?? "none"} href={`#search-group-${group ?? "none"}`}>
-          <strong>LLM {group ?? "미분류"}</strong><span>{candidates.filter(item => item.group === group).length}건</span>
+          <strong>LLM {documentCategory(group) ?? "미분류"}</strong><span>{candidates.filter(item => item.group === group).length}건</span>
           <small>{data.group_definitions[group ?? ""] || "분류되지 않은 참고 후보"}</small>
         </a>)}
     </nav>
-    <p>A/B/C는 LLM의 기술적 판단입니다. 증거 확보 수준은 별도로 표시합니다.</p>
+    <p>X/Y/Z는 LLM의 기술적 판단입니다. 증거 확보 수준은 별도로 표시합니다.</p>
     {data.error && <p role="alert">미완료: {data.error}</p>}
     {!!data.retained_records?.length && <section aria-label="중단 전에 확보한 문헌">
       <h2>중단 전에 확보한 문헌 · {data.retained_records.length}건</h2>
@@ -83,7 +86,7 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     <p>검색 기준일: {data.date_filter.cutoff || "없음"} · 공개일 불명: {data.date_filter.unknown_publication_date || 0}건</p>
     </details>
     {groups.filter(group => group || candidates.some(item => item.group === null)).map(group => <section key={group ?? "none"} id={`search-group-${group ?? "none"}`} className="search-result-group">
-      <header><h2>LLM 그룹 {group ?? "미분류"} <span>{candidates.filter(item => item.group === group).length}건</span></h2>
+      <header><h2>LLM 그룹 {documentCategory(group) ?? "미분류"} <span>{candidates.filter(item => item.group === group).length}건</span></h2>
       <p>{data.group_definitions[group ?? ""] || "분류되지 않은 참고 후보"}</p></header>
       {!candidates.some(item => item.group === group) && <p className="faint">이 그룹의 후보가 없습니다.</p>}
     {candidates.filter(item => item.group === group).map((item) => {

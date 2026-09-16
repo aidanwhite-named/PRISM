@@ -272,8 +272,21 @@ def test_semantic_off_keeps_keyword_search_unchanged(tmp_path) -> None:
 # ----------------------------------------------------- 모델 로딩 실패 fallback
 
 
+@pytest.fixture
+def hub_stub(monkeypatch):
+    """Model-loading failure tests need a fake hub, not an optional installation."""
+    import sys
+    import types
+    hub = types.ModuleType('huggingface_hub')
+    monkeypatch.setitem(sys.modules, 'huggingface_hub', hub)
+    transformers = types.ModuleType('sentence_transformers')
+    transformers.SentenceTransformer = lambda *args, **kwargs: pytest.fail('failed download must not load a model')
+    monkeypatch.setitem(sys.modules, 'sentence_transformers', transformers)
+    return hub
+
+
 def test_model_failure_falls_back_to_keyword_with_recorded_reason(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, hub_stub
 ) -> None:
     """모델을 못 열어도 검색은 돌고, 왜 안 돌았는지가 남는다."""
 
@@ -512,7 +525,7 @@ def test_cache_does_not_change_which_candidates_are_returned(tmp_path) -> None:
 # ------------------------------- 외부 리뷰에서 나온 회귀 (2026-08-27)
 
 
-def test_probe_does_not_download_when_the_model_is_missing(monkeypatch) -> None:
+def test_probe_does_not_download_when_the_model_is_missing(monkeypatch, hub_stub) -> None:
     """allow_download=False 는 네트워크를 건드리지 않는다.
 
     이 파일의 skipif 가 수집 단계에서 이 경로를 쓴다. 여기서 받기 시작하면
@@ -542,7 +555,7 @@ def test_probe_does_not_download_when_the_model_is_missing(monkeypatch) -> None:
     assert calls[0].get("local_files_only") is True
 
 
-def test_allow_download_true_still_falls_back_to_the_network(monkeypatch) -> None:
+def test_allow_download_true_still_falls_back_to_the_network(monkeypatch, hub_stub) -> None:
     """기본값은 여전히 「없으면 한 번 받는다」이다. 앱 동작을 바꾸지 않았다."""
     attempts: list[bool] = []
 

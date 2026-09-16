@@ -1,0 +1,80 @@
+{
+  "claim": "몰입형 비디오를 위해 타겟 뷰포인트에서 장면의 뷰를 생성하는 방법으로서,\n(A) 포인트 클라우드 뷰포인트에서의 상기 장면의 이미지 및 상기 장면의 포인트 클라우드를 수신하는 단계(402);\n(B) 상기 포인트 클라우드 내의 포인트들 사이의 연결성 정보를 획득하는 단계(404);\n(C) 상기 포인트 클라우드 및 상기 연결성 정보를 사용하여 상기 장면의 기하구조(geometry)를 보간하는 단계(406);\n및\n(D) 상기 이미지 및 상기 보간된 기하구조를 사용하여 상기 타겟 뷰포인트에서 상기 장면의 상기 뷰를 렌더링하는\n단계(408)를 포함하는, 방법",
+  "plan": {
+    "features": [
+      {
+        "text": "(A) 포인트 클라우드 뷰포인트에서의 상기 장면의 이미지 및 상기 장면의 포인트 클라우드를 수신하는 단계",
+        "terms": [
+          "point cloud",
+          "viewpoint",
+          "scene image",
+          "immersive video"
+        ],
+        "phrases": [
+          "point cloud viewpoint",
+          "scene image and point cloud"
+        ],
+        "queries": [
+          "point cloud viewpoint scene image reception",
+          "immersive video point cloud input"
+        ],
+        "relation": "point cloud viewpoint -> receive scene image and point cloud -> received inputs"
+      },
+      {
+        "text": "(B) 상기 포인트 클라우드 내의 포인트들 사이의 연결성 정보를 획득하는 단계",
+        "terms": [
+          "point connectivity",
+          "point cloud",
+          "connectivity information",
+          "point relationships"
+        ],
+        "phrases": [
+          "connectivity information between points",
+          "point cloud connectivity"
+        ],
+        "queries": [
+          "point cloud connectivity between points",
+          "connectivity information point cloud"
+        ],
+        "relation": "point cloud -> obtain connectivity information between points -> connectivity information"
+      },
+      {
+        "text": "(C) 상기 포인트 클라우드 및 상기 연결성 정보를 사용하여 상기 장면의 기하구조(geometry)를 보간하는 단계",
+        "terms": [
+          "geometry interpolation",
+          "point cloud",
+          "connectivity information",
+          "scene geometry"
+        ],
+        "phrases": [
+          "interpolating scene geometry",
+          "point cloud and connectivity information"
+        ],
+        "queries": [
+          "interpolate geometry using point cloud connectivity",
+          "scene geometry interpolation point cloud"
+        ],
+        "relation": "point cloud and connectivity information -> interpolate scene geometry -> interpolated geometry"
+      },
+      {
+        "text": "상기 이미지 및 상기 보간된 기하구조를 사용하여 상기 타겟 뷰포인트에서 상기 장면의 상기 뷰를 렌더링하는",
+        "terms": [
+          "target viewpoint",
+          "view rendering",
+          "interpolated geometry",
+          "scene view"
+        ],
+        "phrases": [
+          "rendering a view at a target viewpoint",
+          "image and interpolated geometry"
+        ],
+        "queries": [
+          "render view target viewpoint interpolated geometry",
+          "image based view rendering target viewpoint"
+        ],
+        "relation": "image and interpolated geometry -> render scene view at target viewpoint -> target-viewpoint scene view"
+      }
+    ],
+    "context_query": "immersive video rendering"
+  }
+}

@@ -476,6 +476,7 @@ def _load(body: bytes) -> dict:
 _REGISTERED = False
 
 
+@parsers.synchronized_registration
 def register() -> None:
     """파서와 프로필을 등록한다. 프로세스당 한 번."""
     global _REGISTERED

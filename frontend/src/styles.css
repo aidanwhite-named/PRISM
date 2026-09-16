@@ -1123,6 +1123,12 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .search-candidate-note { margin-top: 4px; color: var(--text-muted); }
 .search-query-list { margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.7; }
 .search-results { font-size: 15px; line-height: 1.75; }
+.search-category-legend { margin: 20px 0 12px; font-size: 18px; line-height: 1.65; }
+.search-category-legend > div { display: grid; grid-template-columns: max-content 1fr; gap: 16px; padding: 8px 0; }
+.search-category-legend dt { font-size: 20px; font-weight: 700; }
+.search-category-legend dd { margin: 0; align-self: center; }
+.search-results .search-unclassified > summary { font-size: 18px; font-weight: 650; cursor: pointer; }
+.search-unclassified-content { margin-top: 16px; }
 .search-results details > summary { font-size: 14px; }
 .search-group-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 22px; }
 .search-group-nav a { display: block; padding: 16px; border: 1px solid var(--border); border-radius: 12px; color: var(--text); text-decoration: none; background: rgba(232, 235, 231, 0.48); }

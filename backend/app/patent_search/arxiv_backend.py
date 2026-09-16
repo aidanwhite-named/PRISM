@@ -56,6 +56,7 @@ def _extract(body, path):
 _REGISTERED = False
 
 
+@parsers.synchronized_registration
 def register():
     # 프로세스당 한 번. literature_parser.register 가 먼저 부르고, materialize 가
     # 응답마다 다시 부른다 — 확인 없이 두면 정상 응답이 전부 ParserError 가 된다.

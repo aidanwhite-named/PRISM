@@ -351,7 +351,7 @@ def _record(record, *, compact=False) -> dict:
     evidence = {}
     selected = set(record.fields)
     if compact:
-        selected = {name for name in selected if name in {"applicants", "authors", "publication_date", "ipc", "cpc", "container"}}
+        selected = {name for name in selected if name in {"applicants", "authors", "publication_date", "ipc", "cpc", "container", "family_id", "arxiv_id", "version_updated"}}
         abstracts = [name for name in record.fields if name.split(":")[0] == "abstract"]
         if abstracts:
             selected.add("abstract:en" if "abstract:en" in abstracts else abstracts[0])

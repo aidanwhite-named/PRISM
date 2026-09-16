@@ -152,6 +152,13 @@ def availability(values: dict, provider: str = "claude") -> dict:
         elif provider not in ("claude", "codex"):
             code = "unsupported_transport"
         result[name] = {"status": code, "detail": STATUS_LABELS[code]}
+        if name == "literature":
+            from importlib.util import find_spec
+            result[name]["sources"] = {
+                "crossref_epmc": "available",
+                "openalex": "available" if find_spec("pyalex") else "dependency_missing",
+                "arxiv": "available" if find_spec("arxiv") else "dependency_missing",
+            }
     return result
 
 
@@ -230,4 +237,8 @@ def execution_limits(values: dict, depth: str = "deep") -> tuple[int, int]:
     ``depth``와 ``values`` 인자는 과거 실행을 읽는 호출 경로 호환을 위해서만
     남긴다. 설정값이나 옛 quick/standard 값으로 새 검색의 범위를 줄이지 않는다.
     """
+    if values.get("progressive_search_enabled", False):
+        from .search_engine.models import Limits
+        limits = Limits.for_depth(depth, values)
+        return limits.queries, limits.seconds
     return SEARCH_CALL_LIMIT, SEARCH_TIMEOUT_SECONDS

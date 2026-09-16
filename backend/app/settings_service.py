@@ -56,6 +56,9 @@ EDITABLE_KEYS = frozenset(
         "literature_openalex_api_key",
         "literature_max_results_per_query",
         "literature_http_budget_seconds",
+        "progressive_search_enabled",
+        "progressive_search_web_enabled",
+        "progressive_search_limits",
         # epo_quota_state 는 일부러 없다. PRISM 이 관측해 적는 값이라
         # 사용자가 PUT 으로 고칠 수 있으면 사용량을 0 으로 되돌릴 수 있다.
             # 근거 패키지의 페이지 확장.
@@ -536,6 +539,10 @@ def run_agy_allowlist_migration() -> None:
 
     try:
         with session_scope() as session:
+            # The progressive engine fetches papers itself. It must not expand
+            # agy's global read_url permissions merely because PRISM starts.
+            if get_all(session).get('progressive_search_enabled', True):
+                return
             apply_agy_allowlist(session, forced=False)
     except agy_permissions.AgyPermissionsError:
         return
@@ -685,6 +692,27 @@ def get(session: Session, key: str) -> Any:
 
 
 def _coerce(key: str, value: Any) -> Any:
+    if key in ('progressive_search_enabled', 'progressive_search_web_enabled'):
+        if not isinstance(value, bool):
+            raise ValueError(f'{key} 는 true 또는 false여야 합니다.')
+        return value
+    if key == 'progressive_search_limits':
+        from .search_engine.models import Limits
+        from dataclasses import asdict
+        if not isinstance(value, dict) or set(value) - {'fast', 'deep', 'exhaustive'}:
+            raise ValueError('검색 예산은 fast/deep/exhaustive 객체여야 합니다.')
+        normalized = {}
+        for depth, limits in value.items():
+            defaults = asdict(Limits.for_depth(depth))
+            if not isinstance(limits, dict) or set(limits) - set(defaults):
+                raise ValueError('알 수 없는 검색 예산 필드입니다.')
+            if any(type(v) is not int or v < 1 for v in limits.values()):
+                raise ValueError('검색 예산은 양의 정수여야 합니다.')
+            bounded = asdict(Limits.for_depth(depth, {key: value}))
+            if any(bounded[name] != number for name, number in limits.items()):
+                raise ValueError('검색 예산이 허용된 상한을 넘습니다.')
+            normalized[depth] = dict(limits)
+        return normalized
     if key in _INT_KEYS:
         if key in _UNLIMITED_KEYS and (
             value is None or (isinstance(value, str) and not value.strip())

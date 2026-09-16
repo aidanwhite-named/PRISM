@@ -1137,7 +1137,7 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="card settings-agy-permissions">
+      {v.progressive_search_enabled === false && <div className="card settings-agy-permissions">
         <div className="split" style={{ marginBottom: 12 }}>
           <h2 style={{ margin: 0 }}>논문 페이지 열람 허용 목록 (agy)</h2>
           <button
@@ -1247,7 +1247,7 @@ export default function SettingsPage() {
         ) : (
           <div className="faint">허용 목록 정보를 받지 못했습니다.</div>
         )}
-      </div>
+      </div>}
 
       <div className="card settings-kiwee">
         <h2>Kiwee 특허 검색 연동</h2>

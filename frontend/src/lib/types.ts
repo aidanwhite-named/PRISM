@@ -273,7 +273,7 @@ export interface GapSearchFocus {
  *  webfetch_summary      WebFetch 로 페이지를 열어 요약을 받았다 (원문 아님)
  *  raw_original_verified 공식 원문 텍스트를 확보해 대조했다
  */
-export type SearchGroup = "A" | "B" | "C" | null;
+export type SearchGroup = "X" | "Y" | "Z" | "A" | "B" | "C" | null;
 export type SearchEvidenceLevel = "search_snippet_only" | "source_page_reviewed" |
   "official_bibliographic" | "official_abstract" | "official_claims" | "official_full_text";
 export type SearchVerificationIssue = "publication_date_unverified" | "title_unverified" | "title_mismatch" | "applicant_unverified" | "applicant_mismatch" | "identifier_unverified" | "identifier_invalid" |
@@ -298,7 +298,8 @@ export interface SearchReview {
   stop_reason?: string; expansion_summary?: string; sampling_review?: string; remaining_gaps?: string[];
 }
 export interface SearchManifestV14 {
-  version: 14; status: "complete" | "incomplete" | "verification_incomplete" | "search_incomplete"; provider: string; model: string;
+  engine?: ProgressiveSearchSnapshot;
+  version: 14; status: "complete" | "incomplete" | "verification_incomplete" | "search_incomplete" | "in_progress"; provider: string; model: string;
   quality?: { execution_status: string; verification_status: string; search_coverage: string;
     search_audit?: { status: "incomplete" | "recorded"; unaccounted_fetches: string[];
       broad_searches: unknown[]; missing_review_fields: string[]; reported_review: SearchReview };
@@ -331,6 +332,23 @@ export interface LegacySearchManifest {
   [key: string]: unknown;
 }
 export type SearchManifest = SearchManifestV14 | LegacySearchManifest;
+
+export interface ProgressiveSearchSnapshot {
+  version: number; phase: string; stop_reason: string; depth: string;
+  elapsed_seconds: number; first_candidate_seconds: number | null;
+  route?: { lane: string; outcome?: string; reason?: string; seconds?: number }[];
+  features: { id: string; text: string; relation: string }[];
+  candidates: { id: string; document_number: string; title: string; url: string;
+      publication_date: string; family_id: string; data_status: string; date_status: string;
+      document_classification?: { group: SearchGroup; reason: string; basis: string; evidence_status: string } | null;
+    acquisitions: { status: string; scope?: string; error?: string }[];
+    evidence: { feature: string; match: string; relation: string; difference: string;
+      quote: string; quote_verified: boolean;
+      locator: { page?: number | null; section?: string; url?: string; artifact_id?: string } | null }[];
+  }[];
+  queries: { id: string; source: string; query: string; status: string; lane?: string; hits?: number; error?: string }[];
+  warnings: string[];
+}
 
 export type RelationType = "MAPPED" | "CONTINUED" | "REANALYZED";
 
@@ -603,6 +621,7 @@ export interface HistoryItem {
 
 export interface AppSettings {
   values: {
+    progressive_search_enabled?: boolean;
     max_file_size_bytes: number;
     max_total_upload_bytes: number;
     max_files_per_job: number;
@@ -803,7 +822,7 @@ export type Preflight = {
   over_bytes: boolean;
   blocked: boolean;
   /** 이 입력이 실제로 어떻게 전달되는가. runner 와 같은 판정 함수를 쓴다. */
-  delivery_plan: DeliveryPlan;
+  delivery_plan: DeliveryPlan | "progressive_search";
   /** 왜 그 방식을 골랐는가. 화면이 문장을 새로 만들지 않고 이 값을 그대로 쓴다. */
   selection_reason: string;
   /** 전체 인라인으로 넣었을 때의 크기. auto 가 왜 좁혔는지 설명한다. */

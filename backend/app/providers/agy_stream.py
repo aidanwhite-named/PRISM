@@ -172,6 +172,7 @@ class AgyStreamState:
     status: str | None = None
     error_message: str | None = None
     usage: dict | None = None
+    usage_by_step: dict[str, dict] = field(default_factory=dict, repr=False)
     num_turns: int | None = None
     saw_result: bool = False
 
@@ -346,7 +347,13 @@ class AgyStreamParser:
 
         usage = body.get("usage")
         if isinstance(usage, dict):
-            state.usage = usage
+            key = str(body.get("step_index", "unknown"))
+            state.usage_by_step[key] = usage
+            keys = {k for row in state.usage_by_step.values() for k, v in row.items()
+                    if isinstance(v, (int, float)) and not isinstance(v, bool)}
+            state.usage = {k: sum(row.get(k, 0) for row in state.usage_by_step.values()
+                                 if isinstance(row.get(k, 0), (int, float))) for k in keys}
+            state.usage["usage_complete"] = False
 
         return events
 

@@ -111,6 +111,17 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+it('shows search depth before the claim and hides the search strategy selector', async () => {
+  window.location.hash = '#/search';
+  render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
+  const depth = await screen.findByRole('combobox', { name: '검색 깊이' });
+  const claim = screen.getByRole('textbox', { name: '검색할 청구항' });
+  expect(depth.compareDocumentPosition(claim) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole('combobox', { name: '검색 전략 프롬프트' })).toBeNull();
+  await userEvent.selectOptions(depth, 'exhaustive');
+  expect((depth as HTMLSelectElement).value).toBe('exhaustive');
+});
+
 describe("종속항 추가 분석", () => {
   it("빈 매핑으로 후속 실행을 시작하지 않는다", async () => {
     const { api } = await import("../lib/api");

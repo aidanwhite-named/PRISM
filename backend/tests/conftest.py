@@ -68,6 +68,17 @@ def work_dir(tmp_path):
     return target
 
 
+@pytest.fixture
+def legacy_search(monkeypatch):
+    """Exercise the retained single-agent compatibility path explicitly.
+
+    New default-engine integration tests use their own injected sources/inference.
+    Old protocol fixtures are not valid responses to the new structured planner.
+    """
+    from app.config import DEFAULTS
+    monkeypatch.setitem(DEFAULTS, "progressive_search_enabled", False)
+
+
 @pytest.fixture(scope="module")
 def client():
     from app.main import app

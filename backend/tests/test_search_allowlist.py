@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 
 import pytest
+pytestmark = pytest.mark.usefixtures("legacy_search")
 
 from app import config, job_assembly, settings_service
 from app.db import session_scope

@@ -365,9 +365,8 @@ class JobRunner:
             # 선택적 검색 기준일. 빈 문자열이면 **날짜 조건이 없다**는 뜻이고,
             # 여기서 오늘 날짜로 채우지 않는다.
             search_cutoff = search_dates.normalize_cutoff(job.search_cutoff_date)
-            # 새 작업은 API가 deep만 만들며, 큐에 남아 있던 옛 작업도 같은
-            # 검색 계약으로 실행한다. 이력 조회의 원래 표기는 바꾸지 않는다.
-            search_depth = "deep" if job_kind is JobKind.SIMILARITY_SEARCH else (job.search_depth or "deep")
+            # 검색 깊이는 새 subsystem의 시간·조회·검증 예산을 함께 선택한다.
+            search_depth = job.search_depth or "deep"
             output_mode = job.output_mode
             work_dir = Path(job.work_dir) if job.work_dir else PATHS.run_dir(job_id)
             # 「분석에 포함」을 푼 자료는 여기서 빠진다. preflight 가 크기를
@@ -423,7 +422,7 @@ class JobRunner:
                 )
                 return
 
-            if job_kind is JobKind.SIMILARITY_SEARCH:
+            if job_kind is JobKind.SIMILARITY_SEARCH and not values.get("progressive_search_enabled", True):
                 selected_policy = provider.search_tool_policy
                 if (
                     selected_policy is None
@@ -466,6 +465,13 @@ class JobRunner:
                 job.started_at = started
                 job.preprocessing_versions = preprocessing_versions()
             await self._emit(job_id, "status", {"status": JobStatus.RUNNING})
+            if job_kind is JobKind.SIMILARITY_SEARCH and values.get("progressive_search_enabled", True):
+                from ..search_engine.job import run_job
+                await run_job(self, provider, job_id=job_id, work_dir=work_dir,
+                    claim=claim_text, cutoff=search_cutoff, depth=search_depth, values=values,
+                    model=model, reasoning_effort=reasoning_effort, strategy=master_prompt,
+                    attachments=attachments, focus=search_focus)
+                return
             await self._emit(
                 job_id, "stage", {"stage": "preprocessing", "message": "프롬프트 조립 중"}
             )

@@ -141,9 +141,9 @@ function SizeNotice({
     >
       <div>
         <span className={`pill ${narrowed ? "accent" : "neutral"}`}>
-          {DELIVERY_LABEL[preflight.delivery_plan]}
+          {preflight.delivery_plan === "progressive_search" ? "단계별 검색 계획" : DELIVERY_LABEL[preflight.delivery_plan]}
         </span>{" "}
-        최종 프롬프트 {narrowed ? "최대 " : ""}
+        {preflight.delivery_plan === "progressive_search" ? "구성 분해 입력 " : "최종 프롬프트 "}{narrowed ? "최대 " : ""}
         {preflight.chars.toLocaleString()}자 ·{" "}
         {preflight.bytes.toLocaleString()} bytes
       </div>
@@ -234,8 +234,8 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const [searchPromptId, setSearchPromptId] = useState("");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [promptId, setPromptId] = useState("");
-  // 유사문헌 검색은 정확 관계·패밀리 확인까지 수행하는 단일 deep 실행이다.
-  const searchDepth = "deep" as const;
+  // 검색 깊이에 따라 검색·후속 탐색·원문 확인의 공통 예산을 정한다.
+  const [searchDepth, setSearchDepth] = useState<"fast" | "deep" | "exhaustive">("deep");
   // 빈 문자열 = 지정 안 함. 제한된 안전성 Provider 가 자동으로 선택되면
   // 사용자가 위험을 확인하지 않은 채 실행하게 된다.
   // 두 작업은 기본 도구를 따로 둔다. 분석 화면에서도 검색 도구가 필요하다 —
@@ -252,6 +252,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   // 최종 조립 프롬프트의 크기를 맞힐 수 없고, Provider 한도는 문자가 아니라
   // UTF-8 바이트로 걸린다. null 이면 아직 못 받았다는 뜻이다.
   const [preflight, setPreflight] = useState<Preflight | null>(null);
+  const progressiveSearch = preflight?.delivery_plan === "progressive_search";
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gapSearchOpen, setGapSearchOpen] = useState(false);
@@ -503,6 +504,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           provider: providerId,
           prompt_id: (searching ? searchPromptId : promptId) || null,
           claim_text: activeClaim,
+          search_depth: searching ? searchDepth : undefined,
           batch_id: activeBatchId,
           selected_attachment_ids: activeSelection,
           source_job_id: lineage?.sourceJobId ?? null,
@@ -527,6 +529,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     providerId,
     promptId,
     searchPromptId,
+    searchDepth,
     searching,
     activeClaim,
     activeBatchId,
@@ -644,8 +647,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         job_kind: "similarity_search",
         provider: providerId || null,
         model: model || null,
-        // 고른 검색 전략. 보내지 않으면 백엔드가 설정 기본값을 쓰지만, 화면이
-        // 보여 준 전략과 실행한 전략이 달라질 수 있으므로 명시해서 보낸다.
+        // 선택란은 숨기고 설정에서 불러온 기본 검색 지침을 적용한다.
         prompt_id: searchPromptId || null,
         claim_text: searchClaimText,
         batch_id: prepared?.batch_id ?? null,
@@ -972,6 +974,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           disabled={running}
         />
       </label>
+
     </section>
   );
 
@@ -1024,14 +1027,14 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         <h2>{searching ? "검색 준비" : "분석 자료 준비"}</h2>
 
         <div className="run-config-summary">
-          <span>
+          {!searching && <span>
             <strong>프롬프트</strong>{" "}
             {searching
               ? (selectedSearchPrompt?.name ?? "설정 필요")
               : selectedPrompt
                 ? selectedPrompt.name
                 : "설정 필요"}
-          </span>
+          </span>}
           <span>
             <strong>실행 도구</strong>{" "}
             {selectedProvider?.display_name ?? (providerId || "설정 필요")}
@@ -1055,52 +1058,25 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               </div>
             )}
 
-            {searchPrompts.length >= 2 && (
-              <section className="input-panel search-panel-input">
-                <div className="input-panel-head">
-                  <span className="input-step">1</span>
-                  <div>
-                    <strong>검색 전략</strong>
-                    <div className="hint">
-                      무엇을 중시하고 어디까지 넓힐지를 정하는 프롬프트입니다.
-                      검색 실행·보안·감사 규칙은 PRISM이 갖고 있으므로 전략을
-                      바꿔도 감사 기록과 보고서 형식은 그대로입니다.
-                    </div>
-                  </div>
-                </div>
-                <select
-                  id="searchPromptId"
-                  aria-label="검색 전략 프롬프트"
-                  value={searchPromptId}
-                  onChange={(e) => setSearchPromptId(e.target.value)}
-                  disabled={running}
-                >
-                  {searchPrompts.map((p) => (
-                    <option key={p.id} value={p.id} disabled={!p.enabled}>
-                      {p.name}
-                      {p.enabled ? "" : " (비활성)"}
-                    </option>
-                  ))}
+            <section className="input-panel search-panel-input">
+              <label className="search-cutoff-field">
+                검색 깊이
+                <select aria-label="검색 깊이" value={searchDepth} disabled={running}
+                  onChange={e => setSearchDepth(e.target.value as "fast" | "deep" | "exhaustive")}>
+                  <option value="fast">빠른 검색 · 후보 우선 확인</option>
+                  <option value="deep">심층 검색 · 필요할 때 자동 확장</option>
+                  <option value="exhaustive">정밀 검색 · 더 많은 후보·원문 확인</option>
                 </select>
-                {selectedSearchPrompt?.description && (
-                  <div className="hint" style={{ marginTop: 6 }}>
-                    {selectedSearchPrompt.description}
-                  </div>
-                )}
-                <div className="hint" style={{ marginTop: 6 }}>
-                  <a href="#/prompts">프롬프트 관리</a>에서 검색 전략을 새로
-                  만들거나 고칠 수 있습니다.
-                </div>
-              </section>
-            )}
-
+                <span className="hint">검색·원문 확인에 사용할 시간과 후보 수를 정합니다. X가 미확인이고 관련 후보와 예산이 남으면 인용·피인용 문헌도 조회합니다.</span>
+              </label>
+            </section>
             <div className="notice info search-depth-notice">
-              심층 검색 · 최대 80회 / 5분
-              <div className="hint">정확 관계 문구 탐색, 패밀리 추적, 유력 후보의 상세 확인을 같은 실행에서 수행합니다.</div>
+              {progressiveSearch ? preflight?.message : "심층 검색 · 최대 80회 / 5분"}
+              <div className="hint">구성별 검색으로 후보를 모으고, 원문에서 관계와 근거를 확인합니다.</div>
             </div>
             <section className="input-panel claim-panel search-panel-input">
               <div className="input-panel-head">
-                <span className="input-step">{searchPrompts.length >= 2 ? 2 : 1}</span>
+                <span className="input-step">1</span>
                 <div>
                   <strong>검색할 청구항</strong>
                   <div className="hint">
@@ -1437,7 +1413,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
       <div className="card run-action-card">
         <h2>
           {searching
-            ? "3. 검색 시작"
+            ? "2. 검색 시작"
             : lineage
               ? "3. 후속 분석 시작"
               : "3. 분석 시작"}
@@ -1468,8 +1444,8 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           )}
           {searching && (
             <div className="run-ready-row">
-              <span>검색 전략</span>
-              <strong>{selectedSearchPrompt?.name ?? "설정 필요"}</strong>
+              <span>검색 깊이</span>
+              <strong>{{ fast: "빠른 검색", deep: "심층 검색", exhaustive: "정밀 검색" }[searchDepth]}</strong>
             </div>
           )}
           {searching && (
@@ -1498,10 +1474,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
         {searching && searchPrompts.length === 0 && (
           <div className="notice danger" style={{ marginBottom: 12 }}>
-            <strong>검색 전략 프롬프트가 없습니다</strong>
+            <strong>기본 검색 지침을 불러오지 못했습니다</strong>
             <div style={{ marginTop: 4 }}>
-              <a href="#/prompts">프롬프트 관리</a>에서 검색 전략을 하나
-              만드십시오.
+              <a href="#/prompts">프롬프트 관리</a>에서 검색 지침을 확인하세요.
             </div>
           </div>
         )}

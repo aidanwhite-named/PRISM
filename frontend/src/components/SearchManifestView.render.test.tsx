@@ -70,7 +70,7 @@ describe("single-agent audit", () => {
   });
   it("shows C independently of unverified evidence", () => {
     render(<SearchManifestView job={{ search_manifest: current() } as Job} />);
-    expect(screen.getByText(/LLM C/)).toBeTruthy();
+    expect(screen.getByText(/LLM Z/)).toBeTruthy();
     expect(screen.getByText("식별 미확인")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "문헌 보기" })).toBeNull();
     expect(document.querySelector("img")).toBeNull();

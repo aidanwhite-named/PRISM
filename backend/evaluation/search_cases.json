@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "gaussian_3dgs",
+      "claim": "A: 가우시안에 대해 복수의 이웃 가우시안들의 위치값 및 SVD(Singular Value Decomposition)를 이용하여 상기 가우시안의 공분산을 계산\nB: 상기 가우시안과 이웃 가우시안 간 거리에 기반하여 상기 가우시안의 복제 여부를 결정",
+      "cutoff": null,
+      "known_relevant": [
+        {
+          "label": "GauHuman",
+          "identifiers": [
+            "arxiv:2312.02973",
+            "https://openaccess.thecvf.com/content/CVPR2024/papers/Hu_GauHuman_Articulated_Gaussian_Splatting_from_Monocular_Human_Videos_CVPR_2024_paper.pdf"
+          ],
+          "feature": "B",
+          "judgment": "partial: KL divergence and gradients control cloning; center distance locates neighbors"
+        },
+        {
+          "label": "Wireframe generation via gaussian splatting",
+          "identifiers": [
+            "WO2025264424A1",
+            "US20250391110A1"
+          ],
+          "family_id": "96698520",
+          "feature": "A",
+          "judgment": "partial: neighboring positions, covariance and SVD for principal-axis projection; output purpose differs"
+        }
+      ],
+      "unverified_leads": [
+        "https://openreview.net/pdf?id=vkj5ARRCeY"
+      ],
+      "notes": "Diagnostic judgments from the repository investigation. Do not supply expected IDs/titles to the search planner. The OpenReview lead is not verified gold."
+    },
+    {
+      "id": "immersive_viewpoint",
+      "claim": "몰입형 비디오를 위해 타겟 뷰포인트에서 장면의 뷰를 생성하는 방법으로서,\n(A) 포인트 클라우드 뷰포인트에서의 상기 장면의 이미지 및 상기 장면의 포인트 클라우드를 수신하는 단계(402);\n(B) 상기 포인트 클라우드 내의 포인트들 사이의 연결성 정보를 획득하는 단계(404);\n(C) 상기 포인트 클라우드 및 상기 연결성 정보를 사용하여 상기 장면의 기하구조(geometry)를 보간하는 단계(406);\n및\n(D) 상기 이미지 및 상기 보간된 기하구조를 사용하여 상기 타겟 뷰포인트에서 상기 장면의 상기 뷰를 렌더링하는\n단계(408)를 포함하는, 방법",
+      "cutoff": null,
+      "known_relevant": [
+        {
+          "label": "User disclosed source invention",
+          "identifiers": [
+            "KR20250121108A",
+            "EP4386678A1"
+          ],
+          "family_id": "84785323",
+          "judgment": "User supplied KR source number; EPO confirms shared family, EP description matches input flow."
+        }
+      ],
+      "notes": "Source identifier supplied after initial experiments; evaluation only, never planner input. Compare exact-publication and family retrieval separately."
+    },
+    {
+      "id": "immersive_viewpoint_numbered",
+      "claim": "청구항 1.\n몰입형 비디오를 위해 타겟 뷰포인트에서 장면의 뷰를 생성하는 방법으로서,\n(A) 포인트 클라우드 뷰포인트에서의 상기 장면의 이미지 및 상기 장면의 포인트 클라우드를 수신하는 단계(402);\n(B) 상기 포인트 클라우드 내의 포인트들 사이의 연결성 정보를 획득하는 단계(404);\n(C) 상기 포인트 클라우드 및 상기 연결성 정보를 사용하여 상기 장면의 기하구조(geometry)를 보간하는 단계(406);\n및\n(D) 상기 이미지 및 상기 보간된 기하구조를 사용하여 상기 타겟 뷰포인트에서 상기 장면의 상기 뷰를 렌더링하는\n단계(408)를 포함하는, 방법",
+      "cutoff": null,
+      "known_relevant": [
+        {
+          "label": "User disclosed source invention",
+          "identifiers": [
+            "KR20250121108A",
+            "EP4386678A1"
+          ],
+          "family_id": "84785323",
+          "judgment": "User supplied KR source number; EPO confirms shared family, EP description matches input flow."
+        }
+      ],
+      "notes": "Same invention with claim-number preamble. Failed user run 7fabd46e-c47e-4ae9-a0cd-9b0711c31f30. Search stability regression."
+    }
+  ]
+}

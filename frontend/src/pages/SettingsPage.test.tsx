@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const settingsResponse = {
   values: {
+    progressive_search_enabled: false,
     max_file_size_bytes: 26214400,
     max_total_upload_bytes: 104857600,
     max_files_per_job: 20,
@@ -178,6 +179,17 @@ async function renderPage() {
 }
 
 describe("대용량 인용발명 전달 방식", () => {
+  it("새 검색에서는 agy 페이지 열람 허용 목록을 표시하지 않는다", async () => {
+    const { api } = await import("../lib/api");
+    const current = await api.settings();
+    vi.mocked(api.settings).mockResolvedValueOnce({
+      ...current,
+      values: { ...current.values, progressive_search_enabled: true },
+    });
+    const { container } = await renderPage();
+    expect(container.querySelector(".settings-agy-permissions")).toBeNull();
+    expect(screen.queryByRole("button", { name: "권장 목록 다시 적용" })).toBeNull();
+  });
   it("브라우저 인증 코드를 제출하고 확인 후 로그인 완료를 표시한다", async () => {
     const { api } = await import("../lib/api");
     vi.mocked(api.listProviders).mockResolvedValueOnce([

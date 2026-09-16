@@ -31,6 +31,20 @@ generic_json 프로필은 텍스트가 거기 있다는 것만 증명한다. 그
 
 from __future__ import annotations
 
+from functools import wraps
+from threading import RLock
+
+_REGISTRATION_LOCK = RLock()
+
+
+def synchronized_registration(function):
+    """Register a parser/profile set atomically across concurrent source workers."""
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        with _REGISTRATION_LOCK:
+            return function(*args, **kwargs)
+    return wrapper
+
 import hashlib
 import inspect
 import json

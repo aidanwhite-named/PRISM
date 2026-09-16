@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+import pytest
+pytestmark = pytest.mark.usefixtures("legacy_search")
 from pathlib import Path
 
 from app.enums import ErrorCode, JobKind, JobStatus

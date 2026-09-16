@@ -281,6 +281,8 @@ class ExecutionRequest:
     # Claude/Codex receive this per invocation.  The mapping follows Claude's
     # mcpServers JSON shape and is translated by each Provider.
     mcp_servers: dict = field(default_factory=dict)
+    # Optional structured output, supported by adapters that expose a native schema flag.
+    response_schema: dict | None = None
 
 
 @dataclass

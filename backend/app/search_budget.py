@@ -27,7 +27,7 @@ def retained_records(journal: list) -> list[dict]:
     from .search_manifest import identity_key
     records = {}
     for row in journal:
-        if row.get("state") != "completed" or row.get("ok") is not True or not row.get("tool", "").endswith("_fetch"):
+        if row.get("state") != "completed" or row.get("ok") is not True or not row.get("tool", "").endswith(("_fetch", "_search")):
             continue
         for record in (row.get("result") or {}).get("records", []):
             number = str(record.get("document_number") or record.get("doc_number") or "")
@@ -40,7 +40,10 @@ def retained_records(journal: list) -> list[dict]:
             key = identity_key(number, doi) if number or doi else url
             item = records.setdefault(key, {"document_number": number, "doi": doi,
                 "title": str(record.get("title") or ""), "url": url, "scopes": [], "call_ids": []})
-            scope = (row.get("arguments") or {}).get("constituent", "abstract" if row["tool"] == "literature_fetch" else "claims")
+            scope = ("bibliographic_search" if row["tool"].endswith("_search") else
+                     (row.get("arguments") or {}).get("constituent", "abstract" if row["tool"] == "literature_fetch" else "claims"))
+            if not item["title"]:
+                item["title"] = str(record.get("title") or "")
             if scope not in item["scopes"]:
                 item["scopes"].append(scope)
             item["call_ids"].append(row.get("id", ""))

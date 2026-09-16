@@ -38,6 +38,8 @@ Claude 와 다른 두 가지 제약이 있다.
 
 from __future__ import annotations
 
+import json
+
 import asyncio
 import os
 import shutil
@@ -426,6 +428,10 @@ class AgyCliProvider(Provider):
         ]
         if request.model:
             args += ["--model", request.model]
+        if request.reasoning_effort in ("low", "medium", "high"):
+            args += ["--effort", request.reasoning_effort]
+        if request.response_schema is not None:
+            args += ["--json-schema", json.dumps(request.response_schema, ensure_ascii=False)]
         return args
 
     def payload_bytes(self, system_prompt: str, user_message: str) -> int:

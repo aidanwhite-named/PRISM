@@ -37,12 +37,13 @@ from dataclasses import dataclass, field as dataclass_field
 FIELD_TITLE = "ti"
 FIELD_ABSTRACT = "ab"
 FIELD_TITLE_ABSTRACT = "ta"
-FIELD_FULLTEXT = "txt"          # 제목·초록·청구항·설명 (EP/WO 위주로만 채워져 있다)
+FIELD_FULLTEXT = "txt"          # Legacy name: OPS title/abstract/inventor/applicant, NOT claims/description.
 FIELD_APPLICANT = "pa"
 FIELD_INVENTOR = "in"
 FIELD_PUBLICATION_NUMBER = "pn"
 FIELD_APPLICATION_NUMBER = "ap"
 FIELD_PRIORITY_NUMBER = "pr"
+FIELD_CITED_NUMBER = "ct"
 FIELD_IPC = "ipc"
 FIELD_CPC = "cpc"
 FIELD_CLASSIFICATION = "cl"     # ipc 또는 cpc
@@ -60,6 +61,7 @@ IDENTIFIER_FIELDS = (
     FIELD_PUBLICATION_NUMBER,
     FIELD_APPLICATION_NUMBER,
     FIELD_PRIORITY_NUMBER,
+    FIELD_CITED_NUMBER,
 )
 CLASSIFICATION_FIELDS = (FIELD_IPC, FIELD_CPC, FIELD_CLASSIFICATION)
 DATE_FIELDS = (FIELD_PUBLICATION_DATE,)

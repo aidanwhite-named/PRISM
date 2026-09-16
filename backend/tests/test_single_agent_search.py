@@ -4,6 +4,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 import pytest
+pytestmark = pytest.mark.usefixtures("legacy_search")
 from app import search_manifest as sm, search_verification as sv, search_report, search_legacy
 from app import search_channels, search_dates
 from app.search_mcp_server import SearchTools, ToolLimitExceeded, _query_node, _response
