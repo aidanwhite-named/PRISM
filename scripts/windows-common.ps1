@@ -56,7 +56,7 @@ function Install-PrismPackage {
     param([string]$Id, [string]$HelpUrl, [switch]$UserScope)
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     if (-not $winget) { throw "winget is unavailable. Install from $HelpUrl and run setup again." }
-    $arguments = @('install', '--id', $Id, '--exact', '--source', 'winget', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity')
+    $arguments = @('install', '--id', $Id, '--exact', '--source', 'winget', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity', '--silent')
     if ($UserScope) { $arguments += @('--scope', 'user') }
     Invoke-Checked $winget.Source $arguments
     Update-PrismPath

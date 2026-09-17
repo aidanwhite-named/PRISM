@@ -81,7 +81,7 @@ elseif ($Rebuild) {
 }
 
 if (-not (Test-Path $venvPython)) {
-    Write-Err '가상환경이 없습니다. 처음설치.cmd를 먼저 실행하십시오. 개발 환경은 -Setup을 사용합니다.'
+    Write-Err '가상환경이 없습니다. 설치.cmd를 먼저 실행하십시오. 개발 환경은 -Setup을 사용합니다.'
     exit 1
 }
 

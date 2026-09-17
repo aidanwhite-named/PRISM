@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = (
-    '처음설치.cmd', 'PRISM실행.cmd', 'setup.ps1', 'start-prism.ps1',
+    'setup.ps1', 'start-prism.ps1', 'scripts/install-window.ps1',
     'scripts/windows-common.ps1', '사용안내.txt',
     'backend/requirements.txt',
 )
@@ -47,13 +47,17 @@ def release_entries(root: Path) -> dict[str, bytes]:
     for name in PROMPTS:
         relative = f'prompt/{name}'
         entries[relative] = subprocess.check_output(['git', 'show', f'HEAD:{relative}'], cwd=root)
-    return entries
+    # Two entry points at the top; implementation stays in app/.
+    packed = {f'app/{name}': content for name, content in entries.items()}
+    packed['설치.cmd'] = (root / '설치.cmd').read_bytes().replace(b'%~dp0scripts', b'%~dp0app\\scripts')
+    packed['실행.cmd'] = (root / '실행.cmd').read_bytes().replace(b'%~dp0start-prism.ps1', b'%~dp0app\\start-prism.ps1')
+    return packed
 
 
 def main() -> None:
     entries = release_entries(ROOT)
     version = re.search(r'__version__\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"',
-                        entries['backend/app/__init__.py'].decode('utf-8')).group(1)
+                        entries['app/backend/app/__init__.py'].decode('utf-8')).group(1)
     output = ROOT / 'release'
     output.mkdir(exist_ok=True)
     archive = output / f'PRISM-{version}-windows-x64.zip'

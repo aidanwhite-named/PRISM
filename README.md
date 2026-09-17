@@ -13,8 +13,9 @@
 
 ## 시작하기
 
-배포 ZIP을 받은 경우 압축을 풀고 **처음설치.cmd → PRISM실행.cmd** 순서로 실행합니다.
-Python과 필요한 CLI를 설치하고, 미리 빌드한 화면을 사용합니다.
+배포 ZIP을 받은 경우 압축을 풀고 **설치.cmd → 실행.cmd** 순서로 실행합니다.
+설치를 누르면 선택 입력 없이 Python·라이브러리·Node.js·Claude Code·Codex를 준비합니다.
+진행 상황은 설치 창에서 보여줍니다. 구현 파일은 ZIP의 `app` 폴더에 모았습니다.
 자세한 내용은 [사용안내.txt](사용안내.txt)를 참고하세요.
 
 소스 실행 방법은 아래와 같습니다.
@@ -66,8 +67,6 @@ EPO·KIPRIS·OpenAlex 등의 검색 서비스 자격증명은 Settings에서 별
 - `.venv`, `node_modules`, DB·로그인 정보·개인 설정은 포함하지 않습니다.
 - 프롬프트는 로컬 편집본 대신 Git HEAD의 기본 템플릿을 포함합니다.
 - ZIP 설치는 `setup.ps1`, 개발 환경 설치·화면 빌드는 `start-prism.ps1 -Setup`을 사용합니다.
-- CLI 선택을 지정하려면 `powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Cli claude`를 사용합니다.
-  `codex`, `both`, `agy`(기존 설치 확인), `skip`(나중에 설치)도 지원합니다.
 - 설치 실패·기존 CLI 재사용 검증: `python scripts/test_windows_setup.py`
 - ZIP 설치·실행 검증: `python scripts/smoke_release.py release/PRISM-2.0.0-windows-x64.zip`
   임시 가상환경에 의존성을 실제 설치합니다. 시스템 Python·CLI 설치와 계정 로그인은 수행하지 않습니다.

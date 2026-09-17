@@ -82,6 +82,24 @@ class SetupTests(unittest.TestCase):
         result = subprocess.run([POWERSHELL, '-NoProfile', '-Command', script], capture_output=True)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_default_setup_never_prompts_and_prepares_both_clis(self):
+        source = (ROOT / 'setup.ps1').read_text(encoding='utf-8-sig')
+        self.assertNotIn('Read-Host', source)
+        self.assertIn("[string]$Cli = 'both'", source)
+
+    def test_install_window_waits_for_worker_and_preserves_result(self):
+        for code in (0, 7):
+            with self.subTest(code=code), tempfile.TemporaryDirectory(prefix='prism-window-') as temporary:
+                root = Path(temporary) / '한글 공백'
+                (root / 'scripts').mkdir(parents=True)
+                shutil.copyfile(ROOT / 'scripts/install-window.ps1', root / 'scripts/install-window.ps1')
+                (root / 'setup.ps1').write_text(f"Write-Host '[1/5] testing'; Start-Sleep -Milliseconds 600; exit {code}", encoding='utf-8-sig')
+                result = subprocess.run([POWERSHELL, '-NoProfile', '-STA', '-WindowStyle', 'Hidden',
+                                         '-ExecutionPolicy', 'Bypass', '-File', str(root / 'scripts/install-window.ps1'),
+                                         '-VerifyAutomation'], capture_output=True, timeout=20)
+                self.assertEqual(result.returncode, code, result.stderr)
+                self.assertIn('testing', (root / '.setup/install-output.log').read_text())
+
 
 if __name__ == '__main__':
     unittest.main()
