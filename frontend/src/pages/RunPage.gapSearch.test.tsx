@@ -5,9 +5,9 @@
  *  아무 일이 일어나지 않는 것으로 보이고, 기능이 사라진 것과 구분되지 않는다.
  *  그래서 "열리는가"가 아니라 "보고서보다 앞에 열리는가"를 고정한다.
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { HashRouter } from "react-router-dom";
+import { HashRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Job, Prompt, ProviderInfo } from "../lib/types";
@@ -109,6 +109,7 @@ afterEach(() => {
   cleanup();
   sessionStorage.clear();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 it('shows one precision checkbox before the claim and defaults to automatic basic search', async () => {
@@ -182,6 +183,47 @@ describe("종속항 추가 분석", () => {
 });
 
 describe("미대응 구성 검색", () => {
+  it("중간 후보 수신부터 검색 완료까지 결과 화면을 유지한다", async () => {
+    const { api } = await import("../lib/api");
+    let source: { onmessage: ((event: { data: string }) => void) | null };
+    class FakeSource {
+      onmessage = null;
+      onerror = null;
+      close() {}
+      constructor() { source = this; }
+    }
+    vi.stubGlobal("EventSource", FakeSource);
+    const searching = { ...job, id: "gap-search", job_kind: "similarity_search",
+      status: "RUNNING", result_text: "", source_job_id: job.id } as Job;
+    // runner.emit이 체크포인트를 게시할 때 실제로 사용하는 날짜 필터 형식.
+    const preview = { ...searching, search_manifest: {
+      version: 14, status: "incomplete", group_definitions: {}, reported: null,
+      tool_availability: {}, date_filter: {},
+      error: "모델이 저장한 중간 후보입니다. 검색이 진행 중입니다.",
+    } } as Job;
+    const completed = { ...preview, status: "SUCCEEDED", search_manifest: {
+      ...preview.search_manifest, status: "complete", error: null,
+      date_filter: { cutoff: "", applied: false, excluded: [], unknown_publication_date: 0 },
+    } } as Job;
+    vi.mocked(api.listProviders).mockResolvedValueOnce([{ ...provider, usable: true }]);
+    vi.mocked(api.createJob).mockResolvedValueOnce(searching);
+    vi.mocked(api.getJob).mockResolvedValueOnce(preview).mockResolvedValueOnce(completed);
+    window.location.hash = `#/analysis?job=${JOB_ID}`;
+    render(<RunSessionProvider><HashRouter><Routes>
+      <Route path="/analysis" element={<RunPage kind="patent_analysis" />} />
+      <Route path="/search" element={<RunPage kind="similarity_search" />} />
+    </Routes></HashRouter></RunSessionProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: "미대응 구성 검색" }));
+    await userEvent.click(screen.getByRole("button", { name: "선택 구성으로 웹 검색" }));
+    expect(await screen.findByRole("heading", { name: "검토 후보 탐색 결과" })).toBeTruthy();
+    act(() => source.onmessage?.({ data: JSON.stringify({ seq: 1, type: "search_preview_ready", payload: {} }) }));
+    expect(await screen.findByText(/모델이 저장한 중간 후보/)).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /결과 보기/ }).getAttribute("aria-selected")).toBe("true");
+    act(() => source.onmessage?.({ data: JSON.stringify({ seq: 2, type: "done", payload: {} }) }));
+    expect(await screen.findByText("성공")).toBeTruthy();
+    expect(screen.queryByText(/모델이 저장한 중간 후보/)).toBeNull();
+    expect(screen.getByRole("heading", { name: "검토 후보 탐색 결과" })).toBeTruthy();
+  });
   it("구성 블록 오류를 보고서 앞에 표시하고 본문은 유지한다", async () => {
     const { api } = await import("../lib/api");
     const invalid = {

@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import agy_permissions as perms
+from ..runtime import search_server_command
 
 SERVER_NAME = "prism-search"
 PERMISSION_RULE = f"mcp({SERVER_NAME}/*)"
@@ -69,11 +70,8 @@ def schema_dir() -> Path:
 
 
 def desired_entry() -> dict:
-    backend_root = Path(__file__).resolve().parents[2]
     return {
-        "command": sys.executable,
-        "args": ["-m", "app.search_mcp_server"],
-        "env": {"PYTHONPATH": str(backend_root)},
+        **search_server_command(),
         "disabled": False,
     }
 

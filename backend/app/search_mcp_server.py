@@ -106,7 +106,7 @@ class SearchTools:
         self.values = values
         self.backends = {}
         self._lock = threading.RLock()
-        self._source_locks = {name: threading.RLock() for name in ('epo', 'literature', 'kipris')}
+        self._source_locks = {name: threading.RLock() for name in ('epo', 'literature', 'kipris', 'arxiv')}
         self.disabled_sources = {}
         openalex_key = str(values.get("literature_openalex_api_key") or "").strip()
         self.secrets = (
@@ -238,7 +238,8 @@ class SearchTools:
         if name.endswith("_fetch"):
             with self._source_locks[backend_id]:
                 return self._fetch(backend_id, arguments, "doi" if backend_id == "literature" else "publication_number")
-        with self._source_locks[backend_id]:
+        lock_id = 'arxiv' if backend_id == 'literature' and arguments.get('source') == 'arxiv' else backend_id
+        with self._source_locks[lock_id]:
             return self._plain_search(backend_id, arguments)
 
     def _backend(self, backend_id):
@@ -266,7 +267,11 @@ class SearchTools:
 
     def _plain_search(self, backend_id, arguments):
         query = arguments["query"]
-        backend = self._backend(backend_id)
+        # OpenAlex and arXiv search concurrently; initialize shared resources once.
+        with self._lock:
+            backend = self._backend(backend_id)
+            if backend_id == 'literature':
+                backend.artifact_store
         source = arguments.get("source")
         if backend_id == "literature" and source == "arxiv":
             response = backend.search_arxiv(query, arguments.get("max_results", 5))
@@ -525,9 +530,10 @@ _CITATION_SEARCH = _tool('citation_search',
      'begin': {'type': 'integer', 'minimum': 1, 'maximum': 2000}}, ['identifier', 'direction'])
 
 _START_COLLECTION = _tool('start_collection',
-    'Start independent EPO, KIPRIS and OpenAlex requests in background, returning immediately. Supply source-specific model-written queries for all useful available sources. Run native web search while these requests run; then collect_results. Default 3, maximum 4 results per source. One active round at a time; no automatic query planning.',
+    'Start independent EPO, KIPRIS, OpenAlex and arXiv requests in background, returning immediately. Include arxiv_query for direct arXiv search alongside openalex_query. Supply source-specific model-written queries for all useful available sources. Results use literature_search for OpenAlex and arxiv_search for arXiv. Run native web search while these requests run; then collect_results. Default 3, maximum 4 results per source. One active round at a time; no automatic query planning.',
     {'epo_query': _QUERY_SCHEMA, 'kipris_query': {'type': 'string', 'maxLength': 500},
      'openalex_query': {'type': 'string', 'maxLength': 500},
+     'arxiv_query': {'type': 'string', 'maxLength': 500},
      'max_results': {'type': 'integer', 'minimum': 1, 'maximum': 4}}, [])
 _COLLECT_RESULTS = _tool('collect_results',
     'Nonblocking snapshot of the current parallel collection. Read completed results and continue useful work while any sources are pending. Results stay in journal even if this session ends.', {}, [])

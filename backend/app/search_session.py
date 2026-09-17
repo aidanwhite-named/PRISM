@@ -38,22 +38,33 @@ def start_collection(tools, arguments):
     skipped = []
     for source, field, tool in [('epo', 'epo_query', 'epo_search'),
                                 ('kipris', 'kipris_query', 'kipris_search'),
-                                ('literature', 'openalex_query', 'literature_search')]:
+                                ('literature', 'openalex_query', 'literature_search'),
+                                ('literature', 'arxiv_query', 'literature_search')]:
         if field not in arguments:
             continue
         if statuses.get(source, {}).get('status') != 'available':
             skipped.append({'source': source, 'reason': 'not_available'})
             continue
         args = {'query': arguments[field], 'max_results': size}
+        key = tool
         if source == 'literature':
-            args.update(source='openalex', openalex_mode='title_and_abstract')
-        requests.append((tool, args))
+            channel = field.removesuffix('_query')
+            availability = statuses[source].get('sources', {}).get(channel, 'available')
+            if availability != 'available':
+                skipped.append({'source': channel, 'reason': availability})
+                continue
+            args['source'] = channel
+            if channel == 'openalex':
+                args['openalex_mode'] = 'title_and_abstract'
+            else:
+                key = 'arxiv_search'
+        requests.append((key, tool, args))
     if not requests:
         return {'started': [], 'skipped': skipped}
     if not getattr(tools, 'collection_pool', None):
-        tools.collection_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='search-api')
-    tools.collection = {name: tools.collection_pool.submit(tools.call, name, args) for name, args in requests}
-    return {'started': [name for name, _ in requests], 'skipped': skipped,
+        tools.collection_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='search-api')
+    tools.collection = {key: tools.collection_pool.submit(tools.call, name, args) for key, name, args in requests}
+    return {'started': [key for key, _, _ in requests], 'skipped': skipped,
             'next_action': 'Run native web search now while APIs run; then call collect_results. Screen results and save at most 15 candidates.'}
 
 

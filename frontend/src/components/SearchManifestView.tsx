@@ -40,11 +40,19 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
   if (data.engine) return <ProgressiveSearchResults data={data.engine} />;
   const candidates = data.reported?.candidates ?? [];
   const audit = data.quality?.search_audit;
+  // 중간 후보는 날짜 필터 처리가 끝나기 전에 도착한다.
+  const dateFilter = data.date_filter;
+  const excludedByDate = dateFilter?.excluded ?? [];
   const groups = ["A", "B", "C", null] as const;
   return <div className="search-results">
     <nav className="search-group-nav" aria-label="문헌 그룹">
       {groups.filter(group => group || candidates.some(item => item.group === null)).map(group =>
-        <a key={group ?? "none"} href={`#search-group-${group ?? "none"}`}>
+        <a key={group ?? "none"} href={`#search-group-${group ?? "none"}`}
+          onClick={event => {
+            // HashRouter도 해시를 사용하므로 문서 내 이동이 보고서 주소를 바꾸면 안 된다.
+            event.preventDefault();
+            document.getElementById(`search-group-${group ?? "none"}`)?.scrollIntoView({ block: "start" });
+          }}>
           <strong>{categoryLabel(group)}</strong><span>{candidates.filter(item => item.group === group).length}건</span>
           <small>{data.group_definitions[group ?? ""] || "분류되지 않은 참고 후보"}</small>
         </a>)}
@@ -89,7 +97,7 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     <details><summary>검색 도구 및 기준일</summary>
     <ul>{Object.entries(data.tool_availability).map(([name, value]) =>
       <li key={name}>{name}: {value.detail}</li>)}</ul>
-    <p>검색 기준일: {data.date_filter.cutoff || "없음"} · 공개일 불명: {data.date_filter.unknown_publication_date || 0}건</p>
+    <p>검색 기준일: {dateFilter?.cutoff == null ? "확인 중" : dateFilter.cutoff || "없음"} · 공개일 불명: {dateFilter?.unknown_publication_date == null ? "확인 중" : `${dateFilter.unknown_publication_date}건`}</p>
     </details>
     {groups.filter(group => group || candidates.some(item => item.group === null)).map(group => <section key={group ?? "none"} id={`search-group-${group ?? "none"}`} className="search-result-group">
       <header><h2>{categoryLabel(group)} <span>{candidates.filter(item => item.group === group).length}건</span></h2>
@@ -120,8 +128,8 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
         </details>
       </section>;
     })}</section>)}
-    {data.date_filter.excluded.length > 0 && <details><summary>기준일 이후 공개로 제외된 문헌</summary>
-      <pre>{JSON.stringify(data.date_filter.excluded, null, 2)}</pre></details>}
+    {excludedByDate.length > 0 && <details><summary>기준일 이후 공개로 제외된 문헌</summary>
+      <pre>{JSON.stringify(excludedByDate, null, 2)}</pre></details>}
     {!!data.reported?.candidate_dispositions?.length && <details><summary>후보 제외·통합 기록</summary>
       <ul>{data.reported.candidate_dispositions.map((item, i) => <li key={i}>{item.doc_number || item.doi || item.url}: {item.reason}</li>)}</ul>
     </details>}

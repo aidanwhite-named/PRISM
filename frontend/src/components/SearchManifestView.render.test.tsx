@@ -1,5 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { HashRouter, Route, Routes } from "react-router-dom";
 import SearchManifestView, { linkableUrl, SearchResults } from "./SearchManifestView";
 import type { Job, SearchManifestV14 } from "../lib/types";
 afterEach(cleanup);
@@ -24,6 +26,37 @@ function current(): SearchManifestV14 {
   };
 }
 describe("single-agent audit", () => {
+  it.each([{}, undefined, null])("renders a search preview before date filtering (%s)", (dateFilter) => {
+    const preview = { ...current(), status: "incomplete", date_filter: dateFilter,
+      error: "모델이 저장한 중간 후보입니다. 검색이 진행 중입니다." } as unknown as SearchManifestV14;
+    const { rerender } = render(<SearchResults data={preview} />);
+    expect(screen.getByText(/모델이 저장한 중간 후보/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /모델 제목/ })).toBeTruthy();
+    expect(screen.queryByText("기준일 이후 공개로 제외된 문헌")).toBeNull();
+    rerender(<SearchResults data={current()} />);
+    expect(screen.queryByText(/모델이 저장한 중간 후보/)).toBeNull();
+    expect(screen.getByRole("heading", { name: /모델 제목/ })).toBeTruthy();
+  });
+  it("keeps the report route when jumping to a document group", async () => {
+    const previousHash = window.location.hash;
+    window.location.hash = "#/search?job=saved-report";
+    try {
+      render(<HashRouter><Routes>
+        <Route path="/search" element={<SearchResults data={current()} />} />
+        <Route path="*" element={<p>결과 화면을 벗어났습니다.</p>} />
+      </Routes></HashRouter>);
+      const group = document.getElementById("search-group-C")!;
+      const scroll = vi.fn();
+      group.scrollIntoView = scroll;
+      await userEvent.click(screen.getByRole("link", { name: /Z분류/ }));
+      expect(window.location.hash).toBe("#/search?job=saved-report");
+      expect(scroll).toHaveBeenCalledWith({ block: "start" });
+      expect(screen.getByRole("heading", { name: /모델 제목/ })).toBeTruthy();
+    } finally {
+      cleanup();
+      window.location.hash = previousHash;
+    }
+  });
   it("distinguishes completed deadline classification from an interrupted search", () => {
     const data = current();
     data.deadline_classification = { attempted: true, completed: true, reason: "마감 분류", candidate_count: 4 };

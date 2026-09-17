@@ -769,8 +769,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .page-settings > .settings-run-limits,
 .page-settings > .settings-epo,
 .page-settings > .settings-kipris,
-.page-settings > .settings-literature,
-.page-settings > .settings-agy-permissions { grid-column: 1 / -1; }
+.page-settings > .settings-literature { grid-column: 1 / -1; }
 .settings-integration-copy { max-width: 900px; }
 .settings-limit-grid {
   display: grid;

@@ -255,13 +255,8 @@ def _live_transport(request: urllib.request.Request, timeout: float) -> HttpResp
 
 @dataclass
 class LiteratureClient:
-    """Crossref·Europe PMC 조회. 자격증명이 없다.
+    """Crossref·Europe PMC 조회. 자격증명이 없다."""
 
-    ``mailto`` 는 Crossref 의 예의 풀(polite pool) 표시다. 넣으면 더 안정적인
-    큐로 들어간다. 사용자 식별에 쓰지 않으며, 넣지 않아도 동작한다.
-    """
-
-    mailto: str = ""
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     http_budget_seconds: float = DEFAULT_HTTP_BUDGET_SECONDS
     transport: Callable[[urllib.request.Request, float], HttpResponse] = (
@@ -293,17 +288,11 @@ class LiteratureClient:
         }
 
     # --- 전송 -----------------------------------------------------------
-    def _user_agent(self) -> str:
-        # Crossref 는 연락처가 담긴 User-Agent 를 권한다. 없으면 익명으로 간다.
-        if self.mailto:
-            return f"PRISM/1.0 (https://github.com/; mailto:{self.mailto})"
-        return "PRISM/1.0"
-
     def _send(self, url: str, *, source: str, kind: str) -> LiteratureCall:
         self._require_budget()
         request = urllib.request.Request(
             url,
-            headers={"User-Agent": self._user_agent(), "Accept": "application/json"},
+            headers={"User-Agent": "PRISM/1.0", "Accept": "application/json"},
             method="GET",
         )
         started = time.monotonic()
@@ -353,8 +342,6 @@ class LiteratureClient:
             "rows": str(_clamp_rows(rows)),
             "select": ",".join(_CROSSREF_SELECT),
         }
-        if self.mailto:
-            params["mailto"] = self.mailto
         url = f"{CROSSREF_BASE}/works?" + urllib.parse.urlencode(params)
         return self._send(url, source=SOURCE_CROSSREF, kind="search")
 
@@ -362,8 +349,6 @@ class LiteratureClient:
         """DOI 하나의 등록 서지를 받는다."""
         key = normalize_doi(doi)
         url = f"{CROSSREF_BASE}/works/{urllib.parse.quote(key, safe='')}"
-        if self.mailto:
-            url += "?" + urllib.parse.urlencode({"mailto": self.mailto})
         return self._send(url, source=SOURCE_CROSSREF, kind="detail")
 
     # --- Europe PMC -----------------------------------------------------

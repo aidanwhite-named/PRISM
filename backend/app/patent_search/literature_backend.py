@@ -19,7 +19,7 @@ search_verification.targets 에서 조용히 빠졌고, 웹에서도 mdpi.com �
 ---------------
 EPO 와 달리 키가 필요 없다. 그래서 ``configured`` 는 항상 참이고, 사용자가 켜기만
 하면 동작한다. 대신 예의를 지키는 쪽으로 기본값을 잡는다 — 질의 수 상한과
-네트워크 시간 예산을 두고, Crossref 에는 연락처를 함께 보낸다.
+네트워크 시간 예산을 둔다.
 """
 
 from __future__ import annotations
@@ -43,7 +43,6 @@ from .base import (
 )
 
 SETTING_ENABLED = "literature_integration_enabled"
-SETTING_MAILTO = "literature_contact_email"
 SETTING_MAX_RESULTS = "literature_max_results_per_query"
 SETTING_HTTP_BUDGET = "literature_http_budget_seconds"
 SETTING_OPENALEX_KEY = "literature_openalex_api_key"
@@ -84,7 +83,6 @@ class LiteratureBackend(PatentSearchBackend):
         # 세 번째 호출을 만들어 실패 소스로 기록되지 않게 하기 위해서다.
         self._use_openalex = openalex is not None
         self._openalex_key = ""
-        self._mailto = ""
         self._max_results = 10
         self._http_budget = literature_client.DEFAULT_HTTP_BUDGET_SECONDS
         self._search_calls = 0
@@ -93,7 +91,6 @@ class LiteratureBackend(PatentSearchBackend):
 
     # --- 설정 -----------------------------------------------------------
     def configure(self, values: Mapping[str, Any]) -> None:
-        self._mailto = str(values.get(SETTING_MAILTO) or "").strip()
         self._max_results = _positive_int(values.get(SETTING_MAX_RESULTS), 10)
         self._http_budget = float(
             _positive_int(
@@ -104,7 +101,6 @@ class LiteratureBackend(PatentSearchBackend):
         self._openalex_key = str(values.get(SETTING_OPENALEX_KEY) or "").strip()
         self._use_openalex = True
         if self._client is not None:
-            self._client.mailto = self._mailto
             self._client.http_budget_seconds = self._http_budget
         if self._openalex is not None:
             self._openalex.api_key = self._openalex_key
@@ -144,7 +140,6 @@ class LiteratureBackend(PatentSearchBackend):
     def _require_client(self) -> literature_client.LiteratureClient:
         if self._client is None:
             self._client = literature_client.LiteratureClient(
-                mailto=self._mailto,
                 http_budget_seconds=self._http_budget,
             )
         return self._client

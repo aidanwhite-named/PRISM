@@ -255,7 +255,6 @@ export default function SettingsPage() {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [probing, setProbing] = useState(false);
-  const [applyingAgy, setApplyingAgy] = useState(false);
   const [smoke, setSmoke] = useState<Record<string, unknown> | null>(null);
   const [searchChecking, setSearchChecking] = useState("");
   const [message, setMessage] = useState("");
@@ -297,7 +296,6 @@ export default function SettingsPage() {
   // EPO OPS 자격증명 입력 초안. Secret 은 서버가 되돌려주지 않으므로 저장된
   // 값에서 채우지 않고, 저장에 성공하면 비운다.
   const [epoKey, setEpoKey] = useState("");
-  const [literatureEmail, setLiteratureEmail] = useState("");
   const [epoSecret, setEpoSecret] = useState("");
   const [epoChecking, setEpoChecking] = useState(false);
   const [epoCheck, setEpoCheck] = useState<CredentialCheck | null>(null);
@@ -333,7 +331,6 @@ export default function SettingsPage() {
         setSearchModels(s.values.search_models ?? {});
         setSearchEfforts(s.values.search_reasoning_effort ?? {});
         setEpoKey(s.values.epo_consumer_key ?? "");
-        setLiteratureEmail(s.values.literature_contact_email ?? "");
       })
       .catch((e) => setError(e.message));
   }, []);
@@ -345,11 +342,6 @@ export default function SettingsPage() {
   useEffect(() => {
     if (settings) setEpoKey(settings.values.epo_consumer_key ?? "");
   }, [settings?.values.epo_consumer_key]);
-
-  useEffect(() => {
-    if (settings)
-      setLiteratureEmail(settings.values.literature_contact_email ?? "");
-  }, [settings?.values.literature_contact_email]);
 
   useEffect(() => {
     if (!loginSession || !loginSession.can_cancel) return;
@@ -432,26 +424,6 @@ export default function SettingsPage() {
       setError((e as Error).message);
     } finally {
       setProbing(false);
-    }
-  };
-
-  // 권장 열람 허용 목록 재적용. PRISM 이 이 파일을 자동으로 고치는 것은 설치당
-  // 한 번뿐이므로, 그 뒤에 다시 넣는 유일한 경로가 이 버튼이다.
-  const applyAgyPermissions = async () => {
-    setApplyingAgy(true);
-    try {
-      const updated = await api.applyAgyPermissions();
-      setSettings(updated);
-      const missing = updated.agy_permissions?.missing?.length ?? 0;
-      notify(
-        missing === 0
-          ? "권장 논문 출처를 허용 목록에 적용했습니다."
-          : "일부 권장 출처를 적용하지 못했습니다. 아래 상태를 확인하십시오.",
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setApplyingAgy(false);
     }
   };
 
@@ -727,7 +699,6 @@ export default function SettingsPage() {
   const v = settings.values;
   // agy 의 허용 목록은 PRISM 설정값이 아니라 다른 도구의 파일에서 읽은 사실이라
   // values 가 아니라 별도 칸으로 온다. 옛 백엔드는 보내지 않는다.
-  const agyPermissions = settings.agy_permissions;
   // Secret 은 values 로 내려오지 않는다. 저장 여부의 근거는 이쪽뿐이다.
   const epoSecretSaved = settings.secrets_set?.epo_consumer_secret === true;
   const openalexKeySaved =
@@ -748,7 +719,11 @@ export default function SettingsPage() {
 
       {message && <div className="notice ok">{message}</div>}
       {error && <div className="notice danger">{error}</div>}
-      {settings.warnings.map((w, i) => (
+      {settings.warnings.filter((warning) =>
+        // 재시작 전의 백엔드가 보내는 폐기한 안내도 표시하지 않는다.
+        !warning.includes("셸·파일 도구를 끄는 수단이 없습니다") &&
+        !warning.startsWith("의미 검색이 켜져 있습니다."),
+      ).map((w, i) => (
         <div className="notice warn" key={i}>
           {w}
         </div>
@@ -1044,29 +1019,6 @@ export default function SettingsPage() {
         {v.literature_integration_enabled && (
           <div style={{ marginTop: 14 }}>
             <div className="field">
-              <label>연락처 이메일 (선택)</label>
-              <input
-                value={literatureEmail}
-                onChange={(e) => setLiteratureEmail(e.target.value)}
-                placeholder="Crossref 예의 풀 표시용. 비워 두어도 동작합니다."
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <div className="hint">
-                Crossref가 권장하는 표시입니다. 넣으면 더 안정적인 큐로
-                들어갑니다. 다른 용도로 쓰이지 않습니다.
-              </div>
-              <button
-                className="btn"
-                onClick={() =>
-                  saveValue("literature_contact_email", literatureEmail.trim())
-                }
-              >
-                연락처 저장
-              </button>
-            </div>
-
-            <div className="field">
               <label htmlFor="openalex-api-key">
                 OpenAlex API Key{" "}
                 <span
@@ -1139,118 +1091,6 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
-
-      {v.progressive_search_enabled === false && <div className="card settings-agy-permissions">
-        <div className="split" style={{ marginBottom: 12 }}>
-          <h2 style={{ margin: 0 }}>논문 페이지 열람 허용 목록 (agy)</h2>
-          <button
-            className="btn small"
-            onClick={applyAgyPermissions}
-            disabled={applyingAgy}
-          >
-            {applyingAgy ? "적용 중…" : "권장 목록 다시 적용"}
-          </button>
-        </div>
-        <p className="muted settings-integration-copy">
-          agy 는 승인 창을 띄울 수 없는 실행에서 허용 목록에 없는 주소를 자동으로
-          거부하고, <b>그 자리에서 실행 전체를 빈 응답으로 종료합니다.</b> 이미
-          끝난 검색 결과와 감사 블록까지 함께 사라집니다. 그래서 PRISM 은{" "}
-          <code>permissions.allow</code> 에 <code>read_url(*)</code> 를 넣어
-          Codex·Claude 와 같이 어떤 주소든 열 수 있게 합니다. 이 규칙은 페이지
-          열람 도구에만 적용되고 명령 실행·파일 쓰기의 승인은 그대로입니다. 연
-          주소는 실행 기록의 감사 블록에 남습니다.
-        </p>
-        <p className="muted settings-integration-copy">
-          이 파일은 agy <b>전역</b> 설정이라 PRISM 밖에서 agy 를 쓸 때도 같은
-          규칙이 적용됩니다.
-        </p>
-        <p className="muted settings-integration-copy">
-          <b>자동 적용은 설치당 한 번뿐입니다.</b> 그 뒤로 PRISM 은 이 파일을 읽기만
-          하며, Provider 를 다시 검사해도 목록을 고치지 않습니다 — 여기서 호스트를
-          지운 것은 그러기로 한 선택이고, 프로그램이 되살릴 일이 아니기 때문입니다.
-          나중에 권장 목록이 늘어나도 <b>그때 새로 추가된 호스트만</b> 넣습니다.
-          지우신 항목은 그대로 둡니다. 전체 목록을 다시 넣는 유일한 방법이 위
-          버튼입니다. 어느 경우에도 기존 항목을 덮어쓰지 않습니다.
-        </p>
-        {agyPermissions ? (
-          <>
-            <div className="faint break" style={{ marginBottom: 8 }}>
-              설정 파일: <span className="mono-text">{agyPermissions.path}</span>
-            </div>
-            {agyPermissions.error ? (
-              <div className="notice danger">
-                <strong>허용 목록을 읽지 못했습니다</strong>
-                <div>{agyPermissions.error}</div>
-              </div>
-            ) : !agyPermissions.exists ? (
-              <div className="notice info">
-                설정 파일이 아직 없습니다. agy 를 한 번 실행하면 만들어지고, 그때
-                PRISM 이 권장 호스트를 한 번 넣습니다. 지금 바로 만들려면 위의
-                「권장 목록 다시 적용」을 누르십시오.
-              </div>
-            ) : (
-              <>
-                <div className="pill-row" style={{ marginBottom: 8 }}>
-                  {agyPermissions.recommended.map((host) => {
-                    const applied = agyPermissions.applied.includes(host);
-                    return (
-                      <span
-                        key={host}
-                        className={`pill ${applied ? "ok" : "warn"}`}
-                        title={
-                          applied
-                            ? "적용됨 — 이 호스트는 지금 열 수 있습니다."
-                            : "아직 없습니다. agy 를 다시 검사하면 추가합니다."
-                        }
-                      >
-                        {applied ? "적용됨" : "미적용"} · {host}
-                      </span>
-                    );
-                  })}
-                </div>
-                {agyPermissions.missing.length > 0 && (
-                  <div className="notice info">
-                    적용되지 않은 권장 호스트가 {agyPermissions.missing.length}곳
-                    있습니다. 직접 지우신 것이라면 그대로 두십시오 — PRISM 은 다시
-                    넣지 않습니다. 넣으려면 위의 <b>권장 목록 다시 적용</b>을
-                    누르십시오.
-                  </div>
-                )}
-                {agyPermissions.wildcard ? (
-                  <div className="notice ok">
-                    <strong>모든 주소 열람 허용 (read_url(*))</strong>
-                    <div>
-                      목록 밖 주소 때문에 검색 실행이 종료되지 않습니다.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="notice warn">
-                    <strong>read_url(*) 가 없습니다</strong>
-                    <div>
-                      아래 호스트만 열 수 있고, 목록 밖 주소를 열려고 하면 실행
-                      전체가 종료됩니다. 넣으려면 위의 <b>권장 목록 다시 적용</b>을
-                      누르십시오.
-                    </div>
-                  </div>
-                )}
-                <div className="faint" style={{ marginTop: 8 }}>
-                  허용은 접근 권한일 뿐 열람 성공을 보장하지 않습니다. 로그인·
-                  유료벽·봇 차단이 걸리면 그 문헌을 미검증 후보로 남기고 나머지
-                  검색을 계속하도록 <b>모델에게 지시합니다.</b> PRISM 이 강제할
-                  수 있는 동작은 아닙니다 — 모델이 이 지시를 무시하면 그 실행은
-                  실패로 기록됩니다.
-                </div>
-                <div className="faint break" style={{ marginTop: 8 }}>
-                  이 파일에 등록된 전체 호스트({agyPermissions.allowed_hosts.length}
-                  곳): {agyPermissions.allowed_hosts.join(", ") || "없음"}
-                </div>
-              </>
-            )}
-          </>
-        ) : (
-          <div className="faint">허용 목록 정보를 받지 못했습니다.</div>
-        )}
-      </div>}
 
       <div className="card settings-provider">
         <div className="split" style={{ marginBottom: 12 }}>

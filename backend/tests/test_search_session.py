@@ -36,7 +36,7 @@ def test_shared_json_retries_windows_reader_without_losing_old_value(tmp_path, m
 def test_parallel_requests_overlap_and_fail_independently(tmp_path, monkeypatch):
     tools = SearchTools(values={}, work_dir=tmp_path, max_calls=40)
     monkeypatch.setattr(tools, 'statuses', lambda: {s: {'status': 'available'} for s in ('epo', 'kipris', 'literature')})
-    entered = threading.Barrier(4)
+    entered = threading.Barrier(5)
     release = threading.Event()
     observed = []
     original = tools.call
@@ -53,16 +53,17 @@ def test_parallel_requests_overlap_and_fail_independently(tmp_path, monkeypatch)
 
     monkeypatch.setattr(tools, 'call', call)
     started = tools.call('start_collection', {'epo_query': {'type': 'term', 'field': 'ta', 'value': 'joint limits'},
-                                            'kipris_query': '관절', 'openalex_query': 'joint limits'})
+                                            'kipris_query': '관절', 'openalex_query': 'joint limits',
+                                            'arxiv_query': 'joint constraints'})
     try:
         entered.wait(timeout=5)
-        assert len(started['started']) == 3
+        assert len(started['started']) == 4
         # The main/model thread is free to search the web while all APIs block.
-        assert len(tools.call('collect_results', {})['pending']) == 3
+        assert len(tools.call('collect_results', {})['pending']) == 4
         with pytest.raises(ValueError, match='collection_running'):
             tools.call('start_collection', {'openalex_query': 'another query'})
         assert all(args['max_results'] == 3 for _, args in observed)
-        assert observed[-1][1].get('source') == 'openalex'
+        assert {args['source'] for name, args in observed if name == 'literature_search'} == {'openalex', 'arxiv'}
     finally:
         release.set()
         tools.collection_pool.shutdown(wait=True)
@@ -70,9 +71,46 @@ def test_parallel_requests_overlap_and_fail_independently(tmp_path, monkeypatch)
     assert not result['pending']
     assert result['completed']['epo_search']['records']
     assert result['completed']['literature_search']['records']
+    assert result['completed']['arxiv_search']['records']
     assert result['completed']['kipris_search']['error_code'] == 'KIPRIS.31'
     with pytest.raises(ValueError, match='invalid_integer'):
         tools.call('start_collection', {'openalex_query': 'test', 'max_results': 5})
+
+
+def test_openalex_and_arxiv_overlap_through_real_dispatch(tmp_path, monkeypatch):
+    tools = SearchTools(values={}, work_dir=tmp_path, max_calls=40)
+    monkeypatch.setattr(tools, 'statuses', lambda: {s: {'status': 'available'} for s in ('epo', 'kipris', 'literature')})
+    entered = threading.Barrier(3)
+    release = threading.Event()
+
+    def search(backend_id, arguments):
+        entered.wait(timeout=5)
+        assert release.wait(timeout=5)
+        return {'records': [{'source': arguments['source']}]}
+
+    monkeypatch.setattr(tools, '_plain_search', search)
+    tools.call('start_collection', {'openalex_query': 'mesh merging', 'arxiv_query': 'texture atlas'})
+    try:
+        entered.wait(timeout=5)
+        assert set(tools.call('collect_results', {})['pending']) == {'literature_search', 'arxiv_search'}
+    finally:
+        release.set()
+        tools.collection_pool.shutdown(wait=True)
+    completed = tools.call('collect_results', {})['completed']
+    assert completed['literature_search']['records'] == [{'source': 'openalex'}]
+    assert completed['arxiv_search']['records'] == [{'source': 'arxiv'}]
+    rows = search_manifest.read_tool_journal(tmp_path)
+    assert {r['arguments']['source'] for r in rows if r['tool'] == 'literature_search' and r['state'] == 'completed'} == {'openalex', 'arxiv'}
+
+
+def test_collection_skips_unavailable_arxiv(tmp_path, monkeypatch):
+    tools = SearchTools(values={}, work_dir=tmp_path)
+    monkeypatch.setattr(tools, 'statuses', lambda: {
+        'epo': {'status': 'unavailable'}, 'kipris': {'status': 'unavailable'},
+        'literature': {'status': 'available', 'sources': {'arxiv': 'dependency_missing'}}})
+    result = tools.call('start_collection', {'arxiv_query': 'mesh merging'})
+    assert result == {'started': [], 'skipped': [{'source': 'arxiv', 'reason': 'dependency_missing'}],
+                      'budget': tools.budget()}
 
 
 def test_shortlist_limit_replacement_and_raw_hits_not_promoted(tmp_path):

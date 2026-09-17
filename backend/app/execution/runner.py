@@ -40,6 +40,7 @@ from .. import (
     settings_service,
 )
 from ..config import PATHS
+from ..runtime import search_server_command
 from .. import search_budget as search_limits
 from ..db import session_scope
 from ..enums import DeliveryPlan, ErrorCode, JobKind, JobStatus, RetrievalMode
@@ -73,13 +74,13 @@ search_spec = job_assembly.search_spec
 
 def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int) -> dict:
     """Per-run MCP config.  No credentials are placed in CLI arguments."""
-    backend_root = Path(__file__).resolve().parents[2]
+    launch = search_server_command()
     return {
         "prism-search": {
-            "command": sys.executable,
-            "args": ["-m", "app.search_mcp_server"],
+            "command": launch["command"],
+            "args": launch["args"],
             "env": {
-                "PYTHONPATH": str(backend_root),
+                **launch["env"],
                 "PRISM_SEARCH_WORK_DIR": str(work_dir.resolve()),
                 "PRISM_DATA_DIR": str(PATHS.data_dir.resolve()),
                 "PRISM_SEARCH_CUTOFF": cutoff or "",
@@ -275,6 +276,19 @@ class JobRunner:
             # 한다.
             self._cancel_requested.add(job_id)
         return cancelled
+
+    async def shutdown(self) -> None:
+        """Stop active CLI trees and queued jobs before the event loop closes."""
+        tasks = dict(self._tasks)
+        await asyncio.gather(*(self.cancel(job_id) for job_id in tasks), return_exceptions=True)
+        if tasks:
+            _, pending = await asyncio.wait(tasks.values(), timeout=5)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*tasks.values(), return_exceptions=True)
+            for job_id, task in tasks.items():
+                if task in pending:
+                    await self._cancelled(job_id)
 
     # ------------------------------------------------------------------ 실행
 
@@ -815,7 +829,7 @@ class JobRunner:
                     elif tool_name == 'start_collection':
                         origin_label = 'API 병렬'
                         summary = {**summary, 'query': ' · '.join(label for field, label in
-                            [('epo_query', 'EPO'), ('kipris_query', '키프리스'), ('openalex_query', 'OpenAlex')]
+                            [('epo_query', 'EPO'), ('kipris_query', '키프리스'), ('openalex_query', 'OpenAlex'), ('arxiv_query', 'arXiv')]
                             if field in summary)}
                 if counts_as == PROGRESS_URL_LOOKUP:
                     # 검색도 아니고 페이지 열람도 아니다. 성공 여부를 알 수

@@ -324,9 +324,10 @@ export interface SearchManifestV14 {
   llm_output: unknown;
   reported: { candidates: SearchCandidate[]; term_expansions: unknown[]; rounds: unknown[]; access_failures: unknown[];
     search_review?: SearchReview; candidate_dispositions?: { doc_number: string; doi: string; url: string; reason: string }[] } | null;
-  date_filter: { cutoff: string; applied: boolean; excluded: { doc_number: string; doi: string;
+  // 중간 검색 결과와 이전 저장 기록에는 날짜 필터가 아직 없을 수 있다.
+  date_filter?: Partial<{ cutoff: string; applied: boolean; excluded: { doc_number: string; doi: string;
     title: string; publication_date: string; detail: string; reason_code: string }[];
-    unknown_publication_date: number };
+    unknown_publication_date: number }> | null;
   usage: unknown; normalization_notes: string[]; error: string | null;
 }
 export interface LegacySearchManifest {
@@ -703,8 +704,6 @@ export interface AppSettings {
      * MCP를 지원하는 Provider의 LLM이 필요할 때 도구로 호출한다.
      */
     literature_integration_enabled: boolean;
-    /** Crossref 예의 풀 표시용 연락처. 비워 둬도 동작한다. */
-    literature_contact_email: string;
     /**
      * OpenAlex API 키. 응답에서는 **항상 빈 문자열**이다. 저장 여부는
      * secrets_set 을 봐야 한다. 비어 있어도 조회되지만 일일 한도가 작다.
@@ -733,28 +732,6 @@ export interface AppSettings {
     limit: number; remaining: number; reset_at: string; blocked: boolean; warning: boolean;
     history: { month: string; requests: number; external_requests: number }[];
   };
-  /** agy 의 페이지 열람 허용 목록. PRISM 설정값이 아니라 다른 도구의 설정
-   *  파일에서 읽은 사실이라 values 가 아니라 이 칸으로 온다. 옛 백엔드는
-   *  보내지 않으므로 선택 값이다. */
-  agy_permissions?: AgyPermissionState;
-}
-
-/** agy settings.json 의 read_url 허용 목록 상태. */
-export interface AgyPermissionState {
-  path: string;
-  exists: boolean;
-  /** 지금 열 수 있는 호스트 전부. 사용자가 직접 넣은 것을 포함한다. */
-  allowed_hosts: string[];
-  /** PRISM 이 권장하는 논문 출처. */
-  recommended: string[];
-  /** 권장 목록 중 실제로 적용된 것. */
-  applied: string[];
-  /** 권장 목록 중 아직 없는 것. */
-  missing: string[];
-  /** read_url(*) 가 들어 있는가. 참이면 모든 주소를 열 수 있다(권장 v2). */
-  wildcard: boolean;
-  /** 읽지 못한 이유. 비어 있지 않으면 다른 칸은 신뢰할 수 없다. */
-  error: string;
 }
 
 /** EPO OPS 사용량 스냅샷.

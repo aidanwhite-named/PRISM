@@ -551,31 +551,10 @@ def test_each_job_kind_resolves_its_own_default_tool(client, monkeypatch) -> Non
         )
 
 
-def test_warning_names_the_search_tool_when_it_differs(client) -> None:
-    data = client.put(
-        "/api/settings",
-        json={"values": {"default_provider": "claude", "search_provider": "agy"}},
-    ).json()
-    try:
-        assert any(
-            "유사문헌 검색 실행 도구(agy)" in note for note in data["warnings"]
-        )
-        assert not any("구성대비 분석 실행 도구" in note for note in data["warnings"])
-    finally:
-        client.put(
-            "/api/settings",
-            json={"values": {"default_provider": "", "search_provider": ""}},
-        )
-
-
-def test_warning_follows_the_selected_provider_not_a_gate(client) -> None:
-    """경고는 '켜 두었는가'가 아니라 '지금 무엇으로 실행하는가'를 본다."""
-    data = client.put(
-        "/api/settings", json={"values": {"default_provider": "agy"}}
-    ).json()
-    assert any("셸·파일 도구를 끄는 수단이 없습니다" in note for note in data["warnings"])
-
-    data = client.put(
-        "/api/settings", json={"values": {"default_provider": "claude"}}
-    ).json()
-    assert not any("끄는 수단이 없습니다" in note for note in data["warnings"])
+def test_settings_omit_tool_and_semantic_notices():
+    from app.settings_service import warnings_for
+    notes = warnings_for({"default_provider": "agy", "search_provider": "codex",
+                          "retrieval_semantic_enabled": True,
+                          "max_concurrency_per_provider": 2})
+    assert not any("끄는 수단이 없습니다" in note or "의미 검색이 켜져" in note for note in notes)
+    assert any("동시 실행" in note for note in notes)

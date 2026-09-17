@@ -21,7 +21,6 @@ from app import config, job_assembly, settings_service
 from app.db import session_scope
 from app.enums import JobKind
 from app.models import AppSetting
-from app.providers import agy_permissions
 
 
 # ------------------------------------------------------- 논문 채널 기본값
@@ -162,9 +161,10 @@ def test_a_policy_without_an_allowlist_file_reads_as_nothing_open(
     assert job_assembly.allowed_hosts_for("web_search") == ()
 
 
-def test_recommended_list_tells_the_model_every_address_is_open(settings_file) -> None:
-    """권장 목록(read_url(*))을 적용하면 프롬프트가 호스트 제한을 걸지 않는다."""
-    agy_permissions.apply_recommended(create=True)
+def test_existing_wildcard_tells_the_model_every_address_is_open(settings_file) -> None:
+    """기존 read_url(*) 규칙이 있으면 프롬프트가 호스트 제한을 걸지 않는다."""
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(json.dumps({"permissions": {"allow": ["read_url(*)"]}}), encoding="utf-8")
 
     text = _lane_text(
         _assemble("agy_web_search", job_assembly.allowed_hosts_for("agy_web_search"))

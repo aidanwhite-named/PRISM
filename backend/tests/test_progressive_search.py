@@ -333,13 +333,6 @@ def test_source_cache_does_not_reuse_results_from_a_different_cutoff(monkeypatch
     assert calls == ['2020-01-01', '']
 
 
-def test_progressive_startup_does_not_change_agy_global_permissions(monkeypatch):
-    from contextlib import nullcontext
-    from app import settings_service
-    monkeypatch.setattr('app.db.session_scope', lambda: nullcontext(object()))
-    monkeypatch.setattr(settings_service, 'get_all', lambda session: {'progressive_search_enabled': True})
-    monkeypatch.setattr(settings_service, 'apply_agy_allowlist', lambda *args, **kwargs: pytest.fail('global permissions must not change'))
-    settings_service.run_agy_allowlist_migration()
 
 
 @pytest.mark.asyncio

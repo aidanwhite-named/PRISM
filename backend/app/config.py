@@ -12,14 +12,18 @@ import os
 import sys
 from pathlib import Path
 
+from .runtime import is_frozen, resource_root
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+PROJECT_ROOT = resource_root()
 
 
 def default_prompt_dir() -> Path:
     override = os.environ.get("PRISM_PROMPT_DIR")
     if override:
         return Path(override)
+    if is_frozen():
+        return default_data_dir() / "prompts"
     return PROJECT_ROOT / "prompt"
 
 
@@ -152,8 +156,9 @@ support_text는 evidence_ref가 가리키는 원문에서 연속된 문자열을
 PRISM은 독립 검색, 후보 강제 추가, 기술 점수, 공식 응답 기반 재분류를 하지 않습니다.
 
 [도구와 안전 경계]
-- 첫 탐색 라운드는 start_collection으로 사용 가능한 EPO·키프리스·OpenAlex를 병렬 시작하고,
+- 첫 탐색 라운드는 start_collection으로 사용 가능한 EPO·키프리스·OpenAlex·arXiv를 병렬 시작하고,
   응답을 기다리는 동안 네이티브 웹 검색을 수행한 다음 collect_results로 수집하십시오.
+  OpenAlex와 별도로 arxiv_query도 작성하여 arXiv를 직접 검색하십시오.
   검색어는 청구항을 분석하여 출처별로 직접 작성합니다. 불필요하거나 사용할 수 없는 출처는 생략하고 이유를 남기십시오.
   API는 출처별 보통 2~3건, 최대 4건씩 받습니다. 후속 질의·인용 확장은 결과를 읽고 선택합니다.
   논문 검색 source 생략으로 여러 DB 결과를 불필요하게 늘리지 마십시오.
@@ -479,9 +484,7 @@ DEFAULTS: dict[str, object] = {
     # EDITABLE_KEYS 밖이다 — PRISM 이 관측해 적는 값이고, 사용자가 PUT 으로
     # "사용 가능"이라고 고쳐 쓸 수 있으면 실측이 아니라 다시 선언이 된다.
     "web_search_health": {},
-    "agy_allowlist_migration": "",
     "literature_integration_enabled": True,
-    "literature_contact_email": "",
     # OpenAlex API 키. 비어 있어도 조회는 되지만 일일 무료 한도가 1/10 이다.
     "literature_openalex_api_key": "",
     "literature_max_results_per_query": 20,

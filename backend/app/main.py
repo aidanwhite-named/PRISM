@@ -17,19 +17,20 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm.exc import StaleDataError
 
-from . import __version__, settings_service
+from . import __version__
 from .api import answers, history, jobs, prompts, providers, settings
 from . import answer_extraction
 from .config import HOST, PATHS, PORT
 from .db import init_engine
 from .prompt_store import PROMPT_STORE
+from .runtime import resource_root
 
 # Windows 에서 asyncio 서브프로세스는 Proactor 이벤트 루프에서만 동작한다.
 # Selector 루프면 create_subprocess_exec 이 NotImplementedError 를 던진다.
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+FRONTEND_DIST = resource_root() / "frontend" / "dist"
 
 # 변경 요청에 요구하는 전용 헤더. 교차 출처에서는 preflight 없이 붙일 수 없다.
 CLIENT_HEADER = "X-PRISM-Client"
@@ -42,13 +43,11 @@ async def lifespan(app: FastAPI):
     PROMPT_STORE.ensure()
     init_engine()
     answer_extraction.recover()
-    # agy 권장 열람 허용 목록의 **일회성** 적용. 여기 한 곳에서만 자동으로
-    # 병합하고, Provider 검사는 읽기 전용이다. 사용자가 지운 호스트가 다음
-    # 검사에서 되살아나지 않게 하는 것이 이 배치의 이유다.
-    settings_service.run_agy_allowlist_migration()
     try:
         yield
     finally:
+        from .execution.runner import RUNNER
+        await RUNNER.shutdown()
         # PRISM이 종료될 때 브라우저 로그인 대기 프로세스나 agy 도우미 창을
         # 고아 프로세스로 남기지 않는다.
         await providers.LOGIN_MANAGER.shutdown()

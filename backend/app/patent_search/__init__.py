@@ -73,7 +73,6 @@ from .literature_backend import (
     BACKEND_ID as LITERATURE_BACKEND_ID,
     CONSTITUENTS as LITERATURE_CONSTITUENTS,
     SETTING_ENABLED as LITERATURE_SETTING_ENABLED,
-    SETTING_MAILTO as LITERATURE_SETTING_MAILTO,
     LiteratureBackend,
 )
 from .literature_client import (
@@ -132,7 +131,6 @@ __all__ = [
     "LITERATURE_BACKEND_ID",
     "LITERATURE_CONSTITUENTS",
     "LITERATURE_SETTING_ENABLED",
-    "LITERATURE_SETTING_MAILTO",
     "LiteratureBackend",
     "LiteratureBudgetExceeded",
     "LiteratureError",
