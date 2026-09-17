@@ -13,6 +13,7 @@ import re
 import time
 from dataclasses import replace
 
+from .analysis_links import validate_links
 from .enums import AttachmentRole, JobStatus
 from .evaluation.evaluator import evaluate
 from .ingestion.service import read_normalized
@@ -40,6 +41,8 @@ queries는 동의어와 원문 언어 표현을 포함한 검색어 최대 8개�
 page는 PDF 페이지(인쇄면 번호 아님), 모르면 null이다. 대응 후보가 없으면 빈 배열을 쓴다.
 페이지·원문·다른 문헌을 지어내지 않는다. 독립된 재검토가 후보를 비교하므로 초안의 순위가
 최종 순위라는 전제로 쓰지 않는다. 이 블록은 화면에서 제거된다.
+같은 실시예의 여러 문단이 한 구성을 함께 뒷받침하면 각 구절을 별도 후보로 모두 남긴다.
+부족 한정을 보완하는 문헌, 결합 동기·양립 가능성·장애를 설명하는 원문도 후보에 포함한다.
 [PRISM_EVIDENCE_COMPARISON_V1]
 {"components":[{"claim":"청구항 1","symbol":"(A)","feature":"청구항 원문 구성",
 "queries":["원문 언어의 동의어"],"candidates":[{"attachment":"ATT-02","page":3,
@@ -53,6 +56,9 @@ Evaluate meaning, not shared words. Compare subject, action, object, condition, 
 and their relation. A different control variable, direction, trigger, processing stage or
 input/output is not direct correspondence. Distinguish direct disclosure from inference.
 Do not combine different documents/embodiments to call a single candidate direct.
+Several separately anchored passages from the SAME document and SAME embodiment may jointly
+disclose a component. Represent this as an evidence_set, never splice quotes. Give source-based
+coherence reasons: being in the same document or on adjacent pages alone is NOT sufficient.
 Evaluate the quoted span in context: surrounding context may disambiguate it but cannot
 silently supply a missing essential limitation in the span. Mark such support partial.
 Use not_applicable only when the CLAIM does not constrain that axis. Use unknown when evidence
@@ -65,15 +71,55 @@ quotes also return a faithful Korean translation, preserving negation, modality 
 You may return quote as a shorter continuous verbatim span inside the supplied quote. Keep
 all conditions needed for your assessment; do not splice sentences. Translation must translate
 that exact chosen span. If no shorter span is sufficient, retain the full supplied quote.
+First divide each supplied feature into limitations using exact continuous text spans, including
+negation, numbers, units, exclusivity, sequence and relations. Together these spans must cover
+ALL feature characters except prose punctuation (retain signs, operators, units and connecting
+words; overlapping spans allowed).
+Keep independently limiting conditions and relations separate; do not collapse a compound
+component into one broad limitation merely to make its mapping easier.
+Do not replace feature with a paraphrase. Use a longer span if the same short phrase repeats.
+For every evidence_set and derivation map EVERY limitation to source candidate IDs and explain
+direct/inferred/missing/contradicted support. An absent limitation must remain missing with [].
+Evaluate individual passages against the whole component first; a partial passage may directly
+support a specific limitation in a set. Use only direct/partial, faithfully translated passages
+in sets/derivations. All candidate IDs must reference assessments, never other sets.
+Build the strongest evidence_set for EACH relevant document, including single-passage sets,
+so every document's limitation coverage is traceable. Omit documents with no usable support.
+selected_id must select the strongest evidence_set after comparing the alternatives, or null.
+Only a SAME-document, SAME-embodiment set covering ALL limitations directly can be direct.
+If coherence is unknown, do not create a direct set. Do not merge independent embodiments.
+For every component with gaps, also evaluate derivations: single_document modification or
+combination of distinct documents. Cite source IDs for motivation and technical compatibility,
+explain the actual modification and obstacles, and state remaining_difference explicitly.
+Do not infer motivation merely because the claim needs a feature. No unsupported common knowledge.
+Keep inferred support distinct from direct disclosure. A supported derivation is an AI assessment
+of a proposed route, NEVER a direct match or an increase in single-document similarity.
+If sources do not justify a route, return derivations:[] and a Korean derivation_limitation
+explaining what evidence is missing. If a route still leaves differences, return remaining_gap
+or insufficient, never supported. A fully direct component may return [] with a brief explanation.
 Similarity is an auxiliary assessment, not a probability: direct 80-100, partial 1-79,
 lexical_only/contradicted 0, unknown null. Do not invent source text or locations.
 Return JSON only:
-{"components":[{"id":"C001","selected_id":"candidate id or null","selection_reason":"comparison",
+{"components":[{"id":"C001","selected_id":"evidence_set id or null","selection_reason":"comparison",
 "assessments":[{"id":"candidate id","verdict":"direct|partial|lexical_only|contradicted|unknown",
 "axes":{"subject":"same|different|unknown|not_applicable","action":"same",
 "object":"same","condition":"unknown","input":"same","output":"same","relation":"same"},
 "similarity":60,"relation":"why","difference":"missing/different constraints",
-"quote":"continuous verbatim span from the supplied quote","translation":"Korean translation"}]}]}
+"quote":"continuous verbatim span from the supplied quote","translation":"Korean translation"}],
+"limitations":[{"id":"L1","text":"exact continuous feature text"}],
+"evidence_sets":[{"id":"S1","candidate_ids":["candidate id"],"verdict":"direct|partial",
+"similarity":60,"axes":{"subject":"same","action":"same","object":"same","condition":"unknown",
+"input":"same","output":"same","relation":"same"},"relation":"why","difference":"remaining gaps",
+"coherence":{"status":"same_embodiment","reason":"source-based same embodiment relation","candidate_ids":["candidate id"]},
+"supports":[{"limitation_id":"L1","candidate_ids":["candidate id"],"status":"direct|inferred|missing|contradicted","reason":"why"}]}],
+"derivations":[{"kind":"single_document|combination","candidate_ids":["candidate id"],
+"supports":[{"limitation_id":"L1","candidate_ids":["candidate id"],"status":"inferred","reason":"why"}],
+"motivation":{"reason":"source-based reason for modification/combination","candidate_ids":["candidate id"]},
+"compatibility":{"status":"compatible|incompatible|unknown","reason":"conditions, interfaces, obstacles","candidate_ids":["candidate id"]},
+"modification":"starting configuration -> actual change -> resulting configuration",
+"conclusion":"supported|remaining_gap|not_supported|insufficient","reason":"assessment and limitations",
+"remaining_difference":"specific remaining gap; empty only if supported"}],
+"derivation_limitation":"why no source-grounded route can be assessed, or why unnecessary"}]}
 '''
 
 
@@ -164,7 +210,7 @@ def candidates_for(component, proposal, sources):
     queries = proposal.get('queries', [])
     if not isinstance(queries, list):
         queries = []
-    terms = set(re.findall(r'[a-zA-Z][a-zA-Z0-9-]{2,}|[가-힣]{2,}',
+    terms = set(re.findall(r'[a-zA-Z][a-zA-Z0-9-]{2,}|[가-힣]{2,}|[\u3040-\u30ff\u3400-\u9fff]{2,}|\d+(?:[.,]\d+)?(?:\s*[%°℃μµa-zA-Z]+)?',
         (' '.join(str(q)[:100] for q in queries[:8]) + ' ' + component['feature']).lower()))
     for alias, source in sources.items():
         scored = []
@@ -198,7 +244,8 @@ def validate_review(component, candidates, row):
             assessments[cid] = {**source[cid], 'verdict': 'unknown', 'similarity': None,
                                 'relation': '', 'difference': '중복된 재검토 결과', 'axes': {}}
             issues.append('duplicate_assessment'); continue
-        if verdict not in GRADES or not isinstance(axes, dict) or any(axes.get(a) not in STATES for a in AXES):
+        if (not isinstance(verdict, str) or verdict not in GRADES or not isinstance(axes, dict)
+                or any(not isinstance(axes.get(a), str) or axes[a] not in STATES for a in AXES)):
             issues.append('invalid_assessment'); continue
         valid_score = ((verdict == 'unknown' and score is None) or
                        (type(score) is int and ((verdict == 'direct' and 80 <= score <= 100) or
@@ -227,7 +274,7 @@ def validate_review(component, candidates, row):
                 'quote': resolved_source['quote'][start:end],
                 'start': resolved_source['start'] + start, 'end': resolved_source['start'] + end}
         translation = str(raw.get('translation') or '').strip()
-        if re.search(r'[A-Za-z]{3}', source[cid]['quote']) and not translation:
+        if re.search(r'[A-Za-z]{3}|[\u3040-\u30ff\u3400-\u9fff]', resolved_source['quote']) and not translation:
             issues.append('translation_unreviewed')
             verdict, score = 'unknown', None
         assessments[cid] = {**resolved_source, 'verdict': verdict, 'axes': axes, 'similarity': score,
@@ -235,19 +282,40 @@ def validate_review(component, candidates, row):
                             'translation': translation[:2400]}
     for cid in source.keys() - assessments.keys():
         issues.append('candidate_not_reviewed:' + cid)
+    links, link_issues = validate_links(component, assessments, row, AXES, STATES)
+    issues.extend(link_issues)
+    options = {g['id']: g for g in links['evidence_sets']}
     chosen = row.get('selected_id')
     if not isinstance(chosen, str):
         chosen = None
-    explanation = str(row.get('selection_reason') or '').strip()
-    eligible = [a for a in assessments.values() if GRADES[a['verdict']] > 0]
-    best_grade = max((GRADES[a['verdict']] for a in eligible), default=0)
-    if chosen not in assessments or not best_grade or GRADES[assessments[chosen]['verdict']] != best_grade or not explanation:
+    if chosen in assessments:
+        issues.append('selected_passage_limitations_unverified')
         chosen = None
-        if eligible:
+    if not options and any(a['verdict'] in ('direct', 'partial') for a in assessments.values()):
+        issues.append('limitation_supports_unverified')
+    explanation = str(row.get('selection_reason') or '').strip()
+    eligible = [a for a in options.values() if GRADES[a['verdict']] > 0]
+    best_grade = max((GRADES[a['verdict']] for a in eligible), default=0)
+    if chosen not in options or not best_grade or GRADES[options[chosen]['verdict']] != best_grade or not explanation:
+        chosen = None
+        if eligible or row.get('selected_id') is not None:
             issues.append('selection_not_supported')
-    return {**component, 'candidates': list(assessments.values()), 'selected_id': chosen,
+    derivation_limitation = row.get('derivation_limitation')
+    derivation_limitation = derivation_limitation.strip() if isinstance(derivation_limitation, str) else ''
+    if not links['derivations'] and not derivation_limitation:
+        issues.append('derivation_explanation_missing')
+    return {**component, **links, 'candidates': list(assessments.values()), 'selected_id': chosen,
+            'derivation_limitation': derivation_limitation,
             'selection_reason': explanation[:1800], 'issues': issues,
             'comparison_complete': len(assessments) == len(source) and not issues}
+
+
+def evidence_options(component):
+    return component['candidates'] + component.get('evidence_sets', [])
+
+
+def selected_evidence(component):
+    return next((a for a in evidence_options(component) if a['id'] == component.get('selected_id')), None)
 
 
 def independent_components(claim_text, components):
@@ -266,7 +334,7 @@ def select_documents(components, sources, mapping, prior_mapping=None, claim_tex
     """Coverage-first selection, followed by incremental contributions; stable prior numbers."""
     coverage = {a: {} for a in sources}
     for c in components:
-        for candidate in c['candidates']:
+        for candidate in c.get('evidence_sets', []):
             grade = GRADES[candidate['verdict']]
             if grade and c.get('selected_id'):
                 alias = candidate['attachment']
@@ -299,10 +367,19 @@ def select_documents(components, sources, mapping, prior_mapping=None, claim_tex
             assigned[alias] = old['citation_number']; used.add(old['citation_number'])
     # A passage independently selected as best remains citable even when another document
     # has equal aggregate coverage. Do not replace it with a weaker aggregate winner.
+    primary_alias = chosen[0] if chosen else None
     for component in components:
-        winner = next((a for a in component['candidates'] if a['id'] == component.get('selected_id')), None)
+        winner = selected_evidence(component)
         if winner and winner['attachment'] not in chosen:
             chosen.append(winner['attachment'])
+        # A supplementary source must remain identifiable even if its component
+        # coverage adds no new grade. Derivations never increase that coverage.
+        passages = {a['id']: a for a in component['candidates']}
+        for route in component.get('derivations', []):
+            for cid in route['candidate_ids']:
+                alias = passages[cid]['attachment']
+                if alias not in chosen:
+                    chosen.append(alias)
     next_number = max([r['citation_number'] for r in previous] + list(used) + [0]) + 1
     for alias in chosen:
         if alias not in assigned:
@@ -320,7 +397,7 @@ def select_documents(components, sources, mapping, prior_mapping=None, claim_tex
                      'document_number': document_number,
                      'alias': alias, 'coverage': coverage[alias]})
     return {'version': 1, 'items': sorted(rows, key=lambda r: r['citation_number']),
-            'primary_alias': chosen[0] if chosen else None,
+            'primary_alias': primary_alias,
             'selection_basis': '명시적으로 확인된 독립항의 직접 대응 수 → 전체 구성의 직접 대응 수 → 새로 보완하는 구성 수 → 대응 개선량. '
                                '동률은 문헌 해시 순이며 구성별 최선 근거 문헌도 보존합니다.'}
 
@@ -341,17 +418,59 @@ def render(audit, mapping):
     lines += ['', '### 구성 × 문헌 대응표', '', '| 구성 | 문헌 | 검토 결과 |', '| --- | --- | --- |']
     for component in audit['components']:
         for alias in audit['documents']:
-            candidates = [a for a in component['candidates'] if a['attachment'] == alias]
+            candidates = [a for a in component.get('evidence_sets', []) if a['attachment'] == alias]
+            if not candidates:
+                # Raw passage assessments remain in the comparison table; they
+                # cannot stand in for complete limitation coverage of a document.
+                candidates = [a for a in component['candidates'] if a['attachment'] == alias
+                              and a['verdict'] in ('lexical_only', 'contradicted', 'unknown')]
             strongest = max(candidates, key=lambda a: GRADES[a['verdict']], default=None)
             label = {'direct': '직접 대응', 'partial': '부분 대응', 'lexical_only': '단어만 유사',
                      'contradicted': '관계 불일치', 'unknown': '미확인'}.get((strongest or {}).get('verdict'), '미검토')
+            if not any(a['attachment'] == alias for a in component.get('evidence_sets', [])) and any(
+                    a['attachment'] == alias and a['verdict'] in ('direct', 'partial') for a in component['candidates']):
+                label = '한정별 근거 미확인'
             doc = by_alias.get(alias)
             name = f"인용발명 {doc['citation_number']}" if doc else audit['documents'][alias]
             lines.append(f"| {cell(component['claim'] + ' ' + component['symbol'])} | {cell(name)} | {label} |")
     quoted = {}
     for component in audit['components']:
         lines += ['', f"## {cell(component['claim'])} {cell(component['symbol'])}", '', cell(component['feature']), '']
-        best = next((a for a in component['candidates'] if a['id'] == component.get('selected_id')), None)
+        passages = {a['id']: a for a in component['candidates']}
+        references = {cid: f'근거 {i}' for i, cid in enumerate(passages, 1)}
+        limitations = {r['id']: r['text'] for r in component.get('limitations', [])}
+        displayed = set()
+
+        def source_refs(ids):
+            return ', '.join(references[cid] for cid in ids)
+
+        def cite(candidate):
+            if candidate['id'] in displayed:
+                return
+            displayed.add(candidate['id'])
+            doc = by_alias.get(candidate['attachment'])
+            name = f"인용발명 {doc['citation_number']}" if doc else audit['documents'][candidate['attachment']]
+            location = f"PDF {candidate['page']}쪽" if candidate['page'] else '본문'
+            lines.extend(['', f"**{references[candidate['id']]} — {cell(name)}, {location}**", ''])
+            quote_key = (candidate['attachment'], candidate['page'], candidate['start'], candidate['end'])
+            if quote_key in quoted:
+                lines.extend(['원문 인용: ' + cell(quoted[quote_key]) + '의 동일 구절 참조.', ''])
+            else:
+                quoted[quote_key] = component['claim'] + ' ' + component['symbol'] + ' ' + references[candidate['id']]
+                if candidate.get('translation'):
+                    lines.extend([cell(candidate['translation']), ''])
+                lines.extend(['> ' + cell(candidate['quote']), ''])
+            lines.extend([f"{location} · 원문 위치 {candidate['start']}–{candidate['end']}", ''])
+
+        def support_table(supports):
+            labels = {'direct': '직접 기재', 'inferred': '추론 필요', 'missing': '미확인', 'contradicted': '상충'}
+            lines.extend(['', '| 청구항 세부 한정 | 근거 | 판단 | 대응 이유 |', '| --- | --- | --- | --- |'])
+            for support in supports:
+                lines.append('| ' + ' | '.join(cell(v) for v in (
+                    limitations[support['limitation_id']], source_refs(support['candidate_ids']) or '없음',
+                    labels[support['status']], support['reason'])) + ' |')
+
+        best = selected_evidence(component)
         if not best:
             lines += ['대응 정도: 검토 후보 범위에서 의미 대응 없음 (0%)' if negative_scope(component) else
                       '대응 정도: 미확인 — 근거 후보의 의미 대응 또는 최선 후보 선택을 확인하지 못했습니다.']
@@ -362,28 +481,48 @@ def render(audit, mapping):
             lines += [f"대응 정도: {grade_label} ({best['similarity']}%)",
                       '', f'유사도 기준 문헌: {name}', '',
                       '선택 이유: ' + cell(component['selection_reason']), '']
-            quote_key = (best['attachment'], best['page'], best['start'], best['end'])
-            if quote_key in quoted:
-                lines += ['원문 인용: ' + cell(quoted[quote_key]) + '의 동일 구절 참조.', '']
-            else:
-                quoted[quote_key] = component['claim'] + ' ' + component['symbol']
-                if best.get('translation'):
-                    lines += [cell(best['translation']), '']
-                lines += ['> ' + cell(best['quote']), '']
-            lines += [(f"PDF {best['page']}쪽" if best['page'] else '본문') + f" · 원문 위치 {best['start']}–{best['end']}", '',
-                      '대응 이유: ' + cell(best['relation']), '', '차이·미확인 한정: ' + cell(best['difference'] or '검토한 구절 범위에서 차이 미확인')]
+            for cid in best.get('candidate_ids', [best['id']]):
+                cite(passages[cid])
+            if best.get('supports'):
+                support_table(best['supports'])
+                lines += ['', '동일 실시예 연결 근거: ' + cell(best['coherence']['reason'])
+                          + ' (' + source_refs(best['coherence']['candidate_ids']) + ')']
+            lines += ['', '대응 이유: ' + cell(best['relation']), '',
+                      '차이·미확인 한정: ' + cell(best['difference'] or '검토한 구절 범위에서 차이 미확인')]
             axes_names = {'subject': '주체', 'action': '동작', 'object': '대상', 'condition': '조건',
                           'input': '입력', 'output': '출력', 'relation': '관계'}
             states = {'same': '일치', 'different': '차이', 'unknown': '미확인', 'not_applicable': '청구항 한정 없음'}
             lines += ['', ' · '.join(axes_names[a] + ': ' + states.get(best['axes'].get(a), '미확인') for a in AXES)]
+        lines += ['', '### 차이점 해소 및 문헌 결합 검토', '',
+                  '아래 도출·결합 평가는 단일 문헌의 직접 대응 여부 및 유사도와 별도로 표시합니다.']
+        conclusions = {'supported': '제시한 도출 경로로 충족 가능하다고 평가',
+                       'remaining_gap': '차이점 잔존', 'not_supported': '도출·결합 근거 불충분',
+                       'insufficient': '판단 자료 부족'}
+        for route in component.get('derivations', []):
+            lines += ['', '**' + ('문헌 간 결합' if route['kind'] == 'combination' else '단일 문헌으로부터의 도출') + '**']
+            for cid in route['candidate_ids']:
+                cite(passages[cid])
+            support_table(route['supports'])
+            lines += ['', '필요한 변경: ' + cell(route['modification'])]
+            for field, label in [('motivation', '변경·결합 동기'), ('compatibility', '기술적 양립 가능성·장애')]:
+                lines += ['', label + ': ' + cell(route[field]['reason']) + ' (' + source_refs(route[field]['candidate_ids']) + ')']
+            lines += ['', '검토 결과: ' + conclusions[route['conclusion']] + ' — ' + cell(route['reason']), '',
+                      '도출·결합 후 남는 차이: ' + cell(route['remaining_difference'] or '제시한 경로의 평가 범위에서 없음')]
+        if not component.get('derivations'):
+            lines += ['', cell(component.get('derivation_limitation') or '검증된 근거에 연결된 도출·결합 검토를 확보하지 못했습니다.')]
+        if not component.get('limitation_coverage_complete'):
+            lines += ['', '한정별 검토 제한: 구성 문언 전체에 대한 세부 한정 분해·대조를 확인하지 못했습니다.']
         if component['candidates']:
             lines += ['', '| 비교 후보 | 위치 | 의미 판정 | 대응 이유·차이 |', '| --- | --- | --- | --- |']
-            for candidate in component['candidates']:
+            for candidate in evidence_options(component):
                 doc = by_alias.get(candidate['attachment'])
                 name = f"인용발명 {doc['citation_number']}" if doc else audit['documents'][candidate['attachment']]
+                name += ' · 한정별 검토' if candidate.get('candidate_ids') else ' · ' + references[candidate['id']]
                 label = {'direct': '직접 대응', 'partial': '부분 대응', 'lexical_only': '단어만 유사',
                          'contradicted': '관계 불일치', 'unknown': '미확인'}[candidate['verdict']]
-                lines.append('| ' + ' | '.join(cell(v) for v in (name, f"PDF {candidate['page']}쪽" if candidate['page'] else '본문',
+                location = source_refs(candidate['candidate_ids']) if candidate.get('candidate_ids') else (
+                    f"PDF {candidate['page']}쪽" if candidate['page'] else '본문')
+                lines.append('| ' + ' | '.join(cell(v) for v in (name, location,
                     label, candidate.get('difference') or candidate.get('relation') or '재확인 필요')) + ' |')
         if component['issues'] or not component.get('comparison_complete'):
             lines += ['', '검토 제한: 일부 후보 또는 조건은 재확인이 필요합니다.']
@@ -420,7 +559,7 @@ async def run(provider, request, outcome, *, attachments, aliases, components, m
     draft = outcome.result_text
     (base / 'draft.md').write_text(draft, encoding='utf-8')
     blocks = BLOCK.findall(draft)
-    audit = {'version': 1, 'status': 'incomplete', 'components': [], 'documents': {}, 'issues': [], 'usage': []}
+    audit = {'version': 2, 'status': 'incomplete', 'components': [], 'documents': {}, 'issues': [], 'usage': []}
     try:
         if len(blocks) != 1:
             raise ValueError('근거 후보 비교 블록이 없거나 중복되었습니다.')
@@ -529,14 +668,14 @@ async def run(provider, request, outcome, *, attachments, aliases, components, m
     # Retain best alternatives even if they add no new coverage: a selected citation must have a number.
     mapped = {r['alias'] for r in selected_mapping['items']}
     for c in audit['components']:
-        chosen = next((a for a in c['candidates'] if a['id'] == c.get('selected_id')), None)
+        chosen = selected_evidence(c)
         if chosen and chosen['attachment'] not in mapped:
             c['selected_id'] = None
             c['issues'].append('최선 후보가 보완 문헌 선정에 포함되지 않아 재선정 필요')
             c['comparison_complete'] = False
     updated = {**components, 'items': []}
     for c in audit['components']:
-        selected = next((a for a in c['candidates'] if a['id'] == c.get('selected_id')), None)
+        selected = selected_evidence(c)
         negative = negative_scope(c)
         updated['items'].append({**{k: v for k, v in c.items() if k in components['items'][0]},
             'similarity': selected['similarity'] if selected else 0 if negative else None,

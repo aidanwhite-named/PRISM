@@ -12,7 +12,7 @@ from ..patent_search.artifacts import ArtifactStore
 from ..patent_search.literature_client import arxiv_identity
 from ..retrieval.extraction import PageRecord
 from .models import Candidate, Feature, Limits, Ledger, identifier, write_json, tokens
-from .planner import PLAN_SYSTEM, RECOVERY_SYSTEM, parse_plan, fallback_plan, initial_queries, expanded_queries, seed_queries
+from .planner import PLAN_SYSTEM, RECOVERY_SYSTEM, parse_plan, fallback_plan, initial_queries, expanded_queries, seed_queries, kipris_queries
 from .ranking import rank, diverse_top, metadata_excerpt, seed_shortlist
 from .sources import Sources
 from .fetcher import SafeFetcher
@@ -58,6 +58,7 @@ class Engine:
         self.first_candidate_seconds = None
         self.http_fetches = 0
         self.seed_queries = []
+        self.kipris_queries = kipris_queries({}, claim)
         self.route = []
         self.stage_deadline = None
         self.citation_edges = []
@@ -75,7 +76,7 @@ class Engine:
         return {'version': 1, 'phase': self.phase, 'stop_reason': self.stop_reason,
             'depth': self.depth, 'limits': asdict(self.limits), 'features': [asdict(f) for f in self.features],
             'candidates': [asdict(c) for c in candidates], 'queries': self.queries,
-            'seed_queries': self.seed_queries, 'route': self.route,
+            'seed_queries': self.seed_queries, 'kipris_queries': self.kipris_queries, 'route': self.route,
             'citation_edges': self.citation_edges,
             'warnings': self.warnings + [call['phase'] + ': partial_output_retained'
                 for call in self.inference.usage().get('stages', []) if call.get('output_partial')], 'usage': self.inference.usage(),
@@ -102,7 +103,7 @@ class Engine:
         self.verified = set(checkpoint['verified'])
         self.attempted_documents = set(checkpoint['attempted_documents'])
         self.failed_sources = set(checkpoint['failed_sources'])
-        for name in ('queries', 'seed_queries', 'route', 'citation_edges', 'warnings',
+        for name in ('queries', 'seed_queries', 'kipris_queries', 'route', 'citation_edges', 'warnings',
                      'first_candidate_seconds', 'http_fetches'):
             setattr(self, name, saved.get(name, getattr(self, name)))
         self.started = time.monotonic() - saved['elapsed_seconds']
@@ -133,6 +134,7 @@ class Engine:
                     payload, seconds=min(30, self.remaining(15)))
             self.features, self.context, warnings = parse_plan(value, self.claim)
             self.seed_queries = seed_queries(value)
+            self.kipris_queries = kipris_queries(value, self.claim)
             self.warnings = warnings
             write_json(cache, value)
         except (ValueError, RuntimeError, OSError) as exc:
@@ -143,6 +145,7 @@ class Engine:
                                                       seconds=min(20, self.remaining(20)))
                     self.features, self.context, warnings = parse_plan(value, self.claim)
                     self.seed_queries = seed_queries(value)
+                    self.kipris_queries = kipris_queries(value, self.claim)
                     self.warnings = ['plan_recovered: ' + str(exc)[:140], *warnings]
                     write_json(cache, value)
                 except (ValueError, RuntimeError, OSError) as recovery_error:
@@ -168,7 +171,10 @@ class Engine:
             return
         if source == 'epo' and not self.values.get('epo_integration_enabled', False):
             return
-        if source != 'epo' and not self.values.get('literature_integration_enabled', True):
+        if source == 'kipris' and not (self.values.get('kipris_integration_enabled', False)
+                                      and self.values.get('kipris_api_key')):
+            return
+        if source not in ('epo', 'kipris') and not self.values.get('literature_integration_enabled', True):
             return
         row = self.admit_query(source, query, feature, **extra)
         if row is None:
@@ -482,6 +488,11 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
                 self.stage_deadline = min(self.deadline,
                     self.started + Limits.for_depth('fast', self.values).seconds)
         if not self.resumed and not self.cancelled():
+            # Reserve a domestic attempt before the seed lane can finish early.
+            # Sequential requests avoid spending a second call after a quota/auth failure.
+            self.phase = 'domestic_search'
+            for query in self.kipris_queries[:1 if self.depth == 'fast' else 2]:
+                await self.query('kipris', query, 'domestic')
             await self.search_relation_seeds()
         if not self.resumed and not self.sufficient() and not self.cancelled():
             self.route.append({'lane': 'existing_search', 'reason': 'no_verified_xy',

@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { api } from "../lib/api";
+import KiprisSettings from '../components/KiprisSettings';
 import { isLogoutSession } from "../lib/types";
 import type {
   AppSettings,
@@ -741,7 +742,7 @@ export default function SettingsPage() {
         <span className="eyebrow">환경 설정</span>
         <h1>분석 환경을 설정합니다</h1>
         <p>
-          분석에 사용할 기준과 AI 실행 도구, 로컬 실행의 안전 범위를 관리합니다. PRISM은 API Key를 수집하거나 저장하지 않습니다.
+          분석 기준과 AI 실행 도구, 검색 연동을 관리합니다. AI 도구는 CLI 로그인 세션을 사용하며, 검색 서비스의 API 키는 이 PC에 저장합니다.
         </p>
       </div>
 
@@ -793,6 +794,8 @@ export default function SettingsPage() {
           실행 도구 저장
         </button>
       </div>
+
+      <KiprisSettings settings={settings} onChange={setSettings} />
 
       <div className="card settings-epo">
         <h2>EPO OPS 특허 검색 연동</h2>

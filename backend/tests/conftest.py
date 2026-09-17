@@ -171,3 +171,13 @@ def block_literature_network(monkeypatch):
         )
 
     monkeypatch.setattr(openalex_client, "_live_transport", refuse_openalex)
+
+
+@pytest.fixture(autouse=True)
+def block_kipris_network(monkeypatch):
+    from app.patent_search import kipris_backend
+
+    def refuse(_params):
+        raise AssertionError('테스트에서 KIPRIS 실제 호출은 금지됩니다. transport를 주입하세요.')
+
+    monkeypatch.setattr(kipris_backend, '_live_transport', refuse)

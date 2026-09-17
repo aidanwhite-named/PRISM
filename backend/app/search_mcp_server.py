@@ -105,6 +105,7 @@ class SearchTools:
         self.backends = {}
         openalex_key = str(values.get("literature_openalex_api_key") or "").strip()
         self.secrets = (
+            str(values.get('kipris_api_key') or ''),
             *credential_tokens(str(values.get("epo_consumer_key") or ""), str(values.get("epo_consumer_secret") or "")),
             *((openalex_key,) if openalex_key else ()),
         )
@@ -131,7 +132,7 @@ class SearchTools:
     def tool_definitions(self):
         statuses = self.statuses()
         return [_CAPABILITIES] + [
-            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIWEE_SEARCH, _KIWEE_FETCH)
+            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIWEE_SEARCH, _KIWEE_FETCH, _KIPRIS_SEARCH)
             if statuses[tool["name"].split("_")[0]]["status"] == "available"
         ]
 
@@ -236,10 +237,22 @@ class SearchTools:
                 openalex_mode=arguments.get("openalex_mode", "search"),
                 cites_doi=arguments.get("cites_doi", ""),
             )
+        elif backend_id == 'kipris':
+            response = backend.search(PatentSearchQuery(query, arguments.get('max_results', 20)),
+                                      begin=arguments.get('begin', 1))
         else:
             response = backend.search(PatentSearchQuery(query, arguments.get("max_results", 10)))
-        return {**_response(response, scope="bibliographic_search"), "query": query,
-                "publication_cutoff": self.cutoff or None}
+        result = {**_response(response, scope="bibliographic_search"), "query": query,
+                  "publication_cutoff": self.cutoff or None}
+        if backend_id == 'kipris':
+            page, size = arguments.get('begin', 1), arguments.get('max_results', 20)
+            first = (page - 1) * size + 1
+            count = len(response.records)
+            more = page * size < response.total_found
+            result['coverage'].update(page=page, page_size=size,
+                result_range=f'{first}-{first + count - 1}' if count else None,
+                more_results_available=more, next_page=page + 1 if more else None)
+        return result
 
     def _fetch(self, backend_id, arguments, identifier_key):
         identifier = arguments[identifier_key]
@@ -399,6 +412,13 @@ _QUERY_SCHEMA = {
     "description": 'Term: {type:"term",field:"ta",value:"image matching",match:"all"}. Group: {type:"group",op:"and"|"or"|"not",items:[nodes]}. Term fields: ti,ab,ta,txt,pa,in,pn,ap,pr,ipc,cpc,cl. Match: all/any/exact. Publication-date node: {type:"date_range",field:"pd",begin:"19000101",end:"20240131"}. A date-limited query may omit unknown dates; choose whether an additional unrestricted query is needed. Maximum nesting: 3.',
     "additionalProperties": True,
 }
+_KIPRIS_SEARCH = _tool(
+    'kipris_search',
+    'Search Korean patents and utility models in KIPRIS Plus. Prefer short Korean technical keyword queries. Returns bibliographic metadata and abstracts, not claims/full text. Each page costs one of 1000 monthly requests. begin is a 1-based page number.',
+    {'query': {'type': 'string', 'maxLength': 500},
+     'max_results': {'type': 'integer', 'minimum': 1, 'maximum': 100},
+     'begin': {'type': 'integer', 'minimum': 1, 'maximum': 1000}}, ['query'])
+
 _EPO_SEARCH = _tool(
     "epo_search",
     "Search EPO OPS with structured CQL. Provider-default order is not relevance ranking. Inspect coverage/date range and broad_query_sample warnings. Use observed ipc/cpc plus technical terms, date_range partitions, or begin for subsequent pages. Keep each OR branch technically specific; match=any splits words with OR. Returns actual CQL and artifact references.",

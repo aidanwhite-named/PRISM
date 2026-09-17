@@ -15,6 +15,7 @@ Use at most 8 features. Each text must be a verbatim substring of the claim, not
 Feature decomposition is a search aid. Preamble, reference numbers and connecting text need
 not each become a feature; the full original claim remains available for verification.
 Use labels A, B, C. For each feature provide English terms (up to 8 separate words),
+and korean_terms (up to 8 Korean technical keywords for the same feature),
 phrases (up to 3 exact technical expressions), queries (2 short alternative English queries,
 each at most 90 characters and 10 words), relation (English input -> operation -> output).
 Prefer rare technical words over processor/computer/device. Expand abbreviations where useful.
@@ -29,8 +30,10 @@ Do not concatenate every feature, or use only the broad domain. These are recall
 discovery queries; the complete relation and original claim are verified later.
 Order terms by importance: entity, most distinctive relational concept, then supporting
 concepts. The patent index initially uses only the first four words to avoid overconstrained AND queries.
-Format: {"features":[{"text":"original","terms":[],"phrases":[],"queries":[],"relation":""}],
-"context_query":"...", "seed_queries":["...", "..."]}. Specification may clarify vocabulary but cannot add claim requirements.'''
+Also supply kipris_queries: TWO short Korean technical keyword queries for domestic patents,
+each using 2-4 key concepts and their Korean terminology alternatives. Do not use whole claim sentences.
+Format: {"features":[{"text":"original","terms":[],"korean_terms":[],"phrases":[],"queries":[],"relation":""}],
+"context_query":"...", "seed_queries":["...", "..."], "kipris_queries":["한국어 검색어", "대체 검색어"]}. Specification may clarify vocabulary but cannot add claim requirements.'''
 
 RECOVERY_SYSTEM = '''Do not invoke tools. Recover useful English search queries from the supplied
 original claim and search_strategy. Return the same plan JSON structure as below, with one feature
@@ -75,7 +78,9 @@ def parse_plan(value: dict, claim: str):
         terms = tokens(' '.join(strings('terms', 8, 60)))[:12]
         queries = [' '.join(q.split()[:10]) for q in strings('queries', 2, 90)]
         features.append(Feature(chr(65 + len(features)), text, terms, strings('phrases', 3, 80), queries,
-                                str(row.get('relation') or '')[:600]))
+                                str(row.get('relation') or '')[:600],
+                                [t for t in tokens(' '.join(strings('korean_terms', 8, 60)) or text)
+                                 if re.search('[가-힣]', t) and t not in {'상기', '포함하는', '이용하여', '기초하여', '단계', '방법', '장치'}][:8]))
     if not features:
         raise ValueError('feature_text_not_in_claim')
     return features, str(value.get('context_query') or '')[:90], warnings
@@ -104,3 +109,16 @@ def seed_queries(value):
         return []
     return list(dict.fromkeys(' '.join(q.split()[:6])[:100] for q in rows
                              if isinstance(q, str) and 2 <= len(q.split()) <= 10))[:2]
+
+
+def kipris_queries(value, claim):
+    rows = value.get('kipris_queries', [])
+    queries = list(dict.fromkeys(' '.join(q.split()[:6])[:120] for q in rows
+        if isinstance(q, str) and re.search('[가-힣]', q)))[:2] if isinstance(rows, list) else []
+    if queries:
+        return queries
+    # A failed/older planner still gets one domestic query from the original text.
+    words = [w for w in tokens(claim) if re.search('[가-힣]', w)
+             and w not in {'상기', '포함하는', '이용하여', '기초하여', '단계', '방법', '장치', '것을', '통해'}]
+    words = words or tokens(claim)
+    return [' '.join(words[:4])] if words else []

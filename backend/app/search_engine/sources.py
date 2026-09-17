@@ -17,11 +17,11 @@ from .models import identifier, write_json
 class Sources:
     def __init__(self, values: dict, directory: Path, cutoff=''):
         self.values, self.directory, self.cutoff = values, directory, cutoff
-        self.locks = {source: threading.Lock() for source in ('epo', 'arxiv', 'openalex', 'crossref_epmc')}
+        self.locks = {source: threading.Lock() for source in ('epo', 'kipris', 'arxiv', 'openalex', 'crossref_epmc')}
 
     def call(self, source: str, arguments: dict, *, fetch=False):
         with self.locks[source]:
-            channel = 'epo' if source == 'epo' else 'literature'
+            channel = source if source in ('epo', 'kipris') else 'literature'
             name = channel + ('_fetch' if fetch else '_search')
             key = identifier(json.dumps([source, name, arguments, self.cutoff], sort_keys=True))
             cache = PATHS.data_dir / 'search_cache' / 'queries' / (key + '.json')
@@ -83,6 +83,8 @@ class Sources:
             return result
 
     def search(self, source: str, query: str, *, fulltext=False, classification='', begin=1):
+        if source == 'kipris':
+            return self.call(source, {'query': query, 'max_results': 20, 'begin': begin})
         if source == 'epo':
             # Historical fulltext flag means broad bibliographic txt search in OPS.
             # It does not search claims/description; those are fetched for passage retrieval.

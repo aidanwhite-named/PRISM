@@ -47,6 +47,8 @@ EDITABLE_KEYS = frozenset(
         "kiwee_integration_enabled",
         "epo_integration_enabled",
         "epo_consumer_key",
+        "kipris_integration_enabled",
+        "kipris_api_key",
         "epo_consumer_secret",
         "epo_http_budget_seconds",
         "epo_hourly_quota_bytes",
@@ -227,7 +229,7 @@ _UNLIMITED_KEYS = frozenset(
 # 는 CLI 가 없고 OAuth client_credentials 뿐이라 저장 외에 방법이 없다.
 # OpenAlex 도 같다 — 2026-02 부터 키가 필수인 HTTP API 다.
 _CREDENTIAL_KEYS = frozenset(
-    {"epo_consumer_key", "epo_consumer_secret", "literature_openalex_api_key"}
+    {"epo_consumer_key", "epo_consumer_secret", "literature_openalex_api_key", "kipris_api_key"}
 )
 
 # 사용량 경고를 띄우는 비율. epo_quota.WARN_RATIO 와 같은 값을 화면 문구에
@@ -235,7 +237,7 @@ _CREDENTIAL_KEYS = frozenset(
 WARN_PERCENT = int(patent_search.QUOTA_WARN_RATIO * 100)
 
 # 응답에서 값 자체를 내보내지 않는 키. 화면에는 "설정됨/미설정"만 준다.
-SECRET_KEYS = frozenset({"epo_consumer_secret", "literature_openalex_api_key"})
+SECRET_KEYS = frozenset({"epo_consumer_secret", "literature_openalex_api_key", "kipris_api_key"})
 
 # OPS 자격증명은 base64 로 안전하게 실릴 수 있는 짧은 문자열이다. 상한을 두는
 # 이유는 실수로 파일 내용이나 로그를 통째로 붙여 넣는 것을 막기 위해서다.
@@ -692,7 +694,7 @@ def get(session: Session, key: str) -> Any:
 
 
 def _coerce(key: str, value: Any) -> Any:
-    if key in ('progressive_search_enabled', 'progressive_search_web_enabled'):
+    if key in ('progressive_search_enabled', 'progressive_search_web_enabled', 'kipris_integration_enabled'):
         if not isinstance(value, bool):
             raise ValueError(f'{key} 는 true 또는 false여야 합니다.')
         return value

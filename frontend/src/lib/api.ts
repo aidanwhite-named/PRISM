@@ -250,6 +250,12 @@ export const api = {
   // 않는다 — 백엔드가 저장된 값을 읽는다.
   checkEpoCredentials: () =>
     request<CredentialCheck>("/api/settings/epo/check", { method: "POST" }),
+  checkKipris: () =>
+    request<CredentialCheck>("/api/settings/kipris/check", { method: "POST" }),
+  updateKiprisUsage: (month: string, total_used: number) =>
+    request<AppSettings>("/api/settings/kipris/usage", {
+      method: "PUT", body: JSON.stringify({ month, total_used }),
+    }),
   checkOpenAlex: () =>
     request<CredentialCheck>("/api/settings/openalex/check", { method: "POST" }),
 };

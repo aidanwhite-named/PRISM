@@ -680,6 +680,8 @@ export interface AppSettings {
     kiwee_integration_enabled: boolean;
     /** EPO OPS 도구 연동. 실행별 MCP를 지원하는 Provider에서 사용한다. */
     epo_integration_enabled: boolean;
+    kipris_integration_enabled?: boolean;
+    kipris_api_key?: string;
     epo_consumer_key: string;
     /**
      * 응답에서는 **항상 빈 문자열**이다. 저장은 되지만 되돌려주지 않는다.
@@ -723,6 +725,11 @@ export interface AppSettings {
   secrets_set: Record<string, boolean>;
   /** EPO OPS 사용량. 백엔드가 한도·남은 양까지 계산해서 준다. */
   epo_quota: EpoQuotaSnapshot;
+  kipris_quota?: {
+    month: string; requests: number; external_requests: number; used: number;
+    limit: number; remaining: number; reset_at: string; blocked: boolean; warning: boolean;
+    history: { month: string; requests: number; external_requests: number }[];
+  };
   /** agy 의 페이지 열람 허용 목록. PRISM 설정값이 아니라 다른 도구의 설정
    *  파일에서 읽은 사실이라 values 가 아니라 이 칸으로 온다. 옛 백엔드는
    *  보내지 않으므로 선택 값이다. */

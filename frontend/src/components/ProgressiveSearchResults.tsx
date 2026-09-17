@@ -11,6 +11,7 @@ const DATA: Record<string, string> = {
   METADATA_ONLY: "서지·검색 단서", PARTIAL_TEXT: "일부 본문 확보",
 };
 const PHASE: Record<string, string> = {
+  domestic_search: "키프리스 국내 특허 검색 중",
   relation_seed: "관계 중심 후보 검색 중",
   citations: "인용·피인용 검색 중",
   planning: "검색 구성 정리 중", fast: "후보 검색 중", deep: "추가 검색 중",

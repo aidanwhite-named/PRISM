@@ -10,7 +10,7 @@ from ..search_dates import evaluate as evaluate_date
 def metadata_excerpt(text, features, budget=700):
     """Keep operation-bearing sentences at the end of abstracts, too."""
     sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
-    wanted = set(t for f in features for t in f.terms)
+    wanted = set(t for f in features for t in f.terms + f.korean_terms)
     ordered = sorted(enumerate(sentences), key=lambda pair: (
         -len(set(tokens(pair[1])) & wanted), pair[0]))
     selected, size = [], 0
@@ -36,8 +36,12 @@ def rank(candidates, features, cutoff='', rrf_k=60):
         rrf = sum(1 / (rrf_k + position) for position in lists.values())
         coverage = []
         for feature in features:
-            weights = {term: math.log(1 + (len(candidates) + 1) / (df[term] + 1)) for term in feature.terms}
-            coverage.append(sum(w for term, w in weights.items() if term in words) / (sum(weights.values()) or 1))
+            language_scores = []
+            for terms in (feature.terms, feature.korean_terms):
+                weights = {term: math.log(1 + (len(candidates) + 1) / (df[term] + 1)) for term in terms}
+                language_scores.append(sum(w for term, w in weights.items() if term in words) / (sum(weights.values()) or 1))
+            # A translation alternative must not dilute the other language's score.
+            coverage.append(max(language_scores))
         candidate.lexical_score = round(max(coverage, default=0), 5)
         matched = {row['feature']: {'explicit': 1, 'semantic': .8, 'partial': .4}.get(row['match'], 0)
                    for row in candidate.evidence if row.get('quote_verified')}
@@ -80,7 +84,8 @@ def seed_shortlist(candidates, features, limit=2):
     def coverage(candidate):
         words = set(tokens(candidate.title + ' ' + ' '.join(str(v) for k, v in candidate.fields.items()
                          if k.startswith('abstract') or k == 'web_snippet')))
-        ratios = [len(words & set(f.terms)) / max(1, len(set(f.terms))) for f in features if f.terms]
+        ratios = [max(len(words & set(terms)) / max(1, len(set(terms)))
+                      for terms in (f.terms, f.korean_terms)) for f in features if f.terms or f.korean_terms]
         return sum(ratios) / max(1, len(ratios))
     ordered = sorted((c for c in candidates if c.date_status != 'after_cutoff'),
                      key=lambda c: (-coverage(c), -c.score, c.id))

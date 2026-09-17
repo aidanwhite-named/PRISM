@@ -39,6 +39,7 @@ class Feature:
     phrases: list[str] = field(default_factory=list)
     queries: list[str] = field(default_factory=list)
     relation: str = ''
+    korean_terms: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

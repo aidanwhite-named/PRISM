@@ -3,20 +3,19 @@
 AI 실행 도구(Provider)의 API Key 입력란은 만들지 않는다. 각 CLI 에 저장된
 로그인 세션만 사용한다.
 
-예외는 **외부 데이터 소스**의 자격증명이다(EPO OPS). 그쪽은 CLI 도 로그인
-세션도 없고 OAuth client_credentials 뿐이라 PRISM 이 보관하는 것 외에 방법이
-없다. 대신 두 가지를 지킨다.
+외부 검색 데이터 소스(EPO OPS, OpenAlex, KIPRIS)의 자격증명은 별도로 저장한다.
 
   - 저장은 하되 응답으로 돌려주지 않는다(settings_service.redact_for_api).
     화면은 "설정됨/미설정"만 본다.
-  - 자격증명을 쓰는 외부 호출은 사용자가 버튼을 눌렀을 때의 확인 한 번뿐이다.
-    실행(runner) 경로는 이 자격증명을 쓰지 않는다.
+  - 연결 테스트는 사용자가 버튼을 눌렀을 때만 호출한다.
+    검색 실행 중에는 활성 검색 백엔드가 저장된 자격증명을 사용한다.
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field, StrictInt
 
 from .. import patent_search, settings_service
 from ..config import DEFAULT_RUNTIME_CONTEXT, PATHS
@@ -25,6 +24,7 @@ from ..providers import agy_permissions
 from ..providers.env import describe_filtering
 from ..providers.registry import invalidate
 from ..schemas import CredentialCheckOut, SettingsOut, SettingsUpdate
+from ..patent_search import kipris_quota
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -42,6 +42,7 @@ def _payload(session: Session) -> SettingsOut:
         env_filtering=describe_filtering(),
         secrets_set=settings_service.secrets_set(values),
         epo_quota=settings_service.epo_quota_snapshot(values),
+        kipris_quota=kipris_quota.snapshot(values.get(kipris_quota.KEY)),
         # 읽기만 한다. 이 화면에서 파일을 고치지 않는다 — 적용은 agy Provider
         # 검사 경로 한 곳에서만 일어나고, 여기는 그 결과를 보여 준다.
         agy_permissions=agy_permissions.read_state().to_dict(),
@@ -71,7 +72,7 @@ def update_settings(
 def check_epo_credentials(session: Session = Depends(get_db)) -> CredentialCheckOut:
     """저장된 EPO OPS 자격증명으로 토큰 발급을 한 번 시도한다.
 
-    PRISM 이 외부로 나가는 유일한 설정 화면 동작이다. 사용자가 버튼을 눌렀을
+    사용자가 버튼을 눌렀을
     때만 실행되고, 특허 데이터는 요청하지 않으며, 받은 토큰은 저장하지 않는다.
     자격증명은 요청 본문이 아니라 저장된 값에서 읽는다 — 본문으로 받으면 비밀이
     프록시 로그와 브라우저 기록에 한 번 더 남는다.
@@ -107,6 +108,34 @@ def check_openalex(session: Session = Depends(get_db)) -> CredentialCheckOut:
         str(values.get("literature_openalex_api_key") or "")
     )
     return CredentialCheckOut(ok=ok, detail=detail, http_status=status)
+
+
+@router.post('/kipris/check', response_model=CredentialCheckOut)
+def check_kipris(session: Session = Depends(get_db)):
+    values = settings_service.get_all(session)
+    backend = patent_search.get_backend(values, 'kipris')
+    if backend is None or not backend.status().configured:
+        raise HTTPException(400, '키프리스 연동을 켜고 API 키를 저장하세요.')
+    try:
+        backend.search(patent_search.PatentSearchQuery('반도체', 1))
+    except patent_search.PatentSearchError as exc:
+        return CredentialCheckOut(ok=False, detail=str(exc))
+    return CredentialCheckOut(ok=True, detail='키프리스 검색 API 연결을 확인했습니다. 1회 호출이 집계되었습니다.', http_status=200)
+
+
+class KiprisUsageUpdate(BaseModel):
+    month: str = Field(pattern=r'^\d{4}-\d{2}$')
+    total_used: StrictInt = Field(ge=0, le=1000000)
+
+
+@router.put('/kipris/usage', response_model=SettingsOut)
+def update_kipris_usage(payload: KiprisUsageUpdate, session: Session = Depends(get_db)):
+    try:
+        kipris_quota.reconcile(payload.total_used, payload.month)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    session.expire_all()
+    return _payload(session)
 
 
 @router.post("/agy-permissions/apply", response_model=SettingsOut)

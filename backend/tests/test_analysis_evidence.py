@@ -32,6 +32,12 @@ def assessment(candidate, verdict='direct', **extra):
             'translation': '제어기는 압력이 임계값을 초과하면 밸브를 연다.', **extra}
 
 
+def single_set(candidate, ident='S1'):
+    return {**assessment(candidate), 'id': ident, 'candidate_ids': [candidate['id']],
+            'coherence': {'status': 'same_embodiment', 'reason': '하나의 조건-동작 문장', 'candidate_ids': [candidate['id']]},
+            'supports': [{'limitation_id': 'L1', 'candidate_ids': [candidate['id']], 'status': 'direct', 'reason': '조건과 동작이 모두 명시됨'}]}
+
+
 def test_quotes_require_exact_document_and_page_but_tolerate_whitespace():
     sources = {'ATT-01': source()}
     proposal = {'candidates': [
@@ -101,8 +107,10 @@ def test_document_selection_is_coverage_based_and_preserves_prior_numbers():
     sources = {'ATT-01': source(text=WRONG), 'ATT-02': source('ATT-02')}
     candidates, _ = ae.candidates_for(component(), {}, sources)
     a, b = candidates
-    c = ae.validate_review(component(), candidates, {'selected_id': b['id'], 'selection_reason': '조건과 동작 일치',
-        'assessments': [assessment(a, 'partial'), assessment(b)]})
+    c = ae.validate_review(component(), candidates, {'selected_id': 'S1', 'selection_reason': '조건과 동작 일치',
+        'assessments': [assessment(a, 'partial'), assessment(b)],
+        'limitations': [{'id': 'L1', 'text': component()['feature']}], 'evidence_sets': [single_set(b)],
+        'derivations': [], 'derivation_limitation': '직접 대응하므로 결합 불필요.'})
     result = ae.select_documents([c], sources, None)
     assert result['primary_alias'] == 'ATT-02'
     assert result['items'][0]['alias'] == 'ATT-02'
@@ -132,8 +140,16 @@ class Reviewer:
             candidates = c['candidates']
             rows = [assessment(p, 'direct' if QUOTE in p['quote'] else 'lexical_only') for p in candidates]
             best = next((r['id'] for r in rows if r['verdict'] == 'direct'), None)
-            results.append({'id': c['id'], 'selected_id': best,
-                            'selection_reason': '다른 후보의 온도·닫힘과 달리 압력·열림 관계가 일치한다.', 'assessments': rows})
+            sets = [{**assessment(next(p for p in candidates if p['id'] == best)),
+                     'id': 'S1', 'candidate_ids': [best],
+                     'coherence': {'status': 'same_embodiment', 'reason': '동일 제어기의 조건과 동작을 한 문장에서 개시',
+                                   'candidate_ids': [best]},
+                     'supports': [{'limitation_id': 'L1', 'candidate_ids': [best], 'status': 'direct',
+                                   'reason': '압력 임계값 초과 조건과 밸브 개방의 관계가 모두 명시됨'}]}] if best else []
+            results.append({'id': c['id'], 'selected_id': 'S1' if best else None,
+                            'selection_reason': '다른 후보의 온도·닫힘과 달리 압력·열림 관계가 일치한다.', 'assessments': rows,
+                            'limitations': [{'id': 'L1', 'text': c['feature']}], 'evidence_sets': sets,
+                            'derivations': [], 'derivation_limitation': '직접 대응하는 단일 문헌이 있으므로 결합 불필요.'})
         return ExecutionOutcome(result_text=json.dumps({'components': results}), exit_code=0,
                                 usage={'input_tokens': 100, 'output_tokens': 100})
 

@@ -54,7 +54,7 @@ def retrieve(candidate_id: str, source: dict, pages: list, features: list, direc
         doc = IndexedDocument(candidate_id, candidate_id, candidate_id, aid, index, report)
         for feature in features:
             # Single-word BM25 terms and deliberate phrases; never a whole claim phrase.
-            queries = list(dict.fromkeys(feature.terms + feature.phrases))
+            queries = list(dict.fromkeys(feature.terms + feature.korean_terms + feature.phrases))
             result = search_document(doc, queries=queries, limit=3, per_channel_limit=20)
             for hit in result.hits:
                 row = hit.to_dict()

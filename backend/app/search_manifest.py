@@ -157,7 +157,7 @@ def has_retrieval_attempt(calls, tool_uses=None, journal=None) -> bool:
                  for row in (journal or []) if row.get("state") == "started")
     eligible = SEARCH_TOOL_NAMES | FETCH_TOOL_NAMES | {
         f"mcp__prism-search__{source}_{action}"
-        for source in ("epo", "literature", "kiwee") for action in ("search", "fetch")
+        for source in ("epo", "literature", "kiwee", "kipris") for action in ("search", "fetch")
     }
     return bool(names & eligible)
 

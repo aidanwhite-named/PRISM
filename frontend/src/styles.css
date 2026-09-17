@@ -769,6 +769,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .page-settings > .settings-run-limits,
 .page-settings > .settings-kiwee,
 .page-settings > .settings-epo,
+.page-settings > .settings-kipris,
 .page-settings > .settings-literature,
 .page-settings > .settings-agy-permissions { grid-column: 1 / -1; }
 .settings-integration-copy { max-width: 900px; }
@@ -1160,7 +1161,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
 .field > label { color: var(--text-muted); font-size: 11px; font-weight: 680; letter-spacing: 0.01em; }
 .field .hint, .hint { color: var(--text-faint); font-size: 10.5px; }
-input[type="text"], input[type="number"], select, textarea {
+input[type="text"], input[type="number"], .settings-kipris input[type="password"], select, textarea {
   width: 100%;
   outline: none;
   min-height: 42px;
