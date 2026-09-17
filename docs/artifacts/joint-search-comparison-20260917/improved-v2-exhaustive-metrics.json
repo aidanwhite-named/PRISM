@@ -1,0 +1,232 @@
+{
+  "case": "coupled_joint_limits",
+  "k": 20,
+  "known_relevant_recall_at_k": 0.0,
+  "known_relevant_ranks": [
+    {
+      "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+      "rank": null,
+      "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+    }
+  ],
+  "candidate_count": 20,
+  "classification": {
+    "status": "complete",
+    "target_count": 8,
+    "reviewed_count": 8,
+    "unreviewed_count": 12
+  },
+  "classified_documents": 1,
+  "insufficient_information_documents": 3,
+  "low_relevance_documents": 4,
+  "first_candidate_seconds": 2.157,
+  "elapsed_seconds": 247.297,
+  "usage": {
+    "input_tokens": 53874.0,
+    "output_tokens": 16180.0,
+    "cache_read_tokens": 0.0,
+    "thinking_tokens": 13892.0,
+    "total_tokens": 70054.0,
+    "usage_complete": false,
+    "stages": [
+      {
+        "phase": "revise_queries",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 9527,
+        "usage_complete": true,
+        "usage": {
+          "input_tokens": 17245,
+          "output_tokens": 1468,
+          "thinking_tokens": 1316,
+          "cache_read_tokens": 0,
+          "total_tokens": 18713
+        },
+        "seconds": 16.21900000000005,
+        "timed_out": false,
+        "tool_calls": [],
+        "output_partial": false
+      },
+      {
+        "phase": "web_seeds",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 12724,
+        "usage_complete": false,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"부모 뼈\" \"자식 뼈\" \"제1 한계\" \"보정\""
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"first limit\" \"correcting\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "site:patents.google.com \"parent bone\" \"child bone\" \"first limit\""
+            },
+            "index": 3
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-8",
+            "input": {
+              "query": "\"KR1020260113114\" OR \"1020260113114\" OR \"KR10-2026-0113114\""
+            },
+            "index": 4
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-10",
+            "input": {
+              "query": "\"The first limit may be a limit including a limit\" OR \"parent bone and a child bone connected by a joint\""
+            },
+            "index": 5
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-12",
+            "input": {
+              "query": "\"Method and program for determining\" \"parent bone\" \"child bone\""
+            },
+            "index": 6
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-14",
+            "input": {
+              "query": "\"자세 결정 방법\" \"제1 한계\" OR \"자세 결정 장치\""
+            },
+            "index": 7
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-16",
+            "input": {
+              "query": "\"親ボーン\" \"子ボーン\" \"第1の限界\" OR \"限界\" \"姿勢\""
+            },
+            "index": 8
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-18",
+            "input": {
+              "query": "site:patents.google.com \"parent bone\" \"child bone\" \"plurality of parameters\""
+            },
+            "index": 9
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-20",
+            "input": {
+              "query": "site:patsnap.com \"KR1020260113114\" OR \"KR1020260113114A\""
+            },
+            "index": 10
+          },
+          {
+            "name": "read_url_content",
+            "id": "agy-step-22",
+            "input": {
+              "url": "https://analytics.patsnap.com/patent/KR1020260113114A"
+            },
+            "index": 11
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-24",
+            "input": {
+              "query": "\"KR1020260113114A\" OR \"KR 10-2026-0113114\""
+            },
+            "index": 12
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-26",
+            "input": {
+              "query": "\"Method and program for determining the\" \"bone postures\" OR \"complex bone postures\""
+            },
+            "index": 13
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-28",
+            "input": {
+              "query": "\"Method and program for determining the complex bone postures\""
+            },
+            "index": 14
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-30",
+            "input": {
+              "query": "\"unipolar spherical\" \"bone\" OR \"joint\" OR \"posture\" OR \"pose\""
+            },
+            "index": 15
+          }
+        ],
+        "timed_out": true,
+        "seconds": 147.1880000000001
+      },
+      {
+        "phase": "triage",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 14030,
+        "usage_complete": true,
+        "usage": {
+          "input_tokens": 18077,
+          "output_tokens": 8402,
+          "thinking_tokens": 7745,
+          "cache_read_tokens": 0,
+          "total_tokens": 26479
+        },
+        "seconds": 37.5630000000001,
+        "timed_out": false,
+        "tool_calls": [],
+        "output_partial": false
+      },
+      {
+        "phase": "verify",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 13153,
+        "usage_complete": true,
+        "usage": {
+          "input_tokens": 18552,
+          "output_tokens": 6310,
+          "thinking_tokens": 4831,
+          "cache_read_tokens": 0,
+          "total_tokens": 24862
+        },
+        "seconds": 29.342999999999847,
+        "timed_out": false,
+        "tool_calls": [],
+        "output_partial": false
+      }
+    ],
+    "cost_usd": null
+  },
+  "verified_evidence_rows": 7,
+  "relation_rows": 7,
+  "full_text_documents": 1,
+  "query_cache_hits": 3,
+  "limits": [
+    "Partial relevance judgments, not anticipation/novelty findings.",
+    "Known-relevant set is incomplete; no corpus-wide recall or precision claimed.",
+    "Single runs and source/model/cache differences must be reported separately."
+  ],
+  "job_id": "2c29f9f3-bb8e-4f79-a57d-46a42f9cb6f9",
+  "status": "SUCCEEDED",
+  "errors": []
+}

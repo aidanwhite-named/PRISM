@@ -1,0 +1,118 @@
+{
+  "case": "coupled_joint_limits",
+  "k": 20,
+  "known_relevant_recall_at_k": 0.0,
+  "known_relevant_ranks": [
+    {
+      "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+      "rank": null,
+      "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+    }
+  ],
+  "candidate_count": 20,
+  "classification": {
+    "status": "complete",
+    "target_count": 8,
+    "reviewed_count": 8,
+    "unreviewed_count": 12
+  },
+  "classified_documents": 1,
+  "insufficient_information_documents": 3,
+  "low_relevance_documents": 4,
+  "first_candidate_seconds": 0.313,
+  "elapsed_seconds": 115.625,
+  "usage": {
+    "input_tokens": 18078.0,
+    "output_tokens": 7154.0,
+    "cache_read_tokens": 0.0,
+    "thinking_tokens": 6293.0,
+    "total_tokens": 25232.0,
+    "usage_complete": false,
+    "stages": [
+      {
+        "phase": "revise_queries",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 9777,
+        "usage_complete": false,
+        "timed_out": true,
+        "seconds": 15.765999999999622
+      },
+      {
+        "phase": "web_seeds",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 12802,
+        "usage_complete": false,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"joint limit\" \"parent bone\" \"child bone\" rotation pose correction"
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"부모 뼈\" \"자식 뼈\" \"골격 모델\" \"한계\" \"회전\" \"파라미터\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"回転\" \"パラメータ\" \"姿勢\" \"限界\""
+            },
+            "index": 3
+          }
+        ],
+        "timed_out": true,
+        "seconds": 28.235000000000582
+      },
+      {
+        "phase": "triage",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 14030,
+        "usage_complete": true,
+        "usage": {
+          "input_tokens": 18078,
+          "output_tokens": 7154,
+          "thinking_tokens": 6293,
+          "cache_read_tokens": 0,
+          "total_tokens": 25232
+        },
+        "seconds": 32.84400000000005,
+        "timed_out": false,
+        "tool_calls": [],
+        "output_partial": false
+      },
+      {
+        "phase": "verify",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 13254,
+        "usage_complete": false,
+        "timed_out": true,
+        "seconds": 26.20300000000043
+      }
+    ],
+    "cost_usd": null
+  },
+  "verified_evidence_rows": 0,
+  "relation_rows": 0,
+  "full_text_documents": 1,
+  "query_cache_hits": 4,
+  "limits": [
+    "Partial relevance judgments, not anticipation/novelty findings.",
+    "Known-relevant set is incomplete; no corpus-wide recall or precision claimed.",
+    "Single runs and source/model/cache differences must be reported separately."
+  ],
+  "job_id": "498fc266-b6ad-4477-b798-fa874521755e",
+  "status": "SUCCEEDED",
+  "errors": []
+}

@@ -1303,10 +1303,12 @@ async def continue_search(job_id: str, session: Session = Depends(get_db)) -> Jo
         raise HTTPException(404, "작업을 찾을 수 없습니다.")
     values = settings_service.get_all(session)
     snapshot = (source.search_manifest or {}).get('engine') or {}
-    if (source.job_kind != JobKind.SIMILARITY_SEARCH or source.status != JobStatus.SUCCEEDED
+    resumable_status = (source.status == JobStatus.SUCCEEDED or
+                        source.status == JobStatus.FAILED and snapshot.get('stop_reason') == 'classification_incomplete')
+    if (source.job_kind != JobKind.SIMILARITY_SEARCH or not resumable_status
             or source.search_depth == 'exhaustive' or not snapshot.get('can_continue')
             or not values.get('progressive_search_enabled', True)):
-        raise HTTPException(409, "완료된 기본 검색에서만 정밀 검색을 이어갈 수 있습니다.")
+        raise HTTPException(409, "종료된 기본 검색에서 이어가기 자료가 있는 경우에만 정밀 검색을 이어갈 수 있습니다.")
     # Repeated clicks/requests return the same continuation instead of spending twice.
     existing = session.query(ExecutionJob).filter_by(
         source_job_id=source.id, job_kind=JobKind.SIMILARITY_SEARCH,

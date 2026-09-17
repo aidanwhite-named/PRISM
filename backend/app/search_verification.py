@@ -32,14 +32,19 @@ LEVEL_LABELS = {
     "official_abstract": "공식 초록 확보",
     "official_claims": "공식 청구항 확보",
     "official_full_text": "공식 전문 확보",
+    "public_capture": "웹 본문 보존·대조 / 원문 언어 미확인",
 }
 SCOPES = ("bibliographic", "abstract", "claims", "description", "family")
 
 def _key(candidate: dict) -> str:
+    if not candidate.get('doc_number') and not candidate.get('doi'):
+        return 'url:' + manifest.normalize_url(candidate.get('url'))
     return manifest.identity_key(candidate.get("doc_number", ""), candidate.get("doi", ""))
 
 def _record_key(record: dict) -> str:
     number = str(record.get("document_number") or "")
+    if not number:
+        return 'url:' + manifest.normalize_url(record.get('url'))
     return manifest.identity_key(doi=number) if number.lower().startswith("10.") else manifest.identity_key(number)
 
 def _ref_key(ref: dict) -> tuple:
@@ -65,7 +70,10 @@ def _matching_sources(candidate: dict, journal: list[dict], store) -> list[dict]
             continue
         result = call.get("result") or {}
         for record in result.get("records", []):
-            if _record_key(record) != _key(candidate):
+            url_match = (result.get('source_kind') == 'public_capture' and not record.get('document_number')
+                         and manifest.normalize_url(record.get('url'))
+                         and manifest.normalize_url(record.get('url')) == manifest.normalize_url(candidate.get('url')))
+            if _record_key(record) != _key(candidate) and not url_match:
                 continue
             refs = record.get("evidence_refs") or {}
             verified_fields = {}
@@ -79,6 +87,7 @@ def _matching_sources(candidate: dict, journal: list[dict], store) -> list[dict]
                     verified_fields[name] = {"text": text, "evidence_ref": ref}
             if verified_fields:
                 found.append({"tool": call.get("tool"), "call_id": call.get("id"),
+                              "source_kind": result.get('source_kind', 'api'),
                               "url": record.get("url", ""), "document_number": record.get("document_number"),
                               "fields": verified_fields})
     return found
@@ -150,12 +159,18 @@ def verify(reported: dict, observed: dict, journal: list[dict], *, store=None) -
             issues.append("source_not_read")
         if sources:
             level = "official_bibliographic"
-            if scope["abstract"] == "verified":
+            api_fields = {name.split(':')[0] for source in sources if source.get('source_kind') != 'public_capture'
+                          for name in source['fields']}
+            if 'abstract' in api_fields:
                 level = "official_abstract"
-            if scope["claims"] == "verified":
+            if 'claims' in api_fields:
                 level = "official_claims"
-            if "full_text" in values_by_field:
+            if 'full_text' in api_fields:
                 level = "official_full_text"
+            if all(source.get('source_kind') == 'public_capture' for source in sources):
+                level = 'public_capture'
+                if not any(source.get('document_number') for source in sources):
+                    issues.append('identifier_unverified')
         else:
             issues.append("identifier_unverified")
         candidate["verification_scope"] = scope

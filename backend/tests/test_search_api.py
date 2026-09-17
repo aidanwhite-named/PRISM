@@ -194,7 +194,7 @@ def test_unread_page_does_not_erase_model_group_or_explanation(client):
     assert "source_not_read" in candidate["verification_issues"]
     assert candidate["group"] == "A"
     assert candidate["mapping"]
-    assert "## LLM 그룹 A" in job["result_text"]
+    assert "## X분류" in job["result_text"]
 
 
 def test_runner_only_calls_mechanical_verification(client, monkeypatch):
@@ -207,7 +207,7 @@ def test_runner_only_calls_mechanical_verification(client, monkeypatch):
     monkeypatch.setattr(search_verification, "verify", verify)
     job = wait_for_job(client, _start(client)["id"])
     assert job["status"] == "SUCCEEDED"
-    assert len(calls) >= 2
+    assert len(calls) == 1
     assert "verification" not in job["search_manifest"]
 
 

@@ -245,11 +245,10 @@ CODEX_WEB_SEARCH = ToolPolicy(
 )
 
 PRISM_MCP_TOOL_NAMES = (
+    "source_fetch", "citation_search", "save_candidates", "start_collection", "collect_results",
     "search_capabilities",
     "epo_search",
     "epo_fetch",
-    "kiwee_search",
-    "kiwee_fetch",
     "literature_search",
     "literature_fetch",
 )

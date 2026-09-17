@@ -9,3 +9,8 @@ export function categoryOrder(value?: string | null): number {
   const category = documentCategory(value);
   return category ? { X: 0, Y: 1, Z: 2 }[category] : 3;
 }
+
+export function categoryLabel(value?: string | null): string {
+  const category = documentCategory(value);
+  return category ? `${category}분류` : "미분류";
+}

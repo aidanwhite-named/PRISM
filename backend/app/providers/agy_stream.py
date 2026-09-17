@@ -86,11 +86,12 @@ _MAX_INPUT_VALUE = 500
 # 호출 기록 대조가 Provider 마다 갈라지지 않는다.
 _MCP_DISPATCH_TOOL = "call_mcp_tool"
 _MCP_INPUT_KEYS = {
+    "source_fetch": ("url", "section", "offset", "max_chars"),
+    "citation_search": ("identifier", "direction", "begin"),
+    "save_candidates": (),
     "search_capabilities": (),
     "epo_search": ("query", "max_results"),
     "epo_fetch": ("publication_number", "constituent"),
-    "kiwee_search": ("query", "max_results"),
-    "kiwee_fetch": ("publication_number", "constituent"),
     "literature_search": ("query", "max_results", "source", "openalex_mode", "cites_doi"),
     "literature_fetch": ("doi", "constituent"),
 }

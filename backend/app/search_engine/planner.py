@@ -14,10 +14,8 @@ Preserve technical relations, conditions and input/output. "Based on" does NOT m
 Use at most 8 features. Each text must be a verbatim substring of the claim, not a translation.
 Feature decomposition is a search aid. Preamble, reference numbers and connecting text need
 not each become a feature; the full original claim remains available for verification.
-Use labels A, B, C. For each feature provide English terms (up to 8 separate words),
-and korean_terms (up to 8 Korean technical keywords for the same feature),
-phrases (up to 3 exact technical expressions), queries (2 short alternative English queries,
-each at most 90 characters and 10 words), relation (English input -> operation -> output).
+For each feature return only its original text, up to 4 English terms and up to 4 Korean terms.
+Do not generate per-feature queries, phrase lists, relation explanations or analysis prose.
 Prefer rare technical words over processor/computer/device. Expand abbreviations where useful.
 Do not invent document titles, identifiers or mandatory claim limitations.
 Do not infer a threshold, direction or intermediate operation unless stated in the claim.
@@ -28,19 +26,13 @@ input/output concepts; use 3-4 content words (up to 6 for compound terms), witho
 obtain, use or generate. The second query is a controlled terminology alternative.
 Do not concatenate every feature, or use only the broad domain. These are recall-oriented
 discovery queries; the complete relation and original claim are verified later.
-Order terms by importance: entity, most distinctive relational concept, then supporting
-concepts. The patent index initially uses only the first four words to avoid overconstrained AND queries.
+Keep the domain and the distinctive input/operation/output relationship in BOTH queries.
+Use a terminology alternative for the second query, never an isolated generic term.
+Every word will be used as a search condition, so omit low-information words.
 Also supply kipris_queries: TWO short Korean technical keyword queries for domestic patents,
 each using 2-4 key concepts and their Korean terminology alternatives. Do not use whole claim sentences.
-Format: {"features":[{"text":"original","terms":[],"korean_terms":[],"phrases":[],"queries":[],"relation":""}],
+Format: {"features":[{"text":"original","terms":[],"korean_terms":[]}],
 "context_query":"...", "seed_queries":["...", "..."], "kipris_queries":["한국어 검색어", "대체 검색어"]}. Specification may clarify vocabulary but cannot add claim requirements.'''
-
-RECOVERY_SYSTEM = '''Do not invoke tools. Recover useful English search queries from the supplied
-original claim and search_strategy. Return the same plan JSON structure as below, with one feature
-whose text is the entire original claim, English technical terms, two short English queries and
-context_query. Do not discard relations or replace the claim with its first few words.
-Format: {"features":[{"text":"original claim","terms":[],"phrases":[],"queries":[],"relation":""}],"context_query":"domain"}.'''
-
 
 def fallback_plan(claim: str):
     labels = list(re.finditer(r'(?:^|\n)\s*(?:\([A-Z]\)|[A-Z]\s*[:：])\s*', claim))
@@ -98,17 +90,14 @@ def initial_queries(features, context):
     return list(dict.fromkeys(result))
 
 
-def expanded_queries(features):
-    return [(f.id, q) for f in features for q in f.queries[1:]]
-
-
 def seed_queries(value):
     """Optional planner output; absent/invalid queries leave the existing path intact."""
     rows = value.get('seed_queries', [])
     if not isinstance(rows, list):
         return []
-    return list(dict.fromkeys(' '.join(q.split()[:6])[:100] for q in rows
-                             if isinstance(q, str) and 2 <= len(q.split()) <= 10))[:2]
+    # Reject an overlong query rather than silently cutting away its relation.
+    return list(dict.fromkeys(' '.join(q.split()) for q in rows
+                             if isinstance(q, str) and 2 <= len(q.split()) <= 6 and len(q) <= 100))[:2]
 
 
 def kipris_queries(value, claim):

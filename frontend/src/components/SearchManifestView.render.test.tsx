@@ -24,6 +24,13 @@ function current(): SearchManifestV14 {
   };
 }
 describe("single-agent audit", () => {
+  it("distinguishes completed deadline classification from an interrupted search", () => {
+    const data = current();
+    data.deadline_classification = { attempted: true, completed: true, reason: "마감 분류", candidate_count: 4 };
+    render(<SearchResults data={data} />);
+    expect(screen.getByText("탐색을 마치고 확보한 후보 4건의 분류를 완료했습니다.")).toBeTruthy();
+    expect(screen.queryByText(/마감 분류 미완료/)).toBeNull();
+  });
   it("shows retained documents after budget exhaustion without inventing candidates", () => {
     const data = current(); data.reported = null; data.status = "incomplete";
     data.error = "호출 상한 초과";
@@ -70,7 +77,7 @@ describe("single-agent audit", () => {
   });
   it("shows C independently of unverified evidence", () => {
     render(<SearchManifestView job={{ search_manifest: current() } as Job} />);
-    expect(screen.getByText(/LLM Z/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /Z분류/ })).toBeTruthy();
     expect(screen.getByText("식별 미확인")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "문헌 보기" })).toBeNull();
     expect(document.querySelector("img")).toBeNull();

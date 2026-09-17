@@ -28,7 +28,7 @@ PAYLOAD = {
     ]
 }
 
-# 테스트 전용 프로필. 실제 Kiwee 응답을 검토해 등록하는 프로필의 자리를
+# 테스트 전용 프로필. 실제 공급자 응답을 검토해 등록하는 프로필의 자리를
 # 흉내낸다. 이름을 test_ 로 시작해 실제 프로필과 섞이지 않게 한다.
 PROFILE_OFFICIAL = "test_official_xml"
 PROFILE_MT = "test_machine_translation"

@@ -109,8 +109,8 @@ def test_search_url_is_built_by_pyalex():
         openalex_client.search_url('"edge detection" OR sensor', rows=5)
     )
     assert url.startswith("https://api.openalex.org/works?")
-    # 검색엔진 문법은 떼고 보낸다(literature_client.plain_query 와 같은 규칙).
-    assert "search=edge detection sensor" in url.replace("+", " ")
+    # OpenAlex supports both exact phrases and Boolean alternatives.
+    assert 'search="edge detection" OR sensor' in url.replace("+", " ")
     assert "per-page=5" in url
     assert "abstract_inverted_index" in url
 

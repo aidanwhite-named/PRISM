@@ -124,6 +124,10 @@ class FakeInference:
                                   'queries': ['Gaussian distance cloning']}], 'context_query': ''}
         if phase == 'verify':
             raise RuntimeError('simulated verifier failure')
+        if phase == 'triage':
+            return {'candidate_ids': [r['id'] for r in payload['candidates'][:3]], 'classifications': [
+                {'candidate_id': r['id'], 'group': 'Y', 'status': 'classified', 'reason': 'Abstract relation match'}
+                for r in payload['candidates']]}
         return {'records': []}
 
 
@@ -191,7 +195,7 @@ def test_agy_partial_usage_is_accumulated_without_duplicate_steps():
 
 def test_structured_response_accepts_final_schema_output_without_merging_drafts():
     from app.search_engine.inference import decode_object
-    text = '```json\n{"candidate_ids":["draft"]}\n```\n{"candidate_ids":["final"],"toolAction":"done"}'
+    text = '```json\n{"candidate_ids":["draft"],"classifications":[]}\n```\n{"candidate_ids":["final"],"classifications":[],"toolAction":"done"}'
     assert decode_object(text, 'triage')['candidate_ids'] == ['final']
 
 
@@ -224,7 +228,7 @@ def test_real_immersive_plan_keeps_four_english_queries_despite_preamble_and_ref
 
 
 @pytest.mark.asyncio
-async def test_planner_recovers_english_queries_once_on_invalid_output(monkeypatch, tmp_path):
+async def test_planner_failure_keeps_claim_without_another_inference(monkeypatch, tmp_path):
     monkeypatch.setattr('app.search_engine.engine.PATHS', SimpleNamespace(data_dir=tmp_path, evidence_dir=tmp_path / 'evidence'))
     calls = []
     class Recover(FakeInference):
@@ -232,15 +236,13 @@ async def test_planner_recovers_english_queries_once_on_invalid_output(monkeypat
             calls.append(phase)
             if phase == 'plan':
                 raise ValueError('invalid JSON')
-            assert phase == 'plan_recovery'
-            return {'features': [{'text': payload['claim'], 'queries': ['point cloud connectivity interpolation']}],
-                    'context_query': 'immersive video'}
+            pytest.fail('No recovery model call should consume classification time')
     engine = Engine(claim='포인트 클라우드 연결성으로 기하구조를 보간한다.', directory=tmp_path / 'run',
                     inference=Recover(), values={}, depth='deep')
     await engine.plan()
-    assert calls == ['plan', 'plan_recovery']
-    assert engine.features[0].queries == ['point cloud connectivity interpolation']
-    assert engine.warnings[0].startswith('plan_recovered')
+    assert calls == ['plan']
+    assert engine.features[0].text == engine.claim
+    assert any(w.startswith('plan:') for w in engine.warnings)
 
 
 def test_document_classification_is_separate_from_feature_and_quote_status():
@@ -265,7 +267,7 @@ def test_document_display_order_migrates_legacy_categories_without_changing_retr
     assert [c['id'] for c in candidates] == ['z', 'y1', 'x', 'y2', 'none']
     text = render({'candidates': candidates, 'features': [{'id': 'A', 'text': 'original feature'}],
                    'elapsed_seconds': 0, 'stop_reason': 'bounded_expansion_complete', 'queries': [], 'warnings': []})
-    assert text.index('**문헌 분류 X**') < text.index('**문헌 분류 Y**') < text.index('**문헌 분류 Z**')
+    assert text.index('**X분류**') < text.index('**Y분류**') < text.index('**Z분류**')
     assert '**A**: original feature' in text
 
 
@@ -347,7 +349,7 @@ def test_progressive_startup_does_not_change_agy_global_permissions(monkeypatch)
     ('X', 'abstract', '2024-01-01', True),
     ('X', 'description', '2026-01-01', True),
 ])
-async def test_relation_seed_requires_dated_fulltext_x_before_skipping_existing_search(
+async def test_relation_seed_collects_metadata_before_shared_verification(
         monkeypatch, tmp_path, group, scope, date, expected_fallback):
     monkeypatch.setattr('app.search_engine.engine.PATHS', SimpleNamespace(data_dir=tmp_path, evidence_dir=tmp_path / 'evidence'))
     class Planner(FakeInference):
@@ -366,31 +368,36 @@ async def test_relation_seed_requires_dated_fulltext_x_before_skipping_existing_
                 c.document_classification = {'group': group}
                 c.evidence = [{'feature': f.id, 'match': 'explicit', 'quote_verified': True,
                                'locator': {'scope': scope}} for f in self.features]
-        async def triage(self): pass
+        async def triage(self):
+            self.classification_targets = list(self.ledger.candidates)
+            for c in self.ordered():
+                c.document_classification = {'group': 'X', 'reason': 'provisional abstract match'}
         async def expand(self): pass
     engine = RouteEngine(claim='Gaussian cloning uses distance.', directory=tmp_path / 'run',
         inference=Planner(), sources=Sources(), depth='deep', cutoff='2025-01-01',
         values={'epo_integration_enabled': True, 'progressive_search_web_enabled': False})
     result = await engine.run()
-    assert (any(step['lane'] == 'existing_search' for step in result['route'])) == expected_fallback
+    assert any(step['lane'] == 'existing_search' for step in result['route'])
     assert calls[:2] == ['gaussian neighbor covariance', 'gaussian neighbor cloning']
     assert len(result['candidates']) == 1  # union survives transition, not a reset
-    assert result['route'][0]['outcome'] == ('no_verified_xy' if expected_fallback else 'verified_xy')
+    assert result['route'][0]['outcome'] == 'candidates_merged'
+    assert result['verified_match'] == (not expected_fallback)
 
 
 @pytest.mark.asyncio
-async def test_seed_stage_reserves_fallback_time_and_restores_deadline(monkeypatch, tmp_path):
+async def test_seed_stage_uses_callers_discovery_deadline_without_nested_timer(monkeypatch, tmp_path):
     monkeypatch.setattr('app.search_engine.engine.PATHS', SimpleNamespace(data_dir=tmp_path, evidence_dir=tmp_path / 'evidence'))
-    engine = Engine(claim='test', directory=tmp_path, inference=FakeInference(), values={}, depth='deep')
+    engine = Engine(claim='test', directory=tmp_path, inference=FakeInference(), values={'epo_integration_enabled': True}, depth='deep')
     engine.seed_queries = ['sensor distance covariance']
+    engine.stage_deadline = engine.deadline - 50
     observed = []
     async def web(*args, **kwargs):
         observed.append(engine.remaining(0))
-    engine.web_seeds = web
+    engine.query = web
     await engine.search_relation_seeds()
-    assert 0 < observed[0] <= 60
-    assert engine.stage_deadline is None and engine.remaining() > 100
-    assert engine.route[0]['outcome'] == 'no_verified_xy'
+    assert 60 < observed[0] <= 70
+    assert engine.stage_deadline == engine.deadline - 50
+    assert engine.route[0]['outcome'] == 'no_candidates'
 
 
 def test_seed_shortlist_spans_features_without_promoting_classification():
@@ -414,12 +421,12 @@ def test_seed_plan_queries_are_optional_and_bounded():
 @pytest.mark.asyncio
 async def test_seed_failure_keeps_global_deadline_available_for_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr('app.search_engine.engine.PATHS', SimpleNamespace(data_dir=tmp_path, evidence_dir=tmp_path / 'evidence'))
-    engine = Engine(claim='test', directory=tmp_path, inference=FakeInference(), values={}, depth='deep')
+    engine = Engine(claim='test', directory=tmp_path, inference=FakeInference(), values={'epo_integration_enabled': True}, depth='deep')
     engine.seed_queries = ['sensor distance covariance']
     async def fail(*args, **kwargs):
         raise RuntimeError('source unavailable')
-    engine.web_seeds = fail
+    engine.query = fail
     await engine.search_relation_seeds()
     assert engine.stage_deadline is None and engine.remaining() > 100
-    assert engine.route[0]['outcome'] == 'no_verified_xy'
+    assert engine.route[0]['outcome'] == 'no_candidates'
     assert 'source unavailable' in engine.warnings[-1]

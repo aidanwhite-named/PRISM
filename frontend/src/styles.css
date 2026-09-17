@@ -767,7 +767,6 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .settings-side > .settings-prompt-defaults { flex: 1 1 auto; }
 .page-settings > .settings-limits { grid-column: 1 / -1; }
 .page-settings > .settings-run-limits,
-.page-settings > .settings-kiwee,
 .page-settings > .settings-epo,
 .page-settings > .settings-kipris,
 .page-settings > .settings-literature,

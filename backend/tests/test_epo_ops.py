@@ -37,11 +37,11 @@ def test_setting_key_names_match_defaults() -> None:
 
 
 def test_toggles_are_independent() -> None:
-    """EPO 를 켜도 Kiwee 는 꺼진 채로 있어야 한다."""
+    """EPO와 비특허문헌 연동은 독립적으로 활성화한다."""
     values = {epo_backend.SETTING_ENABLED: True}
     assert patent_search.is_enabled(values, "epo") is True
-    assert patent_search.is_enabled(values, "kiwee") is False
-    assert patent_search.is_enabled({patent_search.SETTING_KEY: True}, "epo") is False
+    assert patent_search.is_enabled(values, "literature") is False
+    assert patent_search.is_enabled({patent_search.LITERATURE_SETTING_ENABLED: True}, "epo") is False
 
 
 def test_get_backend_injects_credentials() -> None:
@@ -95,7 +95,7 @@ def test_search_without_credentials_never_opens_network() -> None:
 
 def test_describe_all_covers_every_backend() -> None:
     ids = {status.backend_id for status in patent_search.describe_all(dict(DEFAULTS))}
-    assert ids == set(patent_search.BACKEND_IDS)
+    assert ids == set(patent_search.BACKEND_IDS) == {"epo", "literature", "kipris"}
 
 
 # ------------------------------------------------------------- 자격증명 검증

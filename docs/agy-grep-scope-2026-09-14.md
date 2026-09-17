@@ -37,7 +37,7 @@ agy는 성공한 `read_url_content` 14번 단계의 저장 폴더에서 `Abstrac
 첫 실제 검증 실행 `4ef44a79-b2ee-4f9f-9269-d83c8572ff05`는 도구 정책은 통과했으나
 정상 JSON 코드 블록 뒤에 옛 채널별 검색 기록이 붙어 `INVALID_OUTPUT`으로 실패했다.
 `search_manifest.parse_payload`가 이 정확한 조합만 수용하도록 보완했다.
-추가 기록이 web/epo/kiwee/literature의 queries/fetches 문자열 배열일 때만 허용하며,
+추가 기록이 web/epo/literature의 queries/fetches 문자열 배열일 때만 허용하며,
 두 번째 후보 보고서·중복 JSON 키·잘못된 형식·임의 산문은 여전히 거부한다.
 실제 저장된 응답을 새 파서와 근거 검증기에 통과시켜 후보 4건의 처리를 확인했다.
 

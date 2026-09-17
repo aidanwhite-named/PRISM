@@ -759,6 +759,13 @@ def assemble_job(
     search_context = SEARCH_CONTEXT_BY_POLICY.get(tool_policy_name, SEARCH_RUNTIME_CONTEXT)
     if tool_policy_name == ALLOWLIST_POLICY:
         search_context = with_agy_allowlist(search_context, agy_allowed_hosts)
+        from .providers import agy_mcp
+        from .search_channels import available_mcp_names
+        names = [name.removeprefix(agy_mcp.TOOL_PREFIX) for name in available_mcp_names(search_tool_status or {})]
+        search_context += ('\n[MCP 설명 파일의 정확한 경로]\n'
+            '도구 목록은 아래에 있습니다. 파일을 찾기 위한 find_by_name/list_dir 호출은 금지합니다. '
+            '필요한 도구의 아래 경로만 view_file로 읽거나 바로 call_mcp_tool로 호출하십시오.\n' +
+            '\n'.join(f'{name}: {agy_mcp.schema_dir() / (name + ".json")}' for name in names))
     if search_tool_status is not None:
         search_context += "\n[이 실행의 도구 상태]\n" + json.dumps(search_tool_status, ensure_ascii=False)
     from .search_budget import prompt as budget_prompt

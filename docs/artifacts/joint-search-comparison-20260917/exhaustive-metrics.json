@@ -1,0 +1,355 @@
+{
+  "case": "coupled_joint_limits",
+  "k": 20,
+  "known_relevant_recall_at_k": 0.0,
+  "known_relevant_ranks": [
+    {
+      "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+      "rank": null,
+      "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+    }
+  ],
+  "candidate_count": 20,
+  "classification": {
+    "status": "complete",
+    "target_count": 8,
+    "reviewed_count": 8,
+    "unreviewed_count": 12
+  },
+  "classified_documents": 1,
+  "insufficient_information_documents": 3,
+  "low_relevance_documents": 4,
+  "first_candidate_seconds": 0.297,
+  "elapsed_seconds": 279.797,
+  "usage": {
+    "input_tokens": 18078.0,
+    "output_tokens": 7148.0,
+    "cache_read_tokens": 0.0,
+    "thinking_tokens": 6417.0,
+    "total_tokens": 25226.0,
+    "usage_complete": false,
+    "stages": [
+      {
+        "phase": "web_seeds",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 10779,
+        "usage_complete": false,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"부모 뼈\" \"자식 뼈\" \"회전\" \"파라미터\" \"제1 한계\""
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"KR1020260113114A\" OR \"KR20260113114\" OR \"KR-1020260113114\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"姿勢決定\" OR \"姿勢を決定\" OR \"第１の限界\" OR \"第1の限界\""
+            },
+            "index": 3
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-8",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"関節\" \"補正\" \"第1の限界\" OR \"第１の限界\""
+            },
+            "index": 4
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-10",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"補正\" \"限界\" \"姿勢\""
+            },
+            "index": 5
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-12",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"first limit\" OR \"first boundary\" OR \"joint limit\" \"correcting\""
+            },
+            "index": 6
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-14",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"rotation\" \"exceeds\" \"limit\" \"correcting\""
+            },
+            "index": 7
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-16",
+            "input": {
+              "query": "\"joint limits\" \"parent\" \"child\" \"rotation\" \"exceeds\" \"correcting\""
+            },
+            "index": 8
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-18",
+            "input": {
+              "query": "\"골격 모델\" \"부모 뼈\" \"자식 뼈\" \"회전\""
+            },
+            "index": 9
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-20",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"first limit\""
+            },
+            "index": 10
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-22",
+            "input": {
+              "query": "\"10-2020-0113114\" OR \"10-2021-0113114\" OR \"10-2016-0113114\" OR \"10-2019-0113114\" OR \"10-2022-0113114\""
+            },
+            "index": 11
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-24",
+            "input": {
+              "query": "site:patsnap.com \"parent bone\" \"child bone\""
+            },
+            "index": 12
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-26",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"joint\" \"correcting\" \"parameters\""
+            },
+            "index": 13
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-28",
+            "input": {
+              "query": "\"coupled joint limits\" skeleton OR \"skeletal\" OR \"kinematic\" OR \"pose\""
+            },
+            "index": 14
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-30",
+            "input": {
+              "query": "\"Pose-conditioned joint limits\" Black OR Akhter"
+            },
+            "index": 15
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-32",
+            "input": {
+              "query": "\"joint limit\" \"reach cone\" \"skeleton\" OR \"skeletal\""
+            },
+            "index": 16
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-34",
+            "input": {
+              "query": "\"reach cone\" OR \"reach cones\" \"joint limit\" OR \"joint limits\" enforcement OR enforcing OR projection"
+            },
+            "index": 17
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-36",
+            "input": {
+              "query": "Herda Thalmann \"joint limits\" OR \"joint limit\""
+            },
+            "index": 18
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-38",
+            "input": {
+              "query": "\"joint limit\" \"parent bone\" \"child bone\" OR \"skeletal\" \"correcting\" OR \"corrected\""
+            },
+            "index": 19
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-40",
+            "input": {
+              "query": "\"skeletal model\" \"parent bone\" \"child bone\" \"joint\" \"limit\""
+            },
+            "index": 20
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-42",
+            "input": {
+              "query": "site:patents.google.com \"joint limit\" \"bone\" \"child\" \"rotation\" \"correcting\""
+            },
+            "index": 21
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-44",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"joint limit\""
+            },
+            "index": 22
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-46",
+            "input": {
+              "query": "\"swing-twist\" \"joint limit\" OR \"joint limits\" \"parent\" \"child\""
+            },
+            "index": 23
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-48",
+            "input": {
+              "query": "Baerlocher Boulic \"joint limits\" OR \"joint limit\""
+            },
+            "index": 24
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-50",
+            "input": {
+              "query": "\"Parametrization and Range of Motion of the Ball-and-Socket Joint\" Baerlocher Boulic"
+            },
+            "index": 25
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-52",
+            "input": {
+              "query": "Grassia \"spherical ellipse\" OR \"joint limit\" OR \"joint limits\""
+            },
+            "index": 26
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-54",
+            "input": {
+              "query": "\"joint limit\" \"parent bone\" \"child bone\" \"rotation\""
+            },
+            "index": 27
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-56",
+            "input": {
+              "query": "\"exceeds\" \"first limit\" \"child bone\""
+            },
+            "index": 28
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-58",
+            "input": {
+              "query": "site:patsnap.com \"first limit\" \"exceeds\" \"bone\""
+            },
+            "index": 29
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-60",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"第1の限界\" OR \"第１の限界\""
+            },
+            "index": 30
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-62",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"関節\" \"姿勢\""
+            },
+            "index": 31
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-64",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"関節\" \"姿勢\" \"パラメータ\""
+            },
+            "index": 32
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-66",
+            "input": {
+              "query": "\"CGモデルの動きを実機ロボットに反映\" OR \"両者の骨格構造や関節のパラメータ差を補正\""
+            },
+            "index": 33
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-68",
+            "input": {
+              "query": "\"제1 한계\" \"골격\" \"파라미터\" OR \"관절\""
+            },
+            "index": 34
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-70",
+            "input": {
+              "query": "\"관절\" \"골격 모델\" \"부모\" \"자식\" \"회전\" \"한계\" \"보정\""
+            },
+            "index": 35
+          }
+        ],
+        "seconds": 245.09299999999985
+      },
+      {
+        "phase": "triage",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 14030,
+        "usage_complete": true,
+        "usage": {
+          "input_tokens": 18078,
+          "output_tokens": 7148,
+          "thinking_tokens": 6417,
+          "cache_read_tokens": 0,
+          "total_tokens": 25226
+        },
+        "seconds": 33.78200000000015,
+        "timed_out": false,
+        "tool_calls": [],
+        "output_partial": false
+      }
+    ],
+    "cost_usd": null
+  },
+  "verified_evidence_rows": 0,
+  "relation_rows": 0,
+  "full_text_documents": 0,
+  "query_cache_hits": 4,
+  "limits": [
+    "Partial relevance judgments, not anticipation/novelty findings.",
+    "Known-relevant set is incomplete; no corpus-wide recall or precision claimed.",
+    "Single runs and source/model/cache differences must be reported separately."
+  ],
+  "job_id": "29633f0e-0db7-4c40-ad00-d4c98463a6c5",
+  "status": "SUCCEEDED",
+  "errors": []
+}

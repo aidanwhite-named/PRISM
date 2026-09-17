@@ -33,10 +33,6 @@ class EvidencePolicy:
 
 
 # 기본 정책. 원문 등급은 꺼져 있다.
-#
-# Kiwee 응답에 공식 XML 원문 필드가 실제로 있는지 확인되지 않았다. 도달할 수
-# 없는 등급을 열어 두면 "기껏 만들었는데 아무것도 raw 를 못 받네, 조건 좀
-# 풀자"는 압력이 생긴다. 안전 장치가 무너지는 전형적인 경로다.
 RAW_DISABLED = EvidencePolicy(
     version="raw-disabled-1",
     raw_enabled=False,

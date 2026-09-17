@@ -1760,8 +1760,8 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               <>
                 {job.analysis_manifest.evidence_review && <div className={`notice ${job.analysis_manifest.evidence_review.status === "reviewed" ? "info" : "warn"}`}>
                   {job.analysis_manifest.evidence_review.status === "reviewed"
-                    ? "원문 후보의 의미 대응을 별도로 재검토했습니다. AI 평가이며 검토 후보 범위에 한정됩니다."
-                    : "근거 재검토가 완료되지 않은 부분이 있습니다. 미검증 초안의 점수·발췌·문헌 순위를 확정 결과로 보지 마세요."}
+                    ? "원문 근거로 구성대비를 수행했습니다. AI 평가이며 검토한 근거 범위에 한정됩니다."
+                    : "일부 판정 또는 결합 근거가 확인되지 않았습니다. 보고서의 미확인 항목과 검토 제한을 확인하세요."}
                 </div>}
                 <AnalysisDegreeOverview components={job.analysis_manifest.items} />
               </>

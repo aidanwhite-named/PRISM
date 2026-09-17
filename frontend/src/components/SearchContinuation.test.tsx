@@ -13,6 +13,15 @@ afterEach(() => { cleanup(); sessionStorage.clear(); vi.clearAllMocks(); });
 const job = { id: "basic", status: "SUCCEEDED", job_kind: "similarity_search",
   search_manifest: { engine: { can_continue: true, verified_match: false } } } as unknown as Job;
 
+it("allows a classification failure to continue using retained candidates", () => {
+  const failed = { ...job, status: "FAILED", search_manifest: {
+    engine: { can_continue: true, verified_match: false, stop_reason: "classification_incomplete" },
+  } } as unknown as Job;
+  render(<SearchContinuation job={failed} disabled={false} onContinued={vi.fn()} />);
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  expect(api.continueSearch).not.toHaveBeenCalled();
+});
+
 it("offers precision only after basic completion and dismisses without executing", () => {
   const { rerender } = render(<SearchContinuation job={{ ...job, status: "RUNNING" }} disabled onContinued={vi.fn()} />);
   expect(screen.queryByRole("dialog")).toBeNull();

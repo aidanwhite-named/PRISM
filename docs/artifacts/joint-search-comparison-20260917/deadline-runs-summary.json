@@ -1,0 +1,237 @@
+[
+  {
+    "job_id": "922b701c-0fd5-4759-bcac-c90e316d50f2",
+    "status": "FAILED",
+    "error_code": "TOOL_POLICY_VIOLATION",
+    "errors": [
+      "허용되지 않은 도구가 호출되었습니다: find_by_name. agy_web_search 정책은 search_web, read_url_content 만 허용합니다. view_file 은 이 실행에서 가져온 페이지의 저장본을 읽는 호출만 인정합니다."
+    ],
+    "duration_seconds": 287.98,
+    "metrics": {
+      "case": "coupled_joint_limits",
+      "k": 20,
+      "known_relevant_recall_at_k": 0.0,
+      "known_relevant_ranks": [
+        {
+          "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+          "rank": null,
+          "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+        }
+      ],
+      "candidate_count": 38,
+      "classification": {
+        "attempted": true,
+        "completed": true,
+        "reason": "확보 자료의 마감 분류",
+        "candidate_count": 38,
+        "timeout_seconds": 98,
+        "search_timed_out": true
+      },
+      "classified_documents": 4,
+      "insufficient_information_documents": 10,
+      "low_relevance_documents": 24,
+      "first_candidate_seconds": null,
+      "elapsed_seconds": 287.974657,
+      "usage": {
+        "total_tokens": 432854,
+        "output_tokens": 27721,
+        "thinking_tokens": 19410,
+        "cache_read_tokens": 712407,
+        "input_tokens": 405133,
+        "usage_complete": false,
+        "stages": [
+          {
+            "phase": "search",
+            "usage": {
+              "total_tokens": 373403,
+              "output_tokens": 6606,
+              "thinking_tokens": 4451,
+              "cache_read_tokens": 712407,
+              "input_tokens": 366797,
+              "usage_complete": false
+            }
+          },
+          {
+            "phase": "classification",
+            "usage": {
+              "input_tokens": 38336,
+              "output_tokens": 21115,
+              "thinking_tokens": 14959,
+              "cache_read_tokens": 0,
+              "total_tokens": 59451
+            }
+          }
+        ]
+      },
+      "verified_evidence_rows": 0,
+      "relation_rows": 5,
+      "full_text_documents": 0,
+      "query_cache_hits": 0,
+      "limits": [
+        "Partial relevance judgments, not anticipation/novelty findings.",
+        "Known-relevant set is incomplete; no corpus-wide recall or precision claimed.",
+        "Single runs and source/model/cache differences must be reported separately."
+      ]
+    },
+    "time_budget": {
+      "total_seconds": 300,
+      "search_seconds": 195,
+      "classification_reserve_seconds": 100,
+      "save_reserve_seconds": 5
+    },
+    "groups": {
+      "Z": 4,
+      "null": 34
+    },
+    "stages": [
+      {
+        "stage": "queued",
+        "seconds": -0.003007
+      },
+      {
+        "stage": "preprocessing",
+        "seconds": 0.005992
+      },
+      {
+        "stage": "executing",
+        "seconds": 0.029992
+      },
+      {
+        "stage": "classifying",
+        "seconds": 196.957972
+      },
+      {
+        "stage": "verifying",
+        "seconds": 287.401037
+      }
+    ],
+    "tool_counts": {
+      "mcp__prism-search__search_capabilities": 1,
+      "find_by_name": 1,
+      "view_file": 9,
+      "mcp__prism-search__kipris_search": 1,
+      "search_web": 10,
+      "mcp__prism-search__epo_search": 2,
+      "mcp__prism-search__literature_search": 2,
+      "read_url_content": 1
+    },
+    "target_patents_found": []
+  },
+  {
+    "job_id": "3c3a6963-64e8-4fac-bff8-3ca66718c473",
+    "status": "SUCCEEDED",
+    "error_code": null,
+    "errors": [],
+    "duration_seconds": 256.154,
+    "metrics": {
+      "case": "coupled_joint_limits",
+      "k": 20,
+      "known_relevant_recall_at_k": 0.0,
+      "known_relevant_ranks": [
+        {
+          "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+          "rank": null,
+          "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+        }
+      ],
+      "candidate_count": 44,
+      "classification": {
+        "attempted": true,
+        "completed": true,
+        "reason": "확보 자료의 마감 분류",
+        "candidate_count": 44,
+        "timeout_seconds": 98,
+        "search_timed_out": true
+      },
+      "classified_documents": 2,
+      "insufficient_information_documents": 12,
+      "low_relevance_documents": 30,
+      "first_candidate_seconds": null,
+      "elapsed_seconds": 256.148081,
+      "usage": {
+        "thinking_tokens": 9972,
+        "cache_read_tokens": 1078508,
+        "total_tokens": 332680,
+        "input_tokens": 311687,
+        "output_tokens": 20993,
+        "usage_complete": false,
+        "stages": [
+          {
+            "phase": "search",
+            "usage": {
+              "thinking_tokens": 4716,
+              "cache_read_tokens": 1078508,
+              "total_tokens": 276700,
+              "input_tokens": 267718,
+              "output_tokens": 8982,
+              "usage_complete": false
+            }
+          },
+          {
+            "phase": "classification",
+            "usage": {
+              "input_tokens": 43969,
+              "output_tokens": 12011,
+              "thinking_tokens": 5256,
+              "cache_read_tokens": 0,
+              "total_tokens": 55980
+            }
+          }
+        ]
+      },
+      "verified_evidence_rows": 0,
+      "relation_rows": 3,
+      "full_text_documents": 0,
+      "query_cache_hits": 0,
+      "limits": [
+        "Partial relevance judgments, not anticipation/novelty findings.",
+        "Known-relevant set is incomplete; no corpus-wide recall or precision claimed.",
+        "Single runs and source/model/cache differences must be reported separately."
+      ]
+    },
+    "time_budget": {
+      "total_seconds": 300,
+      "search_seconds": 195,
+      "classification_reserve_seconds": 100,
+      "save_reserve_seconds": 5
+    },
+    "groups": {
+      "X": 1,
+      "Y": 1,
+      "null": 42
+    },
+    "stages": [
+      {
+        "stage": "queued",
+        "seconds": -0.002998
+      },
+      {
+        "stage": "preprocessing",
+        "seconds": 0.006004
+      },
+      {
+        "stage": "executing",
+        "seconds": 0.028006
+      },
+      {
+        "stage": "classifying",
+        "seconds": 196.924835
+      },
+      {
+        "stage": "verifying",
+        "seconds": 255.905078
+      }
+    ],
+    "tool_counts": {
+      "mcp__prism-search__search_capabilities": 1,
+      "view_file": 9,
+      "mcp__prism-search__kipris_search": 1,
+      "search_web": 15,
+      "mcp__prism-search__epo_search": 1,
+      "mcp__prism-search__literature_search": 2,
+      "mcp__prism-search__literature_fetch": 1,
+      "mcp__prism-search__save_candidates": 2
+    },
+    "target_patents_found": []
+  }
+]

@@ -1,0 +1,69 @@
+{
+  "case": "coupled_joint_limits",
+  "k": 20,
+  "known_relevant_recall_at_k": 0.0,
+  "known_relevant_ranks": [
+    {
+      "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+      "rank": null,
+      "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+    }
+  ],
+  "candidate_count": 44,
+  "classification": {
+    "attempted": true,
+    "completed": true,
+    "reason": "확보 자료의 마감 분류",
+    "candidate_count": 44,
+    "timeout_seconds": 98,
+    "search_timed_out": true
+  },
+  "classified_documents": 2,
+  "insufficient_information_documents": 12,
+  "low_relevance_documents": 30,
+  "first_candidate_seconds": null,
+  "elapsed_seconds": 256.148081,
+  "usage": {
+    "thinking_tokens": 9972,
+    "cache_read_tokens": 1078508,
+    "total_tokens": 332680,
+    "input_tokens": 311687,
+    "output_tokens": 20993,
+    "usage_complete": false,
+    "stages": [
+      {
+        "phase": "search",
+        "usage": {
+          "thinking_tokens": 4716,
+          "cache_read_tokens": 1078508,
+          "total_tokens": 276700,
+          "input_tokens": 267718,
+          "output_tokens": 8982,
+          "usage_complete": false
+        }
+      },
+      {
+        "phase": "classification",
+        "usage": {
+          "input_tokens": 43969,
+          "output_tokens": 12011,
+          "thinking_tokens": 5256,
+          "cache_read_tokens": 0,
+          "total_tokens": 55980
+        }
+      }
+    ]
+  },
+  "verified_evidence_rows": 0,
+  "relation_rows": 3,
+  "full_text_documents": 0,
+  "query_cache_hits": 0,
+  "limits": [
+    "Partial relevance judgments, not anticipation/novelty findings.",
+    "Known-relevant set is incomplete; no corpus-wide recall or precision claimed.",
+    "Single runs and source/model/cache differences must be reported separately."
+  ],
+  "job_id": "3c3a6963-64e8-4fac-bff8-3ca66718c473",
+  "status": "SUCCEEDED",
+  "errors": []
+}

@@ -37,7 +37,7 @@ EP4386678A1을 별도로 조회한 결과 두 문헌의 EPO family ID는 **84785
 5. **전문 검색으로 오해한 필드가 있었다.** 기존 코드의 `FIELD_FULLTEXT="txt"` 및 `fulltext=True`는 실제로 OPS 제목·초록·출원인·발명자 검색이다. 청구항·설명 전체 검색이 아니다. [EPO OPS 1.3.20, CQL index catalogue, 144~145쪽](https://link.epo.org/web/searching-for-patents/data/en-ops-v3.2-documentation-version-1.3.20.pdf)에서 확인했다. 이번 수정에서 주석을 바로잡고 새 조회 기록에 실제 `search_scope`를 남긴다. 확보한 전문 안에서 수행하는 BM25 문단 검색은 별도로 존재한다.
 6. **패밀리 중복 제거와 패밀리 확장은 다르다.** 현재는 수집된 후보의 family ID로 묶지만, 강한 EP seed를 발견한 후 한국 대응문헌을 자동으로 가져오는 완전한 family expansion은 없다. 앞선 EP 검색 성공과 KR 공개번호의 직접 검색 성공을 구분해야 한다.
 
-따라서 최신 실행의 문제는 embedding threshold나 마지막 화면의 정렬에서 정답이 탈락한 것이 아니다. **대상 발명이 retrieval candidate pool에 들어오지 않았다.** Kiwee가 한국어 검색 범위를 보완할 수 있지만, 위 질의·페이지 편향·출처 배정·확장 조건 문제까지 자동 해결하지는 않는다.
+따라서 최신 실행의 문제는 embedding threshold나 마지막 화면의 정렬에서 정답이 탈락한 것이 아니다. **대상 발명이 retrieval candidate pool에 들어오지 않았다.** 위 질의·페이지 편향·출처 배정·확장 조건 문제는 각각 개선해야 한다.
 
 ## 이번에 적용한 화면·분류 변경
 

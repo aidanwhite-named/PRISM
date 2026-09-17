@@ -5,6 +5,7 @@ import json
 import os
 import re
 import uuid
+import time
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
@@ -20,7 +21,20 @@ def write_json(path: Path, value) -> None:
         json.dump(value, handle, ensure_ascii=False, indent=2)
         handle.flush()
         os.fsync(handle.fileno())
-    os.replace(temporary, path)
+    try:
+        for attempt in range(6):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError as exc:
+                # Windows readers briefly deny replacement while opening the
+                # counter/checkpoint. Keep the old complete JSON until retry.
+                if getattr(exc, 'winerror', None) not in (5, 32) or attempt == 5:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def identifier(value: str) -> str:

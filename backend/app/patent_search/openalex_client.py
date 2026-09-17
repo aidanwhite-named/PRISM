@@ -31,6 +31,7 @@ $0.10 이 무료다. DOI 단건 조회는 무료, 검색은 1,000회에 $1 이�
 from __future__ import annotations
 
 import json
+import re
 import ssl
 import threading
 import time
@@ -48,7 +49,6 @@ from .literature_client import (
     LiteratureCall,
     LiteratureError,
     normalize_doi,
-    plain_query,
 )
 
 SOURCE_OPENALEX = "openalex"
@@ -183,7 +183,10 @@ def _with_page(url: str, rows: int) -> str:
 
 def search_url(query: str, *, rows: int, mode: str = MODE_SEARCH, cites: str = "") -> str:
     works = _works()
-    text = plain_query(query)
+    # OpenAlex supports exact phrases and Boolean expressions. Stripping them
+    # silently broadens a model's carefully narrowed revision into unrelated hits.
+    text = re.sub(r'\b(?:site|filetype|intitle|inurl):\S+', '', query)
+    text = ' '.join(text.replace('“', '"').replace('”', '"').split())
     if cites:
         works = works.filter(cites=cites)
     if mode == MODE_TITLE_ABSTRACT:

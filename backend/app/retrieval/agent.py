@@ -224,6 +224,7 @@ class ComponentState:
     failed_channels: list[str] = field(default_factory=list)
     hit_chunks: dict[str, dict] = field(default_factory=dict)
     reviewed_pages: dict[str, set] = field(default_factory=dict)
+    reviewed_chunks: set[tuple[str, str]] = field(default_factory=set)
     # 후보가 실제 반환된 문헌. 0-hit 시도는 여기 넣지 않아 첫 후보 우선권을 유지한다.
     searched: dict[str, DocumentSearchRecord] = field(default_factory=dict)
     # 0건/누락/실패도 감사와 부재 판정에는 필요하므로 별도로 보존한다.
@@ -325,7 +326,7 @@ class ComponentState:
             if len(record.queries) < MIN_EXPANSION_TERMS
         )
         candidates = len(self.hit_chunks)
-        reviewed = sum(len(pages) for pages in self.reviewed_pages.values())
+        reviewed = sum(len(pages) for pages in self.reviewed_pages.values()) + len(self.reviewed_chunks)
 
         reasons: list[str] = []
         if unsearched:
@@ -854,10 +855,9 @@ class RetrievalAgent:
             position += 1
         scheduled.sort(
             key=lambda row: (
-                # 열람을 먼저 묶으면 페이지 본문을 뒤의 검색 후보도 참조할 수
-                # 있다. 새 광범위 검색이 이월 열람의 반환 공간을 차지하지 않는다.
-                0 if isinstance(row[0], READ_ITEMS)
-                else 1 if row[1] is not None else 2,
+                bool((component := self._component(getattr(row[0], 'component_id', '')))
+                     and component.search_completeness == 'sufficient'),
+                0 if isinstance(row[0], READ_ITEMS) else 1,
                 -self._action_priority(
                     row[0],
                     deferred=row[1] is not None,
@@ -960,7 +960,6 @@ class RetrievalAgent:
         run = RetrievalRun()
         pending_error = ""
         results_payload: list[dict] = []
-        last_deferred_blocked_finalize: FinalizeEvidence | None = None
 
         for round_no in range(1, self.budget.max_rounds + 1):
             if self.is_cancelled():
@@ -970,6 +969,8 @@ class RetrievalAgent:
                 self._sync_deferred_pending(run)
                 return run
 
+            self._refresh_priorities(round_no)
+            final_round = round_no == self.budget.max_rounds
             payload = self._round_payload(round_no, results_payload, pending_error)
             user_message = render_round(payload)
             round_dir = self.work_dir / "rounds"
@@ -1102,7 +1103,8 @@ class RetrievalAgent:
             pending_error = ""
             self._declare_components(response, run)
             response.actions = [self._canonical_action(item) for item in response.actions]
-            self._refresh_priorities(round_no)
+            if response.components:
+                self._refresh_priorities(round_no)
             record.actions = len(response.actions)
             if response.notes:
                 run.notes.append(f"round {round_no}: {response.notes}")
@@ -1128,22 +1130,26 @@ class RetrievalAgent:
             record.status = "ok"
             run.rounds.append(record)
 
+            # The last call consumes the previous results; nothing may be fetched
+            # after it, because no model call remains to inspect the new output.
+            if final_round:
+                for item in response.actions:
+                    if not isinstance(item, FinalizeEvidence):
+                        self._enqueue_deferred(item, run=run, round_no=round_no,
+                            reason="마지막 라운드는 반환된 근거 검토·확정에 사용하므로 추가 조회하지 않았습니다.")
+
             finalize = next(
                 (item for item in response.actions if item.action == ACTION_FINALIZE),
                 None,
             )
             if finalize is not None:
                 problem = self._finalize_problem(finalize)
-                if not problem and self._has_blocking_deferred():
+                if not problem and not final_round and self._has_blocking_deferred():
                     problem = (
                         "아직 우선순위가 높은 구성에 대해 반환 예산으로 이월된 "
                         "검색·열람 action 이 남아 있습니다. 이월된 action 을 먼저 "
                         "실행하고, 각 문헌을 최소 한 번씩 확인한 뒤 finalize 하십시오."
                     )
-                    # 구조적으로 완전한 finalize 는 버리지 않는다. 라운드 상한에
-                    # 닿으면 마지막 유효안을 예산 소진 상태로 채택해, 이미 확인한
-                    # 근거까지 빈 패키지로 잃지 않게 한다.
-                    last_deferred_blocked_finalize = finalize
                 if problem:
                     # 마무리 요청을 받아 주지 않는다. 구성이 빠진 채로 확정하면
                     # 그 구성은 근거도 상태 사유도 없이 조용히 사라진다.
@@ -1158,6 +1164,8 @@ class RetrievalAgent:
                         "finalize_rejected", {"reason": problem}, round_no=round_no
                     )
                     pending_error = problem
+                    if final_round:
+                        break
                     results_payload = await self._execute_actions(
                         [
                             item
@@ -1175,8 +1183,12 @@ class RetrievalAgent:
                     round_no=round_no,
                 )
                 self._sync_deferred_pending(run)
+                if run.budget_exhausted:
+                    run.notes.append("반환된 근거 검토를 마쳤으며, 미처리 요청은 검토 범위 제한으로 남겼습니다.")
                 return run
 
+            if final_round:
+                break
             results_payload = await self._execute_actions(
                 response.actions, run, round_no
             )
@@ -1189,24 +1201,10 @@ class RetrievalAgent:
         )
         if self._deferred_actions:
             run.notes.append(
-                f"반환 예산 때문에 실행하지 못한 action {len(self._deferred_actions)}건은 "
+                f"예산 제한으로 실행하지 못한 action {len(self._deferred_actions)}건은 "
                 "이 실행의 검토 범위에 포함하지 않았습니다."
             )
         self._sync_deferred_pending(run)
-        if last_deferred_blocked_finalize is not None:
-            run.finalize = last_deferred_blocked_finalize
-            run.notes.append(
-                "라운드 상한에 도달해, 이월 action 때문에 보류했던 마지막 유효 "
-                "finalize_evidence 를 예산 소진 상태로 채택했습니다."
-            )
-            self.trace.write(
-                "finalize_fallback",
-                {
-                    "components": len(last_deferred_blocked_finalize.components),
-                    "reason": "round_budget_exhausted_with_blocking_deferred",
-                },
-                round_no=self.budget.max_rounds,
-            )
         if not self._order:
             run.error_code = ErrorCode.RETRIEVAL_FAILED
             run.error = (
@@ -1388,6 +1386,7 @@ class RetrievalAgent:
     ) -> dict:
         payload = {
             "round": round_no,
+            "finalize_only": round_no == self.budget.max_rounds,
             "claim_text": self.claim_text,
             "budget": {
                 **self.budget.to_dict(),
@@ -1498,22 +1497,17 @@ class RetrievalAgent:
         budget_left = self.budget.max_round_result_chars
         scheduled = self._scheduled_actions(items)
 
-        # 문맥 열람을 먼저 처리한다. 각 단계 안에서는 구성별로 한 요청씩 순환한다.
-        # 읽기 요청은 페이지가 들어갈 실제 잔여 공간을 쓰고, 검색은 남은 구성과 나눈다.
-        reads, searches = [], []
+        # Keep the priority order and rotate across components. A second read/search
+        # sort used to override it and spend space on already sufficient components.
+        queues: dict[str, list] = {}
         for row in scheduled:
-            target = reads if isinstance(row[0], READ_ITEMS) else searches
-            target.append(row)
+            group = str(getattr(row[0], "component_id", "") or "~control")
+            queues.setdefault(group, []).append(row)
         scheduled = []
-        for phase in (reads, searches):
-            queues: dict[str, list] = {}
-            for row in phase:
-                group = str(getattr(row[0], "component_id", "") or "~control")
-                queues.setdefault(group, []).append(row)
-            while any(queues.values()):
-                for queue in queues.values():
-                    if queue:
-                        scheduled.append(queue.pop(0))
+        while any(queues.values()):
+            for queue in queues.values():
+                if queue:
+                    scheduled.append(queue.pop(0))
 
         for position, (item, deferred) in enumerate(scheduled):
             remaining_groups = {getattr(row[0], "component_id", "") or "~control"
@@ -1904,6 +1898,7 @@ class RetrievalAgent:
         entry["documents"] = [{"attachment": document.alias, "hits": [hit]}]
         size = json_size(entry)
         if size <= budget_left:
+            self._component(item.component_id).reviewed_chunks.add((document.attachment_id, row.chunk_id))
             self._register_source_fields(hit, document, {
                 "action": item.action, "component_id": item.component_id,
                 "attachment": document.alias, "chunk_id": row.chunk_id,

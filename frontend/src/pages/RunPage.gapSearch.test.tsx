@@ -125,8 +125,8 @@ it('shows one precision checkbox before the claim and defaults to automatic basi
 });
 
 it.each([
-  ['reviewed', '원문 후보의 의미 대응을 별도로 재검토했습니다.'],
-  ['incomplete', '근거 재검토가 완료되지 않은 부분이 있습니다.'],
+  ['reviewed', '원문 근거로 구성대비를 수행했습니다.'],
+  ['incomplete', '일부 판정 또는 결합 근거가 확인되지 않았습니다.'],
 ])('shows the evidence review status %s before the report', async (status, message) => {
   const { api } = await import('../lib/api');
   vi.mocked(api.historyItem).mockResolvedValueOnce({

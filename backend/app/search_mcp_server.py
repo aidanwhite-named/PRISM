@@ -5,6 +5,8 @@ import copy
 import os
 import sys
 import uuid
+import time
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,6 +105,9 @@ class SearchTools:
                 values = settings_service.get_all(session)
         self.values = values
         self.backends = {}
+        self._lock = threading.RLock()
+        self._source_locks = {name: threading.RLock() for name in ('epo', 'literature', 'kipris')}
+        self.disabled_sources = {}
         openalex_key = str(values.get("literature_openalex_api_key") or "").strip()
         self.secrets = (
             str(values.get('kipris_api_key') or ''),
@@ -113,13 +118,17 @@ class SearchTools:
     def _record(self, row: dict):
         row = {**row, "timestamp": datetime.now(timezone.utc).isoformat()}
         serialized = scrub(json.dumps(row, ensure_ascii=False), *self.secrets)
-        with self.ledger_path.open("a", encoding="utf-8") as handle:
-            handle.write(serialized + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
+        with self._lock:
+            with self.ledger_path.open("a", encoding="utf-8") as handle:
+                handle.write(serialized + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
 
     def statuses(self):
-        return search_channels.availability(self.values)
+        statuses = search_channels.availability(self.values)
+        for source, detail in self.disabled_sources.items():
+            statuses[source] = {**statuses.get(source, {}), 'status': 'unavailable', 'detail': detail}
+        return statuses
 
     def budget(self):
         try:
@@ -127,29 +136,52 @@ class SearchTools:
             native = max(0, int(native))
         except (OSError, ValueError, TypeError):
             native = 0
-        return search_budget.budget_status(self.calls + native, self.max_calls)
+        result = search_budget.budget_status(self.calls + native, self.max_calls)
+        try:
+            deadline = float((self.work_dir / 'search_deadline.json').read_text(encoding='utf-8'))
+            result['seconds_remaining'] = max(0, round(deadline - time.time()))
+            if result['seconds_remaining'] <= 30:
+                result.update(action='finalize_now', instruction='시간 한도가 임박했습니다. 현재 후보를 저장하고 미확인 사항을 포함한 최종 JSON을 작성하십시오.')
+        except (OSError, ValueError):
+            pass
+        return result
 
     def tool_definitions(self):
         statuses = self.statuses()
-        return [_CAPABILITIES] + [
-            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIWEE_SEARCH, _KIWEE_FETCH, _KIPRIS_SEARCH)
+        return [_CAPABILITIES, _SAVE_CANDIDATES, _SOURCE_FETCH, _CITATION_SEARCH, _START_COLLECTION, _COLLECT_RESULTS] + [
+            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIPRIS_SEARCH)
             if statuses[tool["name"].split("_")[0]]["status"] == "available"
         ]
 
     def call(self, name: str, arguments: dict) -> dict:
+        if name in ('epo_search', 'kipris_search', 'literature_search') and isinstance(arguments, dict):
+            size = arguments.get('max_results', 3)
+            if type(size) is int and size > 0:
+                arguments = {**arguments, 'max_results': min(size, 4)}
+        with self._lock:
+            return_row = self._reserve_call(name, arguments)
+        return self._run_call(name, arguments, return_row)
+
+    def _reserve_call(self, name, arguments):
         row = {"id": str(uuid.uuid4()), "tool": name, "arguments": arguments, "sequence": self.calls}
-        if self.budget()["remaining"] <= 0:
+        if name not in ('save_candidates', 'collect_results') and self.budget()["remaining"] <= 0:
             self._record({**row, "state": "rejected", "ok": False, "error_code": "tool_call_limit_exceeded"})
             raise ToolLimitExceeded("tool_call_limit_exceeded")
         self.calls += 1
         row["sequence"] = self.calls
         self._record({**row, "state": "started"})
+        return row
+
+    def _run_call(self, name, arguments, row):
         try:
             definition = next((tool for tool in self.tool_definitions() if tool["name"] == name), None)
             if definition is None:
                 raise ValueError("tool_unavailable")
             _validate(arguments, definition["inputSchema"])
-            if name != "search_capabilities" and self.budget()["used"] > self.budget()["finalize_at"]:
+            budget = self.budget()
+            if name not in ("search_capabilities", "save_candidates", "collect_results") and (
+                    budget['used'] > budget['finalize_at'] or budget.get('seconds_remaining', 999999) <= 10
+                    or (self.work_dir / 'search_x_complete.json').exists()):
                 result = {"records": [], "budget": self.budget(), "budget_stopped": True,
                           "not_evidence_of_absence": True}
                 self._record({**row, "state": "completed", "ok": True, "result": result})
@@ -173,7 +205,7 @@ class SearchTools:
                 result = {"tools": self.statuses(), "publication_cutoff": self.cutoff or None,
                           "tool_calls_used": self.calls, "tool_calls_limit": self.max_calls}
             elif name.startswith("epo_"):
-                with _quota_lock():
+                with self._source_locks['epo'], _quota_lock():
                     # Sync another process's committed quota before every call.
                     backend = self._backend("epo")
                     with session_scope() as session:
@@ -184,6 +216,8 @@ class SearchTools:
             else:
                 result = self._execute(name, arguments)
         except Exception as exc:
+            if name == 'kipris_search' and getattr(exc, 'fault_code', '') in ('KIPRIS.30', 'KIPRIS.31'):
+                self.disabled_sources['kipris'] = str(exc)
             self._record({**row, "state": "completed", "ok": False,
                           **error_response(exc, name, arguments, self.secrets)})
             raise
@@ -192,12 +226,20 @@ class SearchTools:
         return result
 
     def _execute(self, name, arguments):
+        if name in ('start_collection', 'collect_results'):
+            from . import search_session
+            return getattr(search_session, name)(self, arguments)
+        if name in ('save_candidates', 'source_fetch', 'citation_search'):
+            from . import search_agent_tools
+            return getattr(search_agent_tools, name)(self, arguments)
         if name == "epo_search":
             return self._epo_search(arguments)
         backend_id = name.split("_")[0]
         if name.endswith("_fetch"):
-            return self._fetch(backend_id, arguments, "doi" if backend_id == "literature" else "publication_number")
-        return self._plain_search(backend_id, arguments)
+            with self._source_locks[backend_id]:
+                return self._fetch(backend_id, arguments, "doi" if backend_id == "literature" else "publication_number")
+        with self._source_locks[backend_id]:
+            return self._plain_search(backend_id, arguments)
 
     def _backend(self, backend_id):
         if backend_id not in self.backends:
@@ -286,6 +328,13 @@ def _validate(value, schema, depth=0):
     elif kind == "integer":
         if type(value) is not int or not schema.get("minimum", 1) <= value <= schema.get("maximum", 20):
             raise ValueError(f"invalid_integer: expected integer in {schema.get('minimum', 1)}..{schema.get('maximum', 20)}, received {value!r}")
+    elif kind == 'boolean' and type(value) is not bool:
+        raise ValueError('expected_boolean')
+    elif kind == 'array':
+        if not isinstance(value, list) or not schema.get('minItems', 0) <= len(value) <= schema.get('maxItems', 100):
+            raise ValueError('invalid_array')
+        for item in value:
+            _validate(item, schema.get('items', {}), depth + 1)
     if "enum" in schema and value not in schema["enum"]:
         raise ValueError("invalid_enum")
 
@@ -450,9 +499,38 @@ _LITERATURE_FETCH = _tool(
     {"doi": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "biblio"]}},
     ["doi"],
 )
-_KIWEE_SEARCH = _tool("kiwee_search", "Search the configured Kiwee patent backend.", {"query": {"type": "string"}, "max_results": {"type": "integer"}}, ["query"])
-_KIWEE_FETCH = _tool("kiwee_fetch", "Fetch a document from the configured Kiwee backend.", {"publication_number": {"type": "string"}, "constituent": {"type": "string"}}, ["publication_number"])
+for _search_tool in (_EPO_SEARCH, _KIPRIS_SEARCH, _LITERATURE_SEARCH):
+    _search_tool['inputSchema']['properties']['max_results'].update(maximum=4, default=3)
+    _search_tool['description'] += ' PRISM returns 3 per source by default, maximum 4 per request; choose additional queries/pages only after reviewing results.'
 _CAPABILITIES = _tool("search_capabilities", "Report which PRISM search tools are enabled and configured without making a network request.", {}, [])
+
+_SAVE_CANDIDATES = _tool('save_candidates',
+    'Persist model-selected shortlist, maximum 15. Merge by identifier/DOI/URL by default; replace=true replaces with your newly ranked shortlist and audits removals. When X covers all essential claim features, supply x_review after source reading: all declared core_features must exactly match mapping.feature rows backed by preserved claims/description/full_text. Accepted X review terminates exploration automatically. Abstract-only X cannot terminate.',
+    {'report': {'type': 'object', 'required': ['candidates'], 'additionalProperties': True},
+     'replace': {'type': 'boolean'},
+     'x_review': {'type': 'object', 'required': ['candidate_id', 'core_features', 'rationale'], 'additionalProperties': False,
+                  'properties': {'candidate_id': {'type': 'string', 'description': 'patent:JP7475618B1 or doi:10... or url:https://...'},
+                                 'core_features': {'type': 'array', 'minItems': 1, 'maxItems': 30, 'items': {'type': 'string'}},
+                                 'rationale': {'type': 'string', 'maxLength': 4000}}}}, ['report'])
+_SAVE_CANDIDATES['annotations'].update(readOnlyHint=False, openWorldHint=False)
+_SOURCE_FETCH = _tool('source_fetch',
+    'Read and preserve a public HTTPS source page or PDF with evidence_refs. No login, no TLS bypass. Prefer a known canonical source URL to a failing redirect. section=claims extracts labelled Google Patents claims; section=page retains description, family and citation tables. offset reads later text windows from the same capture. Identity is confirmed only when parsed from the page; other pages match by URL.',
+    {'url': {'type': 'string', 'maxLength': 4000},
+     'section': {'type': 'string', 'enum': ['claims', 'page']},
+     'offset': {'type': 'integer', 'minimum': 0, 'maximum': 1000000},
+     'max_chars': {'type': 'integer', 'minimum': 1000, 'maximum': 24000}}, ['url'])
+_CITATION_SEARCH = _tool('citation_search',
+    'Retrieve one hop of backward (cited) or forward (citing) publications for an exact patent number, DOI or openalex:W identifier. Uses enabled EPO/OpenAlex APIs. Does not union families: inspect the family/source page and select additional family identifiers yourself. Citation adjacency never proves claim similarity. begin pages patent forward results.',
+    {'identifier': {'type': 'string'}, 'direction': {'type': 'string', 'enum': ['backward', 'forward']},
+     'begin': {'type': 'integer', 'minimum': 1, 'maximum': 2000}}, ['identifier', 'direction'])
+
+_START_COLLECTION = _tool('start_collection',
+    'Start independent EPO, KIPRIS and OpenAlex requests in background, returning immediately. Supply source-specific model-written queries for all useful available sources. Run native web search while these requests run; then collect_results. Default 3, maximum 4 results per source. One active round at a time; no automatic query planning.',
+    {'epo_query': _QUERY_SCHEMA, 'kipris_query': {'type': 'string', 'maxLength': 500},
+     'openalex_query': {'type': 'string', 'maxLength': 500},
+     'max_results': {'type': 'integer', 'minimum': 1, 'maximum': 4}}, [])
+_COLLECT_RESULTS = _tool('collect_results',
+    'Nonblocking snapshot of the current parallel collection. Read completed results and continue useful work while any sources are pending. Results stay in journal even if this session ends.', {}, [])
 
 
 def _reply(request_id, result=None, error=None):

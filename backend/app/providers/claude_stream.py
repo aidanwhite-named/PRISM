@@ -14,13 +14,14 @@ from datetime import datetime, timezone
 # 도구 입력에서 감사 기록으로 남길 필드. 전체 입력을 그대로 저장하지 않는다.
 # WebFetch 의 prompt 는 길고, 남겨야 할 것은 "무엇을 검색했고 어디를 열었는가"다.
 _TOOL_INPUT_KEYS = {
+    "mcp__prism-search__source_fetch": ("url", "section", "offset", "max_chars"),
+    "mcp__prism-search__citation_search": ("identifier", "direction", "begin"),
+    "mcp__prism-search__save_candidates": (),
     "WebSearch": ("query", "allowed_domains", "blocked_domains"),
     "WebFetch": ("url",),
     "mcp__prism-search__search_capabilities": (),
     "mcp__prism-search__epo_search": ("query", "max_results"),
     "mcp__prism-search__epo_fetch": ("publication_number", "constituent"),
-    "mcp__prism-search__kiwee_search": ("query", "max_results"),
-    "mcp__prism-search__kiwee_fetch": ("publication_number", "constituent"),
     "mcp__prism-search__literature_search": ("query", "max_results", "source", "openalex_mode", "cites_doi"),
     "mcp__prism-search__literature_fetch": ("doi", "constituent"),
 }

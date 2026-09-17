@@ -44,7 +44,6 @@ EDITABLE_KEYS = frozenset(
         "retrieval_evidence_chars",
         "retrieval_hits_per_document",
         "retrieval_semantic_enabled",
-        "kiwee_integration_enabled",
         "epo_integration_enabled",
         "epo_consumer_key",
         "kipris_integration_enabled",
@@ -740,7 +739,6 @@ def _coerce(key: str, value: Any) -> Any:
         "keep_raw_output",
         "fail_on_tool_use",
         "retrieval_semantic_enabled",
-        "kiwee_integration_enabled",
         "epo_integration_enabled",
     ):
         return bool(value)

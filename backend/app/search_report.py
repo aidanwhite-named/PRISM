@@ -9,6 +9,10 @@ from .search_quality import REASON_LABELS
 
 REVIEW_LABELS = {"stop_reason": "종료 이유", "expansion_summary": "확장 결과", "sampling_review": "페이지 편향 보완 내역"}
 
+def category_label(group):
+    category = {'A': 'X', 'B': 'Y', 'C': 'Z', 'X': 'X', 'Y': 'Y', 'Z': 'Z'}.get(group)
+    return category + '분류' if category else '미분류'
+
 def _link(raw) -> str:
     if not is_linkable_url(raw):
         return "링크 미확인"
@@ -20,10 +24,14 @@ def render(manifest: dict) -> str:
         return render_engine(manifest["engine"])
     data = view(manifest)
     lines = ["# 유사문헌 검색 결과", ""]
+    finalization = data.get('deadline_classification') or {}
+    if finalization.get('attempted'):
+        lines += [(f"탐색을 마치고 확보한 후보 {finalization.get('candidate_count', 0)}건의 분류를 완료했습니다."
+                   if finalization.get('completed') else '마감 분류 미완료: ' + cell(finalization.get('reason'))), '']
     if data.get("legacy"):
         lines += [f"이전 형식(v{data['legacy_version']})의 저장 기록입니다. 재분류·재검증하지 않았습니다.", ""]
     if data.get("status") == "verification_incomplete":
-        lines += ["검색 실행 종료 · 검증 미완료. 아래 후보와 LLM 분류는 확인이 더 필요합니다.", ""]
+        lines += ["검색 실행 종료 · 검증 미완료. 아래 후보와 분류는 확인이 더 필요합니다.", ""]
     elif data.get("status") == "search_incomplete":
         lines += ["검색 실행 종료 · 탐색 종료 감사 미완료. 후보는 보존했으며 누락·종료 근거 확인이 필요합니다.", ""]
     elif data.get("status") != "complete":
@@ -61,10 +69,10 @@ def render(manifest: dict) -> str:
             lines.append(f"- 제약 {cell(item['source'])}: {cell(REASON_LABELS.get(item['reason'], item['reason']))} {cell(item.get('detail', ''))}")
         followup = data.get("verification_followup") or {}
         lines += ["", "추가 확인: " + cell(followup.get("reason", "기록 없음")), ""]
-    lines += ["A/B/C는 LLM의 기술적 판단이며, 증거 확보 수준과 독립적입니다.", ""]
+    lines += ["X분류·Y분류·Z분류는 기술적 유사성에 대한 판단이며, 증거 확보 수준과 독립적입니다.", ""]
     definitions = data.get("group_definitions") or GROUP_DEFINITIONS
     for group, meaning in definitions.items():
-        lines.append(f"- {cell(group)}: {cell(meaning)}")
+        lines.append(f"- {category_label(group)}: {cell(meaning)}")
     lines += ["", "## 사용 가능한 도구", ""]
     for name, status in data.get("tool_availability", {}).items():
         lines.append(f"- {cell(name)}: {cell(STATUS_LABELS.get(status.get('status'), status.get('status')))}")
@@ -88,7 +96,7 @@ def render(manifest: dict) -> str:
     candidates = (data.get("reported") or {}).get("candidates", [])
     dispositions = (data.get("reported") or {}).get("candidate_dispositions", [])
     if dispositions:
-        lines += ["", "## LLM 후보 제외·통합 기록", ""]
+        lines += ["", "## 후보 제외·통합 기록", ""]
         lines += ["- " + cell(c.get("doc_number") or c.get("doi") or c.get("url")) + ": " + cell(c.get("reason")) for c in dispositions]
     if not candidates:
         lines += ["", "최종 후보가 없습니다. 미검색·접속 실패는 관련 문헌의 부재를 뜻하지 않습니다."]
@@ -99,14 +107,14 @@ def render(manifest: dict) -> str:
         group = item.get("group")
         if group != previous_group:
             count = sum(candidate.get("group") == group for candidate in candidates)
-            lines += ["", f"## LLM 그룹 {cell(group or '미분류')} · {count}건", "",
+            lines += ["", f"## {category_label(group)} · {count}건", "",
                       cell(definitions.get(group, "분류되지 않은 참고 후보"))]
             previous_group = group
         lines += ["", f"### {rank}. {cell(item.get('doc_number') or item.get('doi') or item.get('title'))}", "",
-                  f"LLM 제목: {cell(item.get('title') or item.get('reported_title'))}",
+                  f"보고된 제목: {cell(item.get('title') or item.get('reported_title'))}",
                   "", _link(item.get("url")), "",
                   "증거: " + cell(LEVEL_LABELS.get(item.get("evidence_level"), "이전 형식 / 재검증 안 함")),
-                  "", "LLM 설명: " + cell(item.get("note"))]
+                  "", "판단 이유: " + cell(item.get("note"))]
         scopes = item.get("verification_scope") or {}
         for field, label in (("verified_titles", "보존 원문 명칭"), ("verified_applicants", "보존 원문 저자·출원인")):
             if item.get(field):

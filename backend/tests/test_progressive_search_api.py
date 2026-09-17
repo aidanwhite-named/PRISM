@@ -38,6 +38,10 @@ def progressive_runtime(monkeypatch):
                     'quote': 'Gaussian cloning uses neighbor distance to make the cloning decision.',
                     'relation': '거리 -> 복제 판단'}], 'classifications': [
                         {'candidate_id': p['candidate_id'], 'group': 'B', 'reason': '핵심 관계 유사'}]}
+            if phase == 'triage':
+                return {'candidate_ids': [r['id'] for r in payload['candidates'][:3]], 'classifications': [
+                    {'candidate_id': r['id'], 'group': 'Y', 'status': 'classified', 'reason': '초록의 핵심 관계 유사'}
+                    for r in payload['candidates']]}
             return {'candidate_ids': []}
 
     monkeypatch.setattr('app.search_engine.engine.Sources', Sources)
@@ -65,7 +69,7 @@ def test_default_api_runs_progressive_engine_and_persists_evidence(client, progr
     assert data['candidates'][0]['document_classification']['group'] == 'Y'
     assert data['candidates'][0]['evidence'][0]['feature'] == 'A'
     assert job['search_manifest']['reported']['candidates'][0]['group'] == 'Y'
-    assert '문헌 분류 Y' in job['result_text']
+    assert 'Y분류' in job['result_text']
     assert '거리' in job['result_text']
     assert client.get(f"/api/jobs/{job['id']}/final-prompt").status_code == 200
 
@@ -88,7 +92,7 @@ def test_selected_strategy_and_original_claim_reach_planner_and_verifier(client,
         assert phases.count('verify') == 1
         assert all(phase in ('plan', 'triage', 'verify') for phase in phases)
         for phase, payload in progressive_runtime:
-            if phase in ('plan', 'verify'):
+            if phase in ('plan', 'triage', 'verify'):
                 assert payload['search_strategy'] == strategy
                 assert payload['claim'] == claim
     finally:
@@ -107,6 +111,50 @@ def test_invalid_depth_is_rejected(client):
     response = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
                                             'claim_text': 'A sensor', 'search_depth': 'unlimited'})
     assert response.status_code == 422
+
+
+def test_failed_classification_is_not_success_and_can_continue_with_saved_candidates(client, progressive_runtime, monkeypatch):
+    from app.search_engine.job import Inference
+    original = Inference.call
+    async def fail(self, phase, *args, **kwargs):
+        if phase == 'triage':
+            raise RuntimeError('inference_timeout')
+        return await original(self, phase, *args, **kwargs)
+    monkeypatch.setattr(Inference, 'call', fail)
+    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
+        'claim_text': 'Gaussian cloning uses neighbor distance.', 'search_depth': 'deep'})
+    source = wait_for_job(client, created.json()['id'])
+    assert source['status'] == 'FAILED'
+    assert '분류 미완료' in source['errors'][0]
+    assert source['search_manifest']['status'] == 'classification_incomplete'
+    assert source['search_manifest']['engine']['candidates']
+    assert source['search_manifest']['engine']['can_continue']
+    monkeypatch.setattr(Inference, 'call', original)
+    response = client.post(f"/api/jobs/{source['id']}/continue-search")
+    assert response.status_code == 201
+    target = wait_for_job(client, response.json()['id'])
+    assert target['status'] == 'SUCCEEDED', target['errors']
+    assert target['search_manifest']['engine']['classification']['status'] == 'complete'
+    assert client.get(f"/api/jobs/{source['id']}").json()['status'] == 'FAILED'
+
+
+def test_completed_negative_assessment_is_success_without_xyz(client, progressive_runtime, monkeypatch):
+    from app.search_engine.job import Inference
+    original = Inference.call
+    async def unrelated(self, phase, system, payload, **kwargs):
+        if phase == 'triage':
+            return {'candidate_ids': [], 'classifications': [
+                {'candidate_id': r['id'], 'group': None, 'status': 'low_relevance', 'reason': '다른 기술 관계'}
+                for r in payload['candidates']]}
+        return await original(self, phase, system, payload, **kwargs)
+    monkeypatch.setattr(Inference, 'call', unrelated)
+    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
+        'claim_text': 'Gaussian cloning uses neighbor distance.', 'search_depth': 'fast'})
+    result = wait_for_job(client, created.json()['id'])
+    assert result['status'] == 'SUCCEEDED', result['errors']
+    assert result['search_manifest']['engine']['classification']['status'] == 'complete'
+    assert result['search_manifest']['engine']['candidates'][0]['document_classification']['group'] is None
+    assert '검토 결과 관련성 낮음' in result['result_text']
 
 
 def test_continue_search_reuses_candidates_and_is_idempotent(client, progressive_runtime):

@@ -1,69 +1,24 @@
-"""특허 검색 연동 모듈과 Kiwee 토글.
-
-이 단계의 계약을 못 박는다:
-- 기본값은 꺼짐.
-- 꺼져 있으면 백엔드는 None.
-- 켜져 있어도 search() 는 네트워크를 열지 않고 NotConfigured 를 던진다.
-- manifest 의 provenance/channel 은 이 단계에서 바뀌지 않는다.
-"""
+"""검색 백엔드 등록과 모델 보고 출처 계약."""
 
 from __future__ import annotations
 
 import pytest
 
-from app import patent_search, search_manifest, settings_service
+from app import patent_search, search_manifest
 from app.patent_search import base
-from app.patent_search.kiwee_backend import KiweePatentSearchBackend
 
 
-def test_default_is_off() -> None:
-    assert patent_search.SETTING_KEY == "kiwee_integration_enabled"
-    assert patent_search.is_enabled({}) is False
-    assert patent_search.is_enabled({patent_search.SETTING_KEY: False}) is False
-
-
-def test_get_backend_none_when_off() -> None:
-    assert patent_search.get_backend({patent_search.SETTING_KEY: False}) is None
-    assert patent_search.get_backend({}) is None
-
-
-def test_get_backend_returns_kiwee_when_on() -> None:
-    backend = patent_search.get_backend({patent_search.SETTING_KEY: True})
-    assert isinstance(backend, KiweePatentSearchBackend)
-    assert backend.id == "kiwee"
+@pytest.mark.parametrize("backend_id", patent_search.BACKEND_IDS)
+def test_backend_disabled_by_default(backend_id) -> None:
+    assert patent_search.is_enabled({}, backend_id) is False
+    assert patent_search.get_backend({}, backend_id) is None
+    status = patent_search.describe({}, backend_id)
+    assert status.enabled is False
+    assert status.configured is False
 
 
 def test_unknown_backend_is_none() -> None:
-    assert (
-        patent_search.get_backend({patent_search.SETTING_KEY: True}, "nope") is None
-    )
-
-
-def test_search_never_touches_network() -> None:
-    """켜져 있어도 search 는 NotConfigured. 접속 시도 자체가 없어야 한다."""
-    backend = patent_search.get_backend({patent_search.SETTING_KEY: True})
-    assert backend is not None
-    with pytest.raises(base.PatentSearchNotConfigured):
-        backend.search(base.PatentSearchQuery(text="anything"))
-
-
-def test_status_enabled_but_not_configured() -> None:
-    backend = KiweePatentSearchBackend()
-    status = backend.status()
-    assert status.enabled is True
-    assert status.configured is False
-    assert status.detail
-
-
-def test_describe_reflects_toggle() -> None:
-    off = patent_search.describe({patent_search.SETTING_KEY: False})
-    assert off.enabled is False
-    assert off.configured is False
-
-    on = patent_search.describe({patent_search.SETTING_KEY: True})
-    assert on.enabled is True
-    assert on.configured is False
-    assert on.display_name
+    assert patent_search.get_backend({"unknown_integration_enabled": True}, "unknown") is None
 
 
 def test_register_backend_roundtrip() -> None:
@@ -77,14 +32,15 @@ def test_register_backend_roundtrip() -> None:
         def search(self, query: base.PatentSearchQuery) -> base.PatentSearchResponse:
             return base.PatentSearchResponse(records=(), total_found=0)
 
-    patent_search.register_backend("fake_test", _Fake)
+    patent_search.register_backend("fake_test", _Fake, "fake_test_enabled")
     try:
         backend = patent_search.get_backend(
-            {patent_search.SETTING_KEY: True}, "fake_test"
+            {"fake_test_enabled": True}, "fake_test"
         )
         assert isinstance(backend, _Fake)
     finally:
         patent_search._REGISTRY.pop("fake_test", None)
+        patent_search._ENABLE_KEYS.pop("fake_test", None)
 
 
 def test_model_reported_channel_stays_web_only() -> None:
@@ -102,26 +58,3 @@ def test_model_reported_channel_stays_web_only() -> None:
     }]}))
     assert "channel" not in parsed["candidates"][0]
     assert "evidence_level" not in parsed["candidates"][0]
-
-
-# --------------------------------------------------------------- settings 배선
-
-
-def test_setting_default_off_via_service(client) -> None:
-    values = client.get("/api/settings").json()["values"]
-    assert values["kiwee_integration_enabled"] is False
-
-
-def test_setting_toggle_and_coerce(client) -> None:
-    updated = client.put(
-        "/api/settings", json={"values": {"kiwee_integration_enabled": True}}
-    ).json()
-    assert updated["values"]["kiwee_integration_enabled"] is True
-    # 켜면 아직 실제 검색이 안 된다는 경고가 뜬다.
-    assert any("Kiwee" in w for w in updated["warnings"])
-    # 원복
-    restored = client.put(
-        "/api/settings", json={"values": {"kiwee_integration_enabled": False}}
-    ).json()
-    assert restored["values"]["kiwee_integration_enabled"] is False
-    assert not any("Kiwee" in w for w in restored["warnings"])

@@ -19,7 +19,7 @@
 
 generic_json 프로필은 텍스트가 거기 있다는 것만 증명한다. 그것으로 '공식
 원문'을 증명할 수는 없으므로 raw_capable=False 다. raw 를 받을 수 있는
-프로필은 실제 Kiwee 응답을 검토한 뒤에만 등록한다 — 지금은 하나도 없다.
+프로필은 공급자의 실제 응답과 공식 원문 필드를 검토한 뒤에만 등록한다.
 
 파서 구현 해시
 --------------
@@ -200,8 +200,8 @@ _PARSERS: dict[tuple[str, str], Callable[[bytes, str], str]] = {
 
 # profile_id -> SourceProfile
 #
-# raw_capable=True 인 프로필은 하나도 없다. 실제 Kiwee 응답에 공식 XML 원문
-# 필드가 있다는 것이 확인된 뒤에 등록한다.
+# 일반 JSON은 원문 등급을 주장하지 않는다. 공급자별 원문 프로필은 해당
+# 응답의 공식 XML 원문 필드를 검토한 뒤에 등록한다.
 _PROFILES: dict[str, SourceProfile] = {
     PROFILE_GENERIC_JSON: SourceProfile(
         profile_id=PROFILE_GENERIC_JSON,

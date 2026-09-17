@@ -24,7 +24,7 @@ FAILED_RUN_CALLS = [
 
 
 def _values(record=None):
-    values = {"epo_integration_enabled": False, "kiwee_integration_enabled": False,
+    values = {"epo_integration_enabled": False,
               "literature_integration_enabled": False}
     if record is not None:
         values[search_channels.WEB_HEALTH_KEY] = {"agy": record}

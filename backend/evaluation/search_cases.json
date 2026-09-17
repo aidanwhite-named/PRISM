@@ -64,6 +64,26 @@
         }
       ],
       "notes": "Same invention with claim-number preamble. Failed user run 7fabd46e-c47e-4ae9-a0cd-9b0711c31f30. Search stability regression."
+    },
+    {
+      "id": "coupled_joint_limits",
+      "claim": "청구항 1.\n관절에 의해 부모 뼈와 자식 뼈가 연결된 골격 모델에서, 부모 뼈에 대한 자식 뼈의 회전을 정의하는 복수의 파라미터를 사용하여 자식 뼈의 자세를 결정하는 자세 결정 방법으로서, 상기 방법은\n(A) 복수의 파라미터 중 적어도 하나의 파라미터에 대해 판정을 내리는 단계;\n(B) 상기 판정 결과에 기반하여 복수의 파라미터를 보정하는 단계; 및\n(C) 보정된 복수의 파라미터를 사용하여 자식 뼈의 자세를 결정하는 단계를 포함하고, 여기서\n(D) 상기 판정을 내리는 단계는 복수의 파라미터 중 어느 하나라도 제1 한계를 초과하는지 여부에 대한 제1 판정을 내리는 단계를 포함하며, 상기 제1 한계는 적어도 하나의 파라미터가 다른 두 개 이상의 파라미터와 관련된 한계에 영향을 미치는 한계로 표현되고,\n(E) 상기 복수의 파라미터를 보정하는 단계는, 상기 제1 판정 결과 제1 한계를 초과한 것으로 판정된 경우, 복수의 파라미터가 제1 한계의 범위 내에 있도록 제1 한계를 사용하여 복수의 파라미터를 보정하는 단계를 포함하는,\n자세 결정 방법.",
+      "cutoff": null,
+      "known_relevant": [
+        {
+          "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+          "identifiers": [
+            "10.1007/978-0-306-47002-8_16",
+            "https://infoscience.epfl.ch/server/api/core/bitstreams/949101d1-ec81-4e38-91d8-c414ee95c8fc/content"
+          ],
+          "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+        }
+      ],
+      "unverified_leads": [
+        "US9478058B2",
+        "US9508177B2"
+      ],
+      "notes": "Exact user claim, whitespace normalized. Claude-supplied leads are evaluation-only, never included in planner or web search inputs. Not an exhaustive relevance set."
     }
   ]
 }

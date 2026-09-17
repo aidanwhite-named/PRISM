@@ -1,0 +1,131 @@
+{
+  "case": "coupled_joint_limits",
+  "k": 20,
+  "known_relevant_recall_at_k": 0.0,
+  "known_relevant_ranks": [
+    {
+      "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+      "rank": null,
+      "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+    }
+  ],
+  "candidate_count": 20,
+  "classification": {
+    "status": "complete",
+    "target_count": 8,
+    "reviewed_count": 8,
+    "unreviewed_count": 12
+  },
+  "classified_documents": 2,
+  "insufficient_information_documents": 5,
+  "low_relevance_documents": 1,
+  "first_candidate_seconds": 8.516,
+  "elapsed_seconds": 110.687,
+  "usage": {
+    "input_tokens": 18081.0,
+    "output_tokens": 10895.0,
+    "cache_read_tokens": 0.0,
+    "thinking_tokens": 10141.0,
+    "total_tokens": 28976.0,
+    "usage_complete": false,
+    "stages": [
+      {
+        "phase": "web_seeds",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 10778,
+        "usage_complete": false,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"skeletal model\" \"joint limit\" \"exceed\" \"correct\" pose parameters"
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"관절\" \"골격 모델\" \"부모 뼈\" \"자식 뼈\" \"한계\" \"자세 결정 방법\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "\"제1 한계\" \"골격 모델\" \"부모 뼈\" OR \"자식 뼈\" \"자세 결정\""
+            },
+            "index": 3
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-8",
+            "input": {
+              "query": "\"자식 뼈\" \"부모 뼈\" \"자세 결정\" \"파라미터\" \"한계\" 특허"
+            },
+            "index": 4
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-10",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"rotation\" \"exceeds\" limit correct pose patent"
+            },
+            "index": 5
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-12",
+            "input": {
+              "query": "\"at least one parameter affects\" \"limit\" \"pose\" \"skeletal\" OR \"joint\""
+            },
+            "index": 6
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-14",
+            "input": {
+              "query": "\"KR1020260113114A\" OR \"10-2026-0113114\" OR \"KR10-2026-0113114\""
+            },
+            "index": 7
+          }
+        ],
+        "seconds": 54.40700000000015
+      },
+      {
+        "phase": "triage",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 14030,
+        "usage_complete": true,
+        "usage": {
+          "input_tokens": 18081,
+          "output_tokens": 10895,
+          "thinking_tokens": 10141,
+          "cache_read_tokens": 0,
+          "total_tokens": 28976
+        },
+        "seconds": 44.8130000000001,
+        "timed_out": false,
+        "tool_calls": [],
+        "output_partial": false
+      }
+    ],
+    "cost_usd": null
+  },
+  "verified_evidence_rows": 0,
+  "relation_rows": 0,
+  "full_text_documents": 0,
+  "query_cache_hits": 0,
+  "limits": [
+    "Partial relevance judgments, not anticipation/novelty findings.",
+    "Known-relevant set is incomplete; no corpus-wide recall or precision claimed.",
+    "Single runs and source/model/cache differences must be reported separately."
+  ],
+  "job_id": "03ff303a-5829-49c9-890e-326f38f91d58",
+  "status": "SUCCEEDED",
+  "errors": []
+}

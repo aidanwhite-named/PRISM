@@ -1252,29 +1252,6 @@ export default function SettingsPage() {
         )}
       </div>}
 
-      <div className="card settings-kiwee">
-        <h2>Kiwee 특허 검색 연동</h2>
-        <p className="muted settings-integration-copy">
-          Kiwee 특허 DB를 유사문헌 검색 경로에 추가합니다. 현재는 준비 중이라
-          켜도 실제 접속이나 검색은 수행하지 않습니다.
-        </p>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={v.kiwee_integration_enabled}
-            onChange={(e) =>
-              saveValue("kiwee_integration_enabled", e.target.checked)
-            }
-          />
-          Kiwee 특허 검색 연동 사용
-        </label>
-        {v.kiwee_integration_enabled && (
-          <div className="notice info" style={{ marginTop: 10 }}>
-            준비 중인 기능입니다. 현재는 실제 검색을 수행하지 않습니다.
-          </div>
-        )}
-      </div>
-
       <div className="card settings-provider">
         <div className="split" style={{ marginBottom: 12 }}>
           <div>

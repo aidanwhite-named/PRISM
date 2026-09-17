@@ -23,7 +23,10 @@ class Sources:
         with self.locks[source]:
             channel = source if source in ('epo', 'kipris') else 'literature'
             name = channel + ('_fetch' if fetch else '_search')
-            key = identifier(json.dumps([source, name, arguments, self.cutoff], sort_keys=True))
+            cache_identity = [source, name, arguments, self.cutoff]
+            if source == 'openalex':
+                cache_identity.append('phrase-boolean-v2')
+            key = identifier(json.dumps(cache_identity, sort_keys=True))
             cache = PATHS.data_dir / 'search_cache' / 'queries' / (key + '.json')
             if not fetch and cache.exists() and time.time() - cache.stat().st_mtime < 900:
                 try:
@@ -82,7 +85,7 @@ class Sources:
                 write_json(cache, result)
             return result
 
-    def search(self, source: str, query: str, *, fulltext=False, classification='', begin=1):
+    def search(self, source: str, query: str, *, fulltext=False, classification='', begin=1, openalex_mode='search'):
         if source == 'kipris':
             return self.call(source, {'query': query, 'max_results': 20, 'begin': begin})
         if source == 'epo':
@@ -98,7 +101,10 @@ class Sources:
             # Preserve intended multiword concepts in the arXiv field query.
             if not any(mark in query for mark in ('all:', 'ti:', 'au:', 'id:')):
                 query = ' AND '.join('all:' + word for word in query.replace('"', '').split()[:8])
-        return self.call(source, {'query': query, 'source': source, 'max_results': 10})
+        arguments = {'query': query, 'source': source, 'max_results': 10}
+        if source == 'openalex' and openalex_mode != 'search':
+            arguments['openalex_mode'] = openalex_mode
+        return self.call(source, arguments)
 
     def fetch(self, candidate, scope='abstract'):
         paper = candidate.document_number.lower().startswith('10.')

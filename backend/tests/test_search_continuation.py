@@ -33,14 +33,14 @@ def test_only_evidenced_xy_can_stop(tmp_path, group, scope, date, relation, expe
 
 
 @pytest.mark.asyncio
-async def test_arxiv_is_parallel_only_for_relevant_fields_then_single_supplement(tmp_path):
+async def test_arxiv_is_only_queried_for_relevant_fields_and_keeps_relation(tmp_path):
     engine = engine_at(tmp_path)
     engine.features = [Feature('A', 'valve', ['valve'], queries=['valve pressure'])]
     engine.query = AsyncMock()
     await engine.discover()
     assert [c.args[0] for c in engine.query.call_args_list] == ['openalex']
     await engine.supplement_arxiv()
-    assert engine.query.call_args.args[0] == 'arxiv'
+    assert engine.query.call_args.args[0] == 'openalex'
     engine.queries.append({'source': 'arxiv'})
     engine.query.reset_mock()
     await engine.supplement_arxiv()
@@ -48,6 +48,7 @@ async def test_arxiv_is_parallel_only_for_relevant_fields_then_single_supplement
     engine.claim = 'A neural network renders Gaussian splatting.'
     await engine.discover()
     assert [c.args[0] for c in engine.query.call_args_list] == ['openalex', 'arxiv']
+    assert engine.query.call_args.args[1] == 'valve pressure'
 
 
 @pytest.mark.asyncio

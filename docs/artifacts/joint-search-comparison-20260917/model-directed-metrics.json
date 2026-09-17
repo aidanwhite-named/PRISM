@@ -1,0 +1,41 @@
+{
+  "case": "coupled_joint_limits",
+  "k": 20,
+  "known_relevant_recall_at_k": 1.0,
+  "known_relevant_ranks": [
+    {
+      "label": "Parametrization and Range of Motion of the Ball-and-Socket Joint",
+      "rank": 2,
+      "judgment": "Related lead: swing-dependent twist limits and clamping; exact dependency in feature D not established."
+    }
+  ],
+  "candidate_count": 4,
+  "classification": null,
+  "classified_documents": 0,
+  "insufficient_information_documents": 0,
+  "low_relevance_documents": 0,
+  "first_candidate_seconds": null,
+  "elapsed_seconds": null,
+  "usage": {
+    "thinking_tokens": 8648,
+    "input_tokens": 482800,
+    "output_tokens": 13371,
+    "total_tokens": 496171,
+    "cache_read_tokens": 3269499,
+    "usage_complete": false
+  },
+  "verified_evidence_rows": 0,
+  "relation_rows": 0,
+  "full_text_documents": 0,
+  "query_cache_hits": 0,
+  "limits": [
+    "Partial relevance judgments, not anticipation/novelty findings.",
+    "Known-relevant set is incomplete; no corpus-wide recall or precision claimed.",
+    "Single runs and source/model/cache differences must be reported separately."
+  ],
+  "job_id": "93129d51-a3f1-44ca-b236-2fce8c81432f",
+  "status": "FAILED",
+  "errors": [
+    "실행 제한 시간을 초과했습니다."
+  ]
+}

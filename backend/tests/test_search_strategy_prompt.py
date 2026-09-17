@@ -25,7 +25,7 @@ pytestmark = pytest.mark.usefixtures("legacy_search")
 
 from app import search_channels, search_manifest, settings_service
 from app.db import session_scope
-from app.patent_search import kiwee_backend, literature_client
+from app.patent_search import literature_client
 
 from . import fake_provider
 from . import literature_fixtures as fx
@@ -311,7 +311,7 @@ def test_the_standard_report_survives_a_strategy_that_demands_another_format(
         report = job["result_text"] or ""
         # 전략이 금지한 절이 그대로 나온다. 보고서는 매니페스트가 만든다.
         assert "## 사용 가능한 도구" in report
-        assert "LLM의 기술적 판단" in report
+        assert "기술적 유사성에 대한 판단" in report
         # 모델 산문은 보고서 본문이 되지 않는다.
         assert "★ 결과 ★" not in report
         assert "유사 문헌 검토 후보 (테스트)" not in report
@@ -328,33 +328,6 @@ def test_the_standard_report_survives_a_strategy_that_demands_another_format(
 
 
 
-
-
-@pytest.fixture()
-def kiwee_search_is_a_tripwire(monkeypatch):
-    """Kiwee 백엔드의 search 가 불리면 그 자체로 실패시킨다."""
-
-    def refuse(self, query):  # noqa: ANN001 - 테스트 대역
-        raise AssertionError(
-            "구현되지 않은 Kiwee 채널이 검색을 시도했습니다. 네트워크를 열 수 "
-            "있는 경로가 생겼습니다."
-        )
-
-    monkeypatch.setattr(kiwee_backend.KiweePatentSearchBackend, "search", refuse)
-
-
-def test_kiwee_is_recorded_unavailable_without_network(client, monkeypatch):
-    job = _run(client)
-    assert job["search_manifest"]["tool_availability"]["kiwee"]["status"] == "disabled"
-
-
-def test_kiwee_stays_unavailable_when_toggle_on(client, monkeypatch):
-    client.put("/api/settings", json={"values": {"kiwee_integration_enabled": True}})
-    try:
-        job = _run(client)
-        assert job["search_manifest"]["tool_availability"]["kiwee"]["status"] == "not_implemented"
-    finally:
-        client.put("/api/settings", json={"values": {"kiwee_integration_enabled": False}})
 
 
 @pytest.fixture()

@@ -124,12 +124,17 @@ async def test_run_merges_citations_before_shared_verification_without_extra_llm
         async def discover(self):
             self.ledger.add({'document_number': 'EP123A1', 'title': 'sensor distance'},
                             source='epo', query_id='seed', feature='A', rank=1)
-        async def triage(self): pass
+        async def triage(self):
+            order.append('classify')
+            self.classification_targets = list(self.ledger.candidates)
+            for c in self.ordered():
+                c.document_classification = {'group': 'Y', 'reason': 'abstract relation'}
+        async def expand(self): pass
         async def verify_candidates(self, count, **kwargs):
             order.append('verify')
             assert {c.document_number for c in self.ledger.candidates.values()} == {'EP123A1', 'US456A1'}
     engine = Flow(claim='sensor distance', directory=tmp_path, inference=Inference(),
-                  sources=Source(), values={'epo_integration_enabled': True}, depth='fast')
+                  sources=Source(), values={'epo_integration_enabled': True}, depth='deep')
     result = await engine.run()
-    assert order == ['backward', 'forward', 'verify']
+    assert order == ['backward', 'forward', 'classify', 'verify']
     assert result['route'][-1]['outcome'] == 'candidates_merged'

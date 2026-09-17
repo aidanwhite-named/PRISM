@@ -76,6 +76,11 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, depth, v
         snapshot = engine.snapshot()
         if not snapshot['candidates'] and snapshot['warnings'] and not cancelled():
             error = error or '검색 후보를 확보하지 못했습니다. 채널·질의 계획 오류를 확인하십시오.'
+        if snapshot['classification']['status'] == 'incomplete' and not cancelled():
+            error = error or '분류 미완료: 선별 대상의 분류 응답을 모두 확보하지 못했습니다. 후보와 반환된 부분 분류는 보존했습니다.'
+        if error and engine.stop_reason != 'classification_incomplete' and not cancelled():
+            engine.stop_reason = 'engine_error'
+            snapshot = engine.snapshot()
         engine.ledger.save()
         data = manifest(snapshot, claim=claim, provider=provider.id, model=model, **prompt_metadata)
         text = render(snapshot)

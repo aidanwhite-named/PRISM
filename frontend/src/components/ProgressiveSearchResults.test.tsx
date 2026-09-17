@@ -5,6 +5,27 @@ import type { ProgressiveSearchSnapshot } from "../lib/types";
 
 describe("progressive search evidence", () => {
   afterEach(cleanup);
+  it('shows provisional scope and separates missing data, negative review and omitted responses', () => {
+    const base = { document_number: '', title: 'Candidate', url: '', publication_date: '', family_id: '',
+      data_status: 'ABSTRACT_ONLY', date_status: 'no_date_limit', acquisitions: [], evidence: [] };
+    const data: ProgressiveSearchSnapshot = { version: 1, phase: 'complete', stop_reason: 'classification_incomplete',
+      depth: 'deep', elapsed_seconds: 120, first_candidate_seconds: 25, features: [], queries: [], warnings: [],
+      classification: { status: 'incomplete', target_count: 4, reviewed_count: 3, unreviewed_count: 1 },
+      candidates: [
+        { ...base, id: 'a', document_classification: { group: 'X', status: 'classified', reason: '초록의 관계 유사', basis: 'abstract', evidence_status: 'unverified', provisional: true } },
+        { ...base, id: 'b', document_classification: { group: null, status: 'insufficient_information', reason: '본문 필요', basis: 'search_metadata', evidence_status: 'unverified' } },
+        { ...base, id: 'c', document_classification: { group: null, status: 'low_relevance', reason: '다른 분야', basis: 'abstract', evidence_status: 'unverified' } },
+        { ...base, id: 'd' },
+      ] };
+    render(<ProgressiveSearchResults data={data} />);
+    expect(screen.getByRole('alert').textContent).toContain('분류 미완료');
+    expect(screen.getByRole('alert').textContent).toContain('검토 3/4건');
+    expect(screen.getAllByText(/초록 기준 · 잠정 판단/)).toHaveLength(2);
+    expect(screen.getByText(/자료 부족/)).toBeTruthy();
+    expect(screen.getByText(/검토 결과 관련성 낮음/)).toBeTruthy();
+    expect(screen.getByText('미평가')).toBeTruthy();
+    expect(screen.getByText('X분류', { selector: 'strong' })).toBeTruthy();
+  });
   it('explains fallback as unverified X rather than document absence and shows actual queries', () => {
     const data: ProgressiveSearchSnapshot = { version: 1, phase: 'complete', stop_reason: 'fast_budget_complete',
       depth: 'deep', elapsed_seconds: 30, first_candidate_seconds: 3, features: [], candidates: [], warnings: [],
@@ -53,7 +74,7 @@ describe("progressive search evidence", () => {
       '1. Document 2', '2. Document 1', '3. Document 3', '4. Document 0', '5. Document 4',
     ]);
     expect(data.candidates[0].id).toBe('0');
-    expect(screen.getByText('문헌 분류 X', { selector: 'strong' })).toBeTruthy();
+    expect(screen.getByText('X분류', { selector: 'strong' })).toBeTruthy();
     const folded = screen.getByText('미분류 문헌 · 1개 문헌군').closest('details');
     expect(folded?.open).toBe(false);
     expect(folded?.textContent).toContain('Document 4');

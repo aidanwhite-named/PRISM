@@ -41,12 +41,14 @@ def test_chunk_that_does_not_fit_is_deferred_without_dangling_sources(agent):
     result = asyncio.run(agent._execute_actions([request], run, 2))
     assert result == [] and run.deferred_pending and run.budget_exhausted
     assert not agent._round_sources and run.exposed_chunks == before
+    assert not agent._components['R001'].reviewed_chunks
     agent.budget = replace(agent.budget, max_round_result_chars=56000)
     result = asyncio.run(agent._execute_actions([], run, 3))
     hit = result[0]["documents"][0]["hits"][0]
     assert hit["text"] == agent.corpus[0].index.chunk(request.chunk_id).text
     assert not run.deferred_pending and not run.budget_exhausted
     assert run.pages_read == 0
+    assert agent._components['R001'].reviewed_chunks == {(agent.corpus[0].attachment_id, request.chunk_id)}
 
 
 def test_shared_context_resolves_exactly_and_is_resent_next_call(agent, monkeypatch):

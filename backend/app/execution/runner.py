@@ -22,6 +22,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from .. import (
+    analysis_evidence,
     analysis_manifest,
     citation_mapping,
     job_assembly,
@@ -33,7 +34,9 @@ from .. import (
     search_report,
     search_verification,
     search_quality,
-    search_followup,
+    search_agent_tools,
+    search_deadline,
+    search_session,
     settings_service,
 )
 from ..config import PATHS
@@ -186,6 +189,13 @@ def _progress_counts_as(event_type: str, payload: dict) -> str:
         # 이벤트를 만들었다. 모르면 세지 않는다.
         return ""
     name = str(payload.get("name") or "")
+    if name == 'mcp__prism-search__start_collection':
+        return PROGRESS_SEARCH
+    if name.startswith('mcp__prism-search__'):
+        if name.endswith('_search'):
+            return PROGRESS_SEARCH
+        if name.endswith('_fetch'):
+            return PROGRESS_FETCH
     # 종류를 표시하지 않는 Provider 는 도구 이름이 곧 종류다.
     if name in search_manifest.SEARCH_TOOL_NAMES:
         return PROGRESS_SEARCH
@@ -742,9 +752,10 @@ class JobRunner:
             # 결과 하나로 충분하다. 원문은 stdout.log 에 그대로 남는다.
             received = 0
             native_calls: set[str] = set()
+            checkpoint_mtime = None
 
             async def emit(event_type: str, payload: dict) -> None:
-                nonlocal received
+                nonlocal received, checkpoint_mtime
                 payload = dict(payload)
                 if event_type == "result_stream":
                     received += len(str(payload.get("delta") or ""))
@@ -753,6 +764,23 @@ class JobRunner:
                 await self._emit(job_id, event_type, payload)
                 if job_kind is not JobKind.SIMILARITY_SEARCH:
                     return
+                checkpoint_path = work_dir / search_agent_tools.CHECKPOINT
+                if checkpoint_path.exists() and checkpoint_path.stat().st_mtime_ns != checkpoint_mtime:
+                    checkpoint_mtime = checkpoint_path.stat().st_mtime_ns
+                    saved = search_agent_tools.load_checkpoint(work_dir)
+                    if saved:
+                        saved_journal = search_manifest.read_tool_journal(work_dir)
+                        checked = search_verification.verify(saved, {}, saved_journal)
+                        preview = search_manifest.build(claim_text=claim_text, provider=provider_id, model=model,
+                            reported=checked, tool_journal=saved_journal,
+                            error='모델이 저장한 중간 후보입니다. 검색이 진행 중입니다.')
+                        preview['execution_mode'] = 'model_directed'
+                        with session_scope() as session:
+                            preview_job = session.get(ExecutionJob, job_id)
+                            if preview_job:
+                                preview_job.search_manifest = preview
+                                preview_job.result_text = search_report.render(preview)
+                        await self._emit(job_id, 'search_preview_ready', {'candidate_count': len(checked['candidates'])})
                 if event_type not in ("tool_use", "tool_use_resolved"):
                     return
                 if not str(payload.get("name") or "").startswith("mcp__prism-search__"):
@@ -760,9 +788,8 @@ class JobRunner:
                     if call_id and call_id not in native_calls:
                         native_calls.add(call_id)
                         counter = work_dir / search_limits.NATIVE_COUNT_FILE
-                        temporary = counter.with_suffix(".tmp")
-                        temporary.write_text(json.dumps(len(native_calls)), encoding="utf-8")
-                        temporary.replace(counter)
+                        from ..search_engine.models import write_json
+                        write_json(counter, len(native_calls))
                 counts_as = _progress_counts_as(event_type, payload)
                 name = str(payload.get("name") or "")
                 if not counts_as and name not in (
@@ -775,7 +802,21 @@ class JobRunner:
                 ):
                     return
                 summary = payload.get("input") or {}
-                origin_label = "에이전트"
+                summary = summary.get('arguments', summary)
+                origin_label = "웹" if name in (search_manifest.SEARCH_TOOL_NAMES | search_manifest.FETCH_TOOL_NAMES) else "에이전트"
+                if name.startswith('mcp__prism-search__'):
+                    tool_name = name.removeprefix('mcp__prism-search__')
+                    origin_label = {'epo': 'EPO', 'kipris': '키프리스', 'source': '원문',
+                                    'citation': '인용·피인용'}.get(tool_name.split('_')[0], '논문')
+                    if tool_name.startswith('literature_'):
+                        origin_label = {'openalex': 'OpenAlex', 'arxiv': 'arXiv',
+                                        'crossref_epmc': 'Crossref·Europe PMC'}.get(summary.get('source'),
+                                                                                 'Crossref·Europe PMC·OpenAlex')
+                    elif tool_name == 'start_collection':
+                        origin_label = 'API 병렬'
+                        summary = {**summary, 'query': ' · '.join(label for field, label in
+                            [('epo_query', 'EPO'), ('kipris_query', '키프리스'), ('openalex_query', 'OpenAlex')]
+                            if field in summary)}
                 if counts_as == PROGRESS_URL_LOOKUP:
                     # 검색도 아니고 페이지 열람도 아니다. 성공 여부를 알 수
                     # 없으므로 "시도" 로만 알린다.
@@ -811,7 +852,7 @@ class JobRunner:
                             "message": (
                                 f"{origin_label} 검색 "
                                 f"{search_state['searches']}회째: "
-                                f"{str(summary.get('query', ''))[:120]}"
+                                f"{str(summary.get('query') or summary.get('identifier') or '')[:120]}"
                             ),
                         },
                     )
@@ -879,44 +920,27 @@ class JobRunner:
             await self._emit(
                 job_id, "stage", {"stage": "executing", "message": "Provider 실행 중"}
             )
-            search_deadline = time.monotonic() + timeout
-            outcome = await provider.execute(request, emit)
+            deadline_audit = None
+            deadline_plan = None
+            overall_deadline = time.monotonic() + timeout
+            if job_kind is JobKind.SIMILARITY_SEARCH:
+                deadline_plan = search_deadline.allocation(timeout)
+                request = replace(request, timeout_seconds=deadline_plan['search_seconds'])
+                (work_dir / 'search_deadline.json').write_text(str(time.time() + request.timeout_seconds), encoding='utf-8')
+                await self._emit(job_id, 'search_time_budget', deadline_plan)
+            if job_kind is JobKind.SIMILARITY_SEARCH:
+                outcome = await search_session.execute(provider, request, emit,
+                    cancelled=lambda: job_id in self._cancel_requested)
+            else:
+                outcome = await provider.execute(request, emit)
+            if job_kind is JobKind.SIMILARITY_SEARCH:
+                outcome, deadline_audit = await search_deadline.finish(
+                    provider, request, outcome, emit, claim=claim_text, deadline=overall_deadline,
+                    cancelled=lambda: job_id in self._cancel_requested, keep_raw=keep_raw)
             verdict = evaluate(outcome, attachments, fail_on_tool_use=fail_on_tool_use)
             verification_followup = None
-            if job_kind is JobKind.SIMILARITY_SEARCH and verdict.status == JobStatus.SUCCEEDED:
-                # Publish the completed first pass before optional field completion.
-                try:
-                    preview_observed = search_manifest.observed(outcome.tool_calls, outcome.tool_uses)
-                    preview_journal = search_manifest.read_tool_journal(work_dir)
-                    preview_reported, _ = search_manifest.parse(outcome.result_text, preview_observed)
-                    if not search_manifest.has_retrieval_attempt(outcome.tool_calls, outcome.tool_uses, preview_journal):
-                        raise search_manifest.SearchLogError("실제 검색 기록 없음")
-                    preview_reported = search_verification.verify(preview_reported, preview_observed, preview_journal)
-                    preview_dates = search_dates.filter_candidates(preview_reported, search_cutoff)
-                    preview = search_manifest.build(claim_text=claim_text, provider=provider_id, model=model,
-                        reported=preview_reported, observed_section=preview_observed, date_filter=preview_dates,
-                        quality=search_quality.assess(preview_reported, preview_observed, preview_journal, tool_availability, date_filter=preview_dates),
-                        usage=outcome.usage, error="최초 검색 결과입니다. 필요한 항목을 추가 확인하고 있습니다.")
-                    with session_scope() as session:
-                        preview_job = session.get(ExecutionJob, job_id)
-                        if preview_job:
-                            preview_job.search_manifest = preview
-                            preview_job.result_text = search_report.render(preview)
-                            preview_job.usage = outcome.usage
-                    await self._emit(job_id, "search_preview_ready", {"candidate_count": len(preview_reported["candidates"])})
-                except search_manifest.SearchLogError:
-                    pass
-                outcome, verification_followup = await search_followup.run(
-                    provider, request, outcome, emit, attachments=attachments,
-                    fail_on_tool_use=fail_on_tool_use, deadline=search_deadline,
-                    availability=tool_availability, cancelled=lambda: job_id in self._cancel_requested,
-                    keep_raw=keep_raw,
-                )
-                verdict = evaluate(outcome, attachments, fail_on_tool_use=fail_on_tool_use)
-                if verification_followup.get("execution_status") not in (None, JobStatus.SUCCEEDED.value):
-                    verdict = Verdict(JobStatus(verification_followup["execution_status"]),
-                                      ErrorCode(verification_followup["error_code"]) if verification_followup.get("error_code") else None,
-                                      verification_followup.get("errors", []))
+            # The model chooses every retrieval. At the search deadline a tool-free
+            # model pass may finish classification; no automatic fetching is added.
             if job_id in self._cancel_requested:
                 verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, list(verdict.errors))
             await self._emit(
@@ -936,15 +960,26 @@ class JobRunner:
                         verdict.status == JobStatus.CANCELLED
                         or verdict.error_code in (ErrorCode.TIMED_OUT, ErrorCode.SEARCH_BUDGET_EXCEEDED)
                     )
-                    if verdict.status != JobStatus.SUCCEEDED and not partial_search:
+                    checkpoint = search_agent_tools.load_checkpoint(work_dir)
+                    if verdict.status != JobStatus.SUCCEEDED and not partial_search and not checkpoint:
                         raise search_manifest.SearchLogError(
                             "실행이 정상 완료되지 않아 최종 후보로 확정하지 않았습니다."
                         )
                     if not search_manifest.has_retrieval_attempt(outcome.tool_calls, outcome.tool_uses, journal):
                         verdict = Verdict(JobStatus.FAILED, ErrorCode.SEARCH_NOT_PERFORMED, ["실제 검색 도구 호출이 없습니다."])
                         raise search_manifest.SearchLogError("실제 검색 도구 호출이 없습니다.")
-                    reported, notes = search_manifest.parse(outcome.result_text, observed)
+                    try:
+                        reported, notes = search_manifest.parse(outcome.result_text, observed)
+                    except search_manifest.SearchLogError:
+                        if not checkpoint:
+                            raise
+                        reported = checkpoint
+                        manifest_error = "최종 응답이 없어 모델이 저장한 중간 후보를 복구했습니다. 추가 검토가 필요합니다."
+                        if verdict.status == JobStatus.SUCCEEDED:
+                            verdict = Verdict(JobStatus.FAILED, ErrorCode.INVALID_OUTPUT, [manifest_error])
                     reported = search_verification.verify(reported, observed, journal)
+                    if verdict.status != JobStatus.SUCCEEDED:
+                        manifest_error = manifest_error or "검색 실행이 완료되지 않아 중간 후보를 보존했습니다."
                     if partial_search:
                         manifest_error = "검색이 중단되어 작성된 후보를 부분 결과로 보존했습니다. 추가 확인이 필요합니다."
                 except search_manifest.SearchLogError as exc:
@@ -976,6 +1011,10 @@ class JobRunner:
                     advertised_tools_enforced=tool_policy.enforce_advertised_allowlist,
                     quality=quality, verification_followup=verification_followup,
                 )
+                manifest['execution_mode'] = 'model_directed'
+                manifest['time_budget'] = deadline_plan
+                manifest['deadline_classification'] = deadline_audit
+                manifest['candidate_checkpoint'] = search_agent_tools.load_checkpoint(work_dir)
                 if reported is None:
                     outcome.result_text = search_report.render(manifest) if manifest.get("retained_records") else ""
                     if verdict.status == JobStatus.SUCCEEDED:
@@ -1021,28 +1060,9 @@ class JobRunner:
                 # 원문은 stdout.log 에 그대로 있다.
                 outcome.result_text = citation_mapping.strip_block(outcome.result_text)
 
-            evidence_review = None
-            if expects_blocks and verdict.status == JobStatus.SUCCEEDED:
-                from .. import analysis_evidence
-                original_text = outcome.result_text
-                try:
-                    outcome.result_text, component_result, mapping, evidence_review = await analysis_evidence.run(
-                        provider, request, outcome, attachments=attachments, aliases=assembled.aliases,
-                        components=component_result, mapping=mapping, prior_mapping=prior_mapping,
-                        claim_text=claim_text, deadline=search_deadline, emit=emit,
-                        cancelled=lambda: job_id in self._cancel_requested)
-                    if mapping:
-                        mapping_error = None
-                    if evidence_review.get('calls'):
-                        outcome.usage = analysis_evidence.merge_usage(outcome.usage, evidence_review)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    outcome.result_text = ('> **근거 재검토 미완료:** 아래 내용은 미검증 초안입니다. '
-                        '발췌·대응·문헌 순위를 재확인해야 합니다.\n\n' + analysis_evidence.strip(original_text))
-                    component_error = '근거 재검토 오류: ' + type(exc).__name__
-                if job_id in self._cancel_requested:
-                    verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, ['근거 재검토 중 사용자 중단'])
+            if expects_blocks:
+                # Hide obsolete protocol blocks from saved prompts without invoking a reviewer.
+                outcome.result_text = analysis_evidence.strip(outcome.result_text)
 
             self._providers.pop(job_id, None)
             if expects_blocks:
@@ -1066,10 +1086,6 @@ class JobRunner:
             # --- 저장 -----------------------------------------------------
             completed = _utcnow()
             artifacts: list[tuple[str, Path]] = list(retrieval_artifacts)
-            review_directory = work_dir / 'analysis_evidence'
-            for name, kind in [('review.json', 'analysis_evidence_review'), ('draft.md', 'analysis_draft')]:
-                if (review_directory / name).exists():
-                    artifacts.append((kind, review_directory / name))
             if retrieval_usage:
                 # 로컬 검색 라운드도 사용량을 쓴다. 최종 호출분만 남기면 이
                 # 실행이 실제로 얼마를 썼는지가 기록에서 빠진다.
@@ -1107,6 +1123,12 @@ class JobRunner:
                     for path in sorted(followup_dir.iterdir()):
                         if path.is_file() and path.name in {"prompt.txt", "initial_output.txt", "output.txt", "initial_usage.json", "usage.json"}:
                             artifacts.append(("search_verification_" + path.stem, path))
+                classification_dir = work_dir / 'deadline_classification'
+                if classification_dir.exists():
+                    for path in sorted(classification_dir.iterdir()):
+                        if path.is_file() and path.name in {'input.json', 'system_prompt.txt', 'initial_output.txt',
+                                                          'output.txt', 'initial_usage.json', 'usage.json'}:
+                            artifacts.append(('search_classification_' + path.stem, path))
 
             if component_result is not None:
                 component_path = work_dir / "analysis_manifest.json"

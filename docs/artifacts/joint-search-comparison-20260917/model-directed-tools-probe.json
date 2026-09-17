@@ -1,0 +1,26 @@
+{
+  "diagnostic_only": true,
+  "citation_search": {
+    "ok": true,
+    "identifiers": [
+      "JP7475618B1",
+      "CN113129414A"
+    ],
+    "scope": "bibliographic_search",
+    "raw_artifact_id": "f0a944b26626fc6c4e229605bab236b7344bad7d8cda5ce1687ccfece8a95227",
+    "record_count": 2,
+    "total_chars": null,
+    "next_offset": null
+  },
+  "source_fetch": {
+    "ok": true,
+    "identifiers": [
+      "JP7475618B1"
+    ],
+    "scope": "claims",
+    "raw_artifact_id": "0514b949cad0db1f28393528ab64a0d7b3b38eebb75beb551907efa0efea563b",
+    "record_count": 1,
+    "total_chars": 5741,
+    "next_offset": null
+  }
+}

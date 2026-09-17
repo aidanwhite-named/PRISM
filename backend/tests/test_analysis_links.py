@@ -212,7 +212,7 @@ def test_raw_direct_score_without_limitation_links_is_not_a_final_match(linked):
     mapping = ae.select_documents([result], sources, None)
     assert not mapping['items']
     report = ae.render({'components': [result], 'documents': {'ATT-01': 'reference.pdf'}, 'issues': []}, mapping)
-    assert '한정별 근거 미확인' in report
+    assert '대응 정도: 미확인' in report
     assert '(95%)' not in report
 
 
@@ -247,6 +247,8 @@ async def test_pipeline_preserves_multi_passage_result_and_audit(tmp_path, linke
 
     class Reviewer:
         max_input_bytes = None
+        def payload_bytes(self, system, user):
+            return len((system + user).encode())
         async def execute(self, request, emit):
             payload = json.loads(request.user_message)['components'][0]
             actual = payload['candidates']

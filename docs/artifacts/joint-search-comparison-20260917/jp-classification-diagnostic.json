@@ -1,0 +1,175 @@
+{
+  "diagnostic": "explicitly seeded; not an independent search result",
+  "job_id": "diagnostic-e7d3663c-a31f-4d99-94d1-9dd2ff46002f",
+  "provider": "agy",
+  "model": "gemini-3.8-flash-medium",
+  "document_number": "JP7475618B1",
+  "classification": {
+    "group": "X",
+    "status": "classified",
+    "reason": "인용문헌의 청구항 1은 본 청구항의 전제부 및 특징 A~E의 모든 구성 요소와 유기적 결합 관계를 빠짐없이 명시하고 있어 기술적 구성 및 전체 구조가 완전히 일치함.",
+    "basis": "retrieved_passages",
+    "provisional": false,
+    "evidence_status": "quotes_available"
+  },
+  "evidence": [
+    {
+      "candidate_id": "1c0e8151b954f1119d2f",
+      "feature": "A",
+      "match": "explicit",
+      "quote": "前記複数のパラメータのうちの少なくとも一つのパラメータについて判定を行うことと、",
+      "quote_verified": true,
+      "quote_match_method": "exact",
+      "relation": "복수의 파라미터 중 적어도 하나에 대해 판정을 내리는 단계가 명시되어 기술적 관계가 일치함.",
+      "difference": "실질적인 차이점 없음.",
+      "locator": {
+        "artifact_id": "0514b949cad0db1f28393528ab64a0d7b3b38eebb75beb551907efa0efea563b",
+        "url": "https://patents.google.com/patent/JP7475618B1/en",
+        "scope": "claims",
+        "section": "claims",
+        "page": null,
+        "chunk_id": "claims",
+        "offset": 160
+      },
+      "scope_limit": "retrieved_passages_only"
+    },
+    {
+      "candidate_id": "1c0e8151b954f1119d2f",
+      "feature": "B",
+      "match": "explicit",
+      "quote": "前記判定に基づいて前記複数のパラメータを修正することと、",
+      "quote_verified": true,
+      "quote_match_method": "exact",
+      "relation": "판정 결과에 기초하여 복수의 파라미터를 보정(수정)하는 단계가 명시되어 대응됨.",
+      "difference": "실질적인 차이점 없음.",
+      "locator": {
+        "artifact_id": "0514b949cad0db1f28393528ab64a0d7b3b38eebb75beb551907efa0efea563b",
+        "url": "https://patents.google.com/patent/JP7475618B1/en",
+        "scope": "claims",
+        "section": "claims",
+        "page": null,
+        "chunk_id": "claims",
+        "offset": 204
+      },
+      "scope_limit": "retrieved_passages_only"
+    },
+    {
+      "candidate_id": "1c0e8151b954f1119d2f",
+      "feature": "C",
+      "match": "explicit",
+      "quote": "修正された前記複数のパラメータを用いて、前記子骨の姿勢を決定することと、",
+      "quote_verified": true,
+      "quote_match_method": "exact",
+      "relation": "수정(보정)된 파라미터를 사용하여 자식 뼈의 자세를 결정하는 기술적 관계가 명시됨.",
+      "difference": "실질적인 차이점 없음.",
+      "locator": {
+        "artifact_id": "0514b949cad0db1f28393528ab64a0d7b3b38eebb75beb551907efa0efea563b",
+        "url": "https://patents.google.com/patent/JP7475618B1/en",
+        "scope": "claims",
+        "section": "claims",
+        "page": null,
+        "chunk_id": "claims",
+        "offset": 236
+      },
+      "scope_limit": "retrieved_passages_only"
+    },
+    {
+      "candidate_id": "1c0e8151b954f1119d2f",
+      "feature": "D",
+      "match": "explicit",
+      "quote": "前記判定を行うことは、前記複数のパラメータのうちのいずれかが、第１の制限を超えるか否かの判定を行うことであって、前記第１の制限は、少なくとも一つのパラメータが他の二つ以上のパラメータに係る制限に影響を与える制限で表される、第１の判定を行うこと、を含み",
+      "quote_verified": true,
+      "quote_match_method": "exact",
+      "relation": "제1 제한(다른 2개 이상에 영향)을 초과하는지 제1 판정을 내리는 단계가 정확히 일치함.",
+      "difference": "실질적인 차이점 없음.",
+      "locator": {
+        "artifact_id": "0514b949cad0db1f28393528ab64a0d7b3b38eebb75beb551907efa0efea563b",
+        "url": "https://patents.google.com/patent/JP7475618B1/en",
+        "scope": "claims",
+        "section": "claims",
+        "page": null,
+        "chunk_id": "claims",
+        "offset": 282
+      },
+      "scope_limit": "retrieved_passages_only"
+    },
+    {
+      "candidate_id": "1c0e8151b954f1119d2f",
+      "feature": "E",
+      "match": "explicit",
+      "quote": "前記複数のパラメータを修正することは、前記第１の判定が、前記第１の制限を超えるとの判定である場合、前記複数のパラメータが前記第１の制限の範囲内となるように、前記第１の制限を用いて前記複数のパラメータを修正すること、を含む、",
+      "quote_verified": true,
+      "quote_match_method": "exact",
+      "relation": "제1 제한 초과 시 파라미터가 범위 내가 되도록 제1 제한을 이용해 보정하는 구성이 일치함.",
+      "difference": "실질적인 차이점 없음.",
+      "locator": {
+        "artifact_id": "0514b949cad0db1f28393528ab64a0d7b3b38eebb75beb551907efa0efea563b",
+        "url": "https://patents.google.com/patent/JP7475618B1/en",
+        "scope": "claims",
+        "section": "claims",
+        "page": null,
+        "chunk_id": "claims",
+        "offset": 411
+      },
+      "scope_limit": "retrieved_passages_only"
+    }
+  ],
+  "acquisitions": [
+    {
+      "scope": "claims",
+      "status": "failed",
+      "error": "EPO OPS 오류(HTTP 404). <?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<fault xmlns=\"http://ops.epo.org\">\n    <code>CLIENT.InvalidCountryCode</code>\n    <message>At least on"
+    },
+    {
+      "scope": "description",
+      "status": "failed",
+      "error": "EPO OPS 오류(HTTP 404). <?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<fault xmlns=\"http://ops.epo.org\">\n    <code>CLIENT.InvalidCountryCode</code>\n    <message>At least on"
+    },
+    {
+      "artifact_id": "0514b949cad0db1f28393528ab64a0d7b3b38eebb75beb551907efa0efea563b",
+      "url": "https://patents.google.com/patent/JP7475618B1/en",
+      "scope": "claims",
+      "content_type": "text/html",
+      "truncated": false,
+      "title": "JP7475618B1 - \n        Method and program for determining posture of skeletal model\n       \n        - Google Patents",
+      "section": "claims",
+      "document_number": "JP7475618B1",
+      "publisher": "Google Patents",
+      "language": "as_served",
+      "status": "acquired",
+      "characters": 5741
+    }
+  ],
+  "warnings": [
+    "planner_fallback: translation/feature plan requires review"
+  ],
+  "usage": {
+    "input_tokens": 17214.0,
+    "output_tokens": 2790.0,
+    "cache_read_tokens": 0.0,
+    "thinking_tokens": 1949.0,
+    "total_tokens": 20004.0,
+    "usage_complete": true,
+    "stages": [
+      {
+        "phase": "verify",
+        "model": "gemini-3.8-flash-medium",
+        "reasoning_effort": "medium",
+        "input_chars": 10205,
+        "usage_complete": true,
+        "usage": {
+          "input_tokens": 17214,
+          "output_tokens": 2790,
+          "thinking_tokens": 1949,
+          "cache_read_tokens": 0,
+          "total_tokens": 20004
+        },
+        "seconds": 19.453999999999724,
+        "timed_out": false,
+        "tool_calls": [],
+        "output_partial": false
+      }
+    ],
+    "cost_usd": null
+  }
+}

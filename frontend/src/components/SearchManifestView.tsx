@@ -1,7 +1,7 @@
 /** Read-only audit. Technical groups never depend on evidence levels. */
 import type { Job, SearchManifestV14 } from "../lib/types";
 import ProgressiveSearchResults from "./ProgressiveSearchResults";
-import { documentCategory } from "../lib/searchCategories";
+import { categoryLabel } from "../lib/searchCategories";
 
 export function linkableUrl(raw?: string): string | null {
   const text = (raw ?? "").trim();
@@ -16,6 +16,7 @@ const LEVELS: Record<string, string> = {
   source_page_reviewed: "페이지 열람 확인 / 인용 미검증",
   official_bibliographic: "공식 서지 확보", official_abstract: "공식 초록 확보",
   official_claims: "공식 청구항 확보", official_full_text: "공식 전문 확보",
+  public_capture: "웹 본문 보존·대조 / 원문 언어 미확인",
 };
 const ISSUES: Record<string, string> = {
   identifier_unverified: "식별 미확인", identifier_invalid: "식별자 형식 오류",
@@ -44,11 +45,16 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     <nav className="search-group-nav" aria-label="문헌 그룹">
       {groups.filter(group => group || candidates.some(item => item.group === null)).map(group =>
         <a key={group ?? "none"} href={`#search-group-${group ?? "none"}`}>
-          <strong>LLM {documentCategory(group) ?? "미분류"}</strong><span>{candidates.filter(item => item.group === group).length}건</span>
+          <strong>{categoryLabel(group)}</strong><span>{candidates.filter(item => item.group === group).length}건</span>
           <small>{data.group_definitions[group ?? ""] || "분류되지 않은 참고 후보"}</small>
         </a>)}
     </nav>
-    <p>X/Y/Z는 LLM의 기술적 판단입니다. 증거 확보 수준은 별도로 표시합니다.</p>
+    <p>X분류·Y분류·Z분류는 기술적 유사성에 대한 판단입니다. 증거 확보 수준은 별도로 표시합니다.</p>
+    {data.deadline_classification?.attempted && <p>
+      {data.deadline_classification.completed
+        ? `탐색을 마치고 확보한 후보 ${data.deadline_classification.candidate_count ?? 0}건의 분류를 완료했습니다.`
+        : `마감 분류 미완료: ${data.deadline_classification.reason}`}
+    </p>}
     {data.error && <p role="alert">미완료: {data.error}</p>}
     {!!data.retained_records?.length && <section aria-label="중단 전에 확보한 문헌">
       <h2>중단 전에 확보한 문헌 · {data.retained_records.length}건</h2>
@@ -65,8 +71,8 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
       <ul>{audit.unaccounted_fetches.map(identity => <li key={identity}>조회 후 후보·제외 사유에서 누락: {identity}</li>)}</ul>
       {audit.missing_review_fields.length > 0 && <p>종료 근거 기록 누락: {audit.missing_review_fields.map(key => REVIEW_LABELS[key] || key).join(", ")}</p>}
       {audit.broad_searches.length > 0 && <p>전체 결과의 일부 페이지만 확인한 넓은 EPO 검색: {audit.broad_searches.length}회</p>}
-      {audit.reported_review.stop_reason && <p>LLM 종료 이유: {audit.reported_review.stop_reason}</p>}
-      <details><summary>LLM 확장·페이지 편향 보완 기록</summary>
+      {audit.reported_review.stop_reason && <p>탐색 종료 이유: {audit.reported_review.stop_reason}</p>}
+      <details><summary>탐색 확장·페이지 편향 보완 기록</summary>
         <p>{audit.reported_review.expansion_summary}</p><p>{audit.reported_review.sampling_review}</p>
         <ul>{audit.reported_review.remaining_gaps?.map((gap, i) => <li key={i}>남은 탐색 과제: {gap}</li>)}</ul>
       </details>
@@ -86,7 +92,7 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     <p>검색 기준일: {data.date_filter.cutoff || "없음"} · 공개일 불명: {data.date_filter.unknown_publication_date || 0}건</p>
     </details>
     {groups.filter(group => group || candidates.some(item => item.group === null)).map(group => <section key={group ?? "none"} id={`search-group-${group ?? "none"}`} className="search-result-group">
-      <header><h2>LLM 그룹 {documentCategory(group) ?? "미분류"} <span>{candidates.filter(item => item.group === group).length}건</span></h2>
+      <header><h2>{categoryLabel(group)} <span>{candidates.filter(item => item.group === group).length}건</span></h2>
       <p>{data.group_definitions[group ?? ""] || "분류되지 않은 참고 후보"}</p></header>
       {!candidates.some(item => item.group === group) && <p className="faint">이 그룹의 후보가 없습니다.</p>}
     {candidates.filter(item => item.group === group).map((item) => {
@@ -116,7 +122,7 @@ export function SearchResults({ data }: { data: SearchManifestV14 }) {
     })}</section>)}
     {data.date_filter.excluded.length > 0 && <details><summary>기준일 이후 공개로 제외된 문헌</summary>
       <pre>{JSON.stringify(data.date_filter.excluded, null, 2)}</pre></details>}
-    {!!data.reported?.candidate_dispositions?.length && <details><summary>LLM 후보 제외·통합 기록</summary>
+    {!!data.reported?.candidate_dispositions?.length && <details><summary>후보 제외·통합 기록</summary>
       <ul>{data.reported.candidate_dispositions.map((item, i) => <li key={i}>{item.doc_number || item.doi || item.url}: {item.reason}</li>)}</ul>
     </details>}
   </div>;
@@ -130,7 +136,7 @@ export default function SearchManifestView({ job, auditOnly = false }: { job: Jo
       <details><summary>실제 도구 호출·검색어 (PRISM 관측)</summary>
         <pre>{JSON.stringify({ observed: data.observed, journal: data.tool_journal }, null, 2)}</pre>
       </details>
-      <details><summary>LLM 원출력 (미검증)</summary><pre>{JSON.stringify(data.llm_output, null, 2)}</pre></details>
+      <details><summary>모델 원출력 (미검증)</summary><pre>{JSON.stringify(data.llm_output, null, 2)}</pre></details>
     </> : <>
       <p>이전 형식(v{data.version})의 저장 기록입니다. 재분류·재검증하지 않았습니다. 저장된 보고서를 함께 확인하십시오.</p>
       <pre>{JSON.stringify(data, null, 2)}</pre>

@@ -23,6 +23,16 @@ PROFILE = 'kipris_search_xml'
 MAX_BYTES = 8 * 1024 * 1024
 
 
+class KiprisAPIError(PatentSearchError):
+    def __init__(self, code):
+        self.fault_code = 'KIPRIS.' + code
+        advice = {
+            '30': '서비스 키 미등록 응답(SERVICE_KEY_IS_NOT_REGISTERED_ERROR). KIPRIS Plus에서 현재 발급된 인증키와 해당 API 활용신청·승인 상태를 확인하고 설정의 키를 갱신하세요.',
+            '31': '이용기간 만료 응답(DEADLINE_HAS_EXPIRED_ERROR). KIPRIS Plus에서 해당 API 활용신청의 이용기간·승인을 확인하고 연장 또는 재신청하세요. 유효기간 내라면 고객센터에 코드 31과 서비스명을 문의하세요.',
+        }.get(code, 'API 키, 해당 서비스 활용신청·승인, 이용기간 및 한도를 확인하세요.')
+        super().__init__(f'키프리스 API 오류 [{code}]: {advice}')
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -65,7 +75,9 @@ def parse(data):
     # Fault bodies may arrive with HTTP 200. Never treat them as zero hits.
     for key in ('resultcode', 'returnreasoncode', 'errorcode'):
         if tags.get(key) and tags[key] not in ('0', '00', '000', '0000'):
-            raise PatentSearchError('키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.')
+            code = tags[key]
+            # Do not forward arbitrary upstream messages: they can echo accessKey.
+            raise KiprisAPIError(code if re.fullmatch(r'\d{1,6}', code) else 'UNKNOWN')
     rows = [_fields(n) for n in root.iter() if _tag(n) in ('patentutilityinfo', 'item')]
     total = tags.get('totalsearchcount', tags.get('totalcount', ''))
     if not total.isdigit():

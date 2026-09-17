@@ -18,7 +18,6 @@ async def test_installed_cli_can_call_only_capabilities(provider_type, client, t
     # TestClient owns an isolated database, never the user's settings.
     client.put("/api/settings", json={"values": {
         "epo_integration_enabled": False, "literature_integration_enabled": False,
-        "kiwee_integration_enabled": False,
     }})
     request = ExecutionRequest(job_id="mcp-smoke-" + provider.id, work_dir=tmp_path,
         system_prompt="Call only the prism-search search_capabilities tool exactly once. Do not call other tools. Then reply PRISM_MCP_SMOKE_OK.",

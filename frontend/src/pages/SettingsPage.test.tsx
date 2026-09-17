@@ -45,7 +45,6 @@ const settingsResponse = {
     delivery_scale_claim_elements: 0,
     embedding_cache_max_mb: 512,
     retrieval_semantic_enabled: true,
-    kiwee_integration_enabled: false,
     epo_integration_enabled: false,
     epo_consumer_key: "",
     epo_consumer_secret: "",
@@ -466,11 +465,7 @@ describe("대용량 인용발명 전달 방식", () => {
 
   it("특허 연동 카드를 전체 폭 대상으로 표시하고 설명을 간결하게 유지한다", async () => {
     const { container } = await renderPage();
-    expect(container.querySelector(".settings-kiwee")).toBeTruthy();
     expect(container.querySelector(".settings-epo")).toBeTruthy();
-    expect(container.textContent).toContain(
-      "Kiwee 특허 DB를 유사문헌 검색 경로에 추가합니다.",
-    );
     expect(container.textContent).toContain(
       "EPO OPS API로 특허를 검색하고 받은 XML과 결과를 대조합니다.",
     );

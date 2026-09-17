@@ -1,0 +1,242 @@
+[
+  {
+    "query": "joint constraints projection",
+    "mode": "title_and_abstract",
+    "coverage": {
+      "returned_records": 9,
+      "unique_documents": 9,
+      "duplicate_records": 0,
+      "result_range": "1-9",
+      "total_results": 2419,
+      "more_results_available": true,
+      "returned_fraction": null,
+      "status": "results",
+      "source_stats": [
+        {
+          "source": "openalex",
+          "status": "results",
+          "total_results": 2419,
+          "returned_records": 9,
+          "result_range": "1-9"
+        }
+      ],
+      "unique_families_in_page": null,
+      "abstracts_in_page": 9,
+      "classification_records_in_page": 0,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+    },
+    "cache_hit": false,
+    "records": [
+      {
+        "rank": 1,
+        "title": "Iterative Bregman Projections for Regularized Transportation Problems",
+        "document_number": "10.1137/141000439"
+      },
+      {
+        "rank": 2,
+        "title": "Matching constraints and the joint image",
+        "document_number": "10.1109/iccv.1995.466920"
+      },
+      {
+        "rank": 3,
+        "title": "Joint Learning for Single-Image Super-Resolution via a Coupled Constraint",
+        "document_number": "10.1109/tip.2011.2161482"
+      },
+      {
+        "rank": 4,
+        "title": "Jointly Learning Non-negative Projection and Dictionary with Discriminative Graph Constraints for Classification",
+        "document_number": "10.5244/c.30.14"
+      },
+      {
+        "rank": 5,
+        "title": "An Algorithm for Least-Squares Estimation of Nonlinear Parameters",
+        "document_number": "10.1137/0111030"
+      },
+      {
+        "rank": 6,
+        "title": "Projections of total hip replacement in Sweden from 2013 to 2030",
+        "document_number": "10.3109/17453674.2014.913224"
+      },
+      {
+        "rank": 7,
+        "title": "Jointly Learning Non-negative Projection and Dictionary with Discriminative Graph Constraints for Classification",
+        "document_number": "10.48550/arxiv.1511.04601"
+      },
+      {
+        "rank": 8,
+        "title": "Motion control of redundant robots under joint constraints: Saturation in the Null Space",
+        "document_number": "10.1109/icra.2012.6225376"
+      },
+      {
+        "rank": 9,
+        "title": "A unified approach for inverse and direct dynamics of constrained multibody systems based on linear projection operator: applications to control and simulation",
+        "document_number": "10.1109/tro.2005.851380"
+      },
+      {
+        "rank": 10,
+        "title": "The Geometry of Projective Reconstruction I: Matching Constraints and the Joint Image",
+        "document_number": "openalex:W1664657138"
+      }
+    ]
+  },
+  {
+    "query": "joint limits dependencies",
+    "mode": "title_and_abstract",
+    "coverage": {
+      "returned_records": 10,
+      "unique_documents": 10,
+      "duplicate_records": 0,
+      "result_range": "1-10",
+      "total_results": 1265,
+      "more_results_available": true,
+      "returned_fraction": null,
+      "status": "results",
+      "source_stats": [
+        {
+          "source": "openalex",
+          "status": "results",
+          "total_results": 1265,
+          "returned_records": 10,
+          "result_range": "1-10"
+        }
+      ],
+      "unique_families_in_page": null,
+      "abstracts_in_page": 5,
+      "classification_records_in_page": 0,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+    },
+    "cache_hit": false,
+    "records": [
+      {
+        "rank": 1,
+        "title": "Probabilistic arithmetic. I. Numerical methods for calculating convolutions and dependency bounds",
+        "document_number": "10.1016/0888-613x(90)90022-t"
+      },
+      {
+        "rank": 2,
+        "title": "The scale dependence of rock joint surface roughness",
+        "document_number": "10.1016/s1365-1609(01)00028-4"
+      },
+      {
+        "rank": 3,
+        "title": "Hierarchical implicit surface joint limits for human body tracking",
+        "document_number": "10.1016/j.cviu.2005.01.005"
+      },
+      {
+        "rank": 4,
+        "title": "Speech-Transformer: A No-Recurrence Sequence-to-Sequence Model for Speech Recognition",
+        "document_number": "10.1109/icassp.2018.8462506"
+      },
+      {
+        "rank": 5,
+        "title": "Vector quantization in speech coding",
+        "document_number": "10.1109/proc.1985.13340"
+      },
+      {
+        "rank": 6,
+        "title": "Scale dependency in the functional form of the distance decay relationship",
+        "document_number": "10.1111/j.1600-0587.2013.00407.x"
+      },
+      {
+        "rank": 7,
+        "title": "Hierarchical Implicit Surface Joint Limits to Constrain Video-Based Motion Capture",
+        "document_number": "10.1007/978-3-540-24671-8_32"
+      },
+      {
+        "rank": 8,
+        "title": "Limit positions of compliant mechanisms using the pseudo-rigid-body model concept",
+        "document_number": "10.1016/s0094-114x(98)00093-7"
+      },
+      {
+        "rank": 9,
+        "title": "GraphSearchNet: Enhancing GNNs via Capturing Global Dependencies for Semantic Code Search",
+        "document_number": "10.1109/tse.2022.3233901"
+      },
+      {
+        "rank": 10,
+        "title": "Correctness of Belief Propagation in Gaussian Graphical Models of Arbitrary Topology",
+        "document_number": "10.1162/089976601750541769"
+      }
+    ]
+  },
+  {
+    "query": "joint constraints distance fields",
+    "mode": "search",
+    "coverage": {
+      "returned_records": 10,
+      "unique_documents": 10,
+      "duplicate_records": 0,
+      "result_range": "1-10",
+      "total_results": 599966,
+      "more_results_available": true,
+      "returned_fraction": null,
+      "status": "results",
+      "source_stats": [
+        {
+          "source": "openalex",
+          "status": "results",
+          "total_results": 599966,
+          "returned_records": 10,
+          "result_range": "1-10"
+        }
+      ],
+      "unique_families_in_page": null,
+      "abstracts_in_page": 9,
+      "classification_records_in_page": 0,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+    },
+    "cache_hit": false,
+    "records": [
+      {
+        "rank": 1,
+        "title": "Improved cosmological constraints from a joint analysis of the SDSS-II and SNLS supernova samples",
+        "document_number": "10.1051/0004-6361/201423413"
+      },
+      {
+        "rank": 2,
+        "title": "Gradient-based learning applied to document recognition",
+        "document_number": "10.1109/5.726791"
+      },
+      {
+        "rank": 3,
+        "title": "Type Ia Supernova Discoveries at z > 1 from the Hubble Space Telescope : Evidence for Past Deceleration and Constraints on Dark Energy Evolution",
+        "document_number": "10.1086/383612"
+      },
+      {
+        "rank": 4,
+        "title": "A joint-constraint model for human joints using signed distance-fields",
+        "document_number": "10.1007/s11044-011-9296-1"
+      },
+      {
+        "rank": 5,
+        "title": "Joint Radar and Communication Design: Applications, State-of-the-Art, and the Road Ahead",
+        "document_number": "10.1109/tcomm.2020.2973976"
+      },
+      {
+        "rank": 6,
+        "title": "An Explicit Link between Gaussian Fields and Gaussian Markov Random Fields: The Stochastic Partial Differential Equation Approach",
+        "document_number": "10.1111/j.1467-9868.2011.00777.x"
+      },
+      {
+        "rank": 7,
+        "title": "GPS constraints on continental deformation in the Africa‐Arabia‐Eurasia continental collision zone and implications for the dynamics of plate interactions",
+        "document_number": "10.1029/2005jb004051"
+      },
+      {
+        "rank": 8,
+        "title": "Cosmological constraints from the SDSS luminous red galaxies",
+        "document_number": "10.1103/physrevd.74.123507"
+      },
+      {
+        "rank": 9,
+        "title": "Cultural Constraints on Grammar and Cognition in Pirahã",
+        "document_number": "10.1086/431525"
+      },
+      {
+        "rank": 10,
+        "title": "CHANDRACLUSTER COSMOLOGY PROJECT III: COSMOLOGICAL PARAMETER CONSTRAINTS",
+        "document_number": "10.1088/0004-637x/692/2/1060"
+      }
+    ]
+  }
+]

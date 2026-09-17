@@ -10,9 +10,8 @@ PRISM 은 구성별 결과와 문헌 매핑을 사람이 읽는 Markdown 이 아
 계약의 두 짝을 같은 곳에 둔다. 규칙을 여기로 옮기고, 분석 조립이 선택된
 프롬프트 뒤에 이 절을 붙인다.
 
-구성·매핑 블록은 출력 형식 계약이다. 추가로 analysis_evidence의 근거 후보
-계약을 붙인다. 근거 후보는 원문 대조와 별도 의미 재검토에 사용되며, 이 경로의
-최종 점수·문헌 순서·보고서는 검증된 재검토 결과에서 다시 생성된다.
+구성·매핑 블록은 출력 형식 계약이다. 모델의 최종 보고서를 보존하며 별도의
+AI 재검토나 보고서 재조립은 수행하지 않는다.
 
 검색 실행에는 붙이지 않는다. 검색은 자기 출력 계약(search_manifest)이 따로
 있고, 조립 경로도 다르다 — prompt_assembly.assemble_search 는 이 모듈을 부르지
@@ -76,10 +75,11 @@ def apply(master_prompt: str) -> str:
     따르는 프롬프트일수록 깨지는 셈이다. 옛 프롬프트 파일과 사용자가 직접 적어
     둔 프롬프트가 여기에 해당한다.
     """
-    from .analysis_evidence import INSTRUCTIONS as EVIDENCE_INSTRUCTIONS, OPEN as EVIDENCE_OPEN
-    evidence = '' if EVIDENCE_OPEN in master_prompt else '\n\n' + EVIDENCE_INSTRUCTIONS
+    report_only = ('\n\n이번 실행에서는 최종 보고서와 구성별 분석·문헌 매핑 블록만 작성한다. '
+                   '별도 근거 후보 비교 블록이나 후속 AI 재검토를 전제로 한 출력 규칙은 적용하지 않는다. '
+                   '탈락 후보의 설명·번역·제외 이유는 작성하지 않는다.')
     if not declares_blocks(master_prompt):
-        return master_prompt.rstrip() + "\n\n" + INSTRUCTIONS + evidence
+        return master_prompt.rstrip() + "\n\n" + INSTRUCTIONS + report_only
     component, mapping = INSTRUCTIONS.split("## 문헌 매핑 블록", 1)
     result = master_prompt.rstrip()
     if _COMPONENT_OPEN not in master_prompt:
@@ -90,4 +90,4 @@ def apply(master_prompt: str) -> str:
         result += ("\n\n문헌 매핑 출력 보완: 문헌번호가 없는 논문도 attachment로 연결하고 "
                    "document_number에 '문헌번호 확인 불가'를 쓴다. 문헌번호 미확인을 이유로 "
                    "매핑을 생략하라는 규칙 대신 모든 번호–첨부 대응을 보존한다.")
-    return result + evidence
+    return result + report_only

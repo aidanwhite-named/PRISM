@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ProgressiveSearchSnapshot } from "../lib/types";
-import { categoryOrder, documentCategory } from "../lib/searchCategories";
+import { categoryLabel, categoryOrder, documentCategory } from "../lib/searchCategories";
 
 const MATCH: Record<string, string> = {
   explicit: "명시적 대응", semantic: "의미상 대응", partial: "부분 대응",
@@ -15,6 +15,7 @@ const PHASE: Record<string, string> = {
   relation_seed: "관계 중심 후보 검색 중",
   citations: "인용·피인용 검색 중",
   planning: "검색 구성 정리 중", fast: "후보 검색 중", deep: "추가 검색 중",
+  classification: "후보 비교·잠정 분류 중",
   exhaustive: "확장 검색 중", verification: "원문 근거 확인 중", complete: "검색 종료",
 };
 function safeLink(raw: string): string | undefined {
@@ -42,8 +43,14 @@ export default function ProgressiveSearchResults({ data }: { data: ProgressiveSe
       const url = safeLink(candidate.url);
       return <section key={candidate.id} className="card search-result-candidate">
         <h3>{index + 1}. {candidate.title || candidate.document_number}</h3>
-        <p><strong>문헌 분류 {documentCategory(candidate.document_classification?.group) || "미분류"}</strong>
+        <p><strong>{categoryLabel(candidate.document_classification?.group)}</strong>
           {" · "}{candidate.document_classification?.reason || "아직 평가하지 않은 후보"}</p>
+        <p>{candidate.document_classification?.status === "insufficient_information" ? "자료 부족" :
+          candidate.document_classification?.status === "low_relevance" ? "검토 결과 관련성 낮음" :
+          !candidate.document_classification ? "미평가" : "분류 검토됨"}
+          {candidate.document_classification?.basis === "abstract" && " · 초록 기준 · 잠정 판단"}
+          {candidate.document_classification?.basis === "search_metadata" && " · 제목·검색 단서 기준"}
+          {candidate.document_classification?.basis === "retrieved_passages" && " · 확보한 근거 구간 기준"}</p>
         <p>{candidate.document_number} · 공개일 {candidate.publication_date || "미확인"} · {DATA[candidate.data_status] || candidate.data_status}</p>
         {url && <a href={url} target="_blank" rel="noreferrer">문헌 보기</a>}
         {members.length > 1 && <details><summary>같은 family {members.length}개 문헌</summary><ul>
@@ -74,6 +81,12 @@ export default function ProgressiveSearchResults({ data }: { data: ProgressiveSe
       <h2>{PHASE[data.phase] || data.phase} · 후보 {eligible.length}건 / {groups.length}개 문헌군</h2>
       <p>{data.elapsed_seconds.toFixed(1)}초 경과{data.first_candidate_seconds != null &&
         ` · 첫 후보 ${data.first_candidate_seconds.toFixed(1)}초`}</p>
+      {data.classification && <p role={data.phase === "complete" && data.classification.status === "incomplete" ? "alert" : undefined}>
+        {data.phase !== "complete" && data.classification.status === "incomplete" ? "분류 대기·진행 중" :
+          data.classification.status === "incomplete" ? "분류 미완료" :
+          data.classification.status === "complete" ? "선별 대상 분류 응답 완료" : "분류할 후보 없음"}
+        {` · 검토 ${data.classification.reviewed_count}/${data.classification.target_count}건 · 미평가 후보 ${data.classification.unreviewed_count}건`}
+      </p>}
       <p>관련성은 아래 구성별 원문 근거로 확인하세요. 미확인 항목은 문헌에 없다는 뜻이 아니며, 검색 누락이 없음을 보장하지 않습니다.</p>
       <p>원문 인용을 대조한 후보: {eligible.filter(c => c.evidence.some(e => e.quote_verified)).length}건</p>
       {data.route?.map((step, index) => <p key={index}>
@@ -84,13 +97,14 @@ export default function ProgressiveSearchResults({ data }: { data: ProgressiveSe
           step.outcome === "no_verified_x" ? " · X 미확인" : ""}
         {step.reason === "no_verified_x" && " · X 미확인으로 후속 검색 진행"}
         {step.outcome === "verified_xy" && " · 원문 근거가 있는 X·Y 후보 확인"}
+        {step.outcome === "no_candidates" && " · 반환된 후보 없음"}
         {(step.outcome === "no_verified_xy" || step.reason === "no_verified_xy") && " · X·Y 미확인으로 후속 검색 진행"}
         {step.seconds != null && ` · ${step.seconds.toFixed(1)}초`}
       </p>)}
       <dl className="search-category-legend" aria-label="문헌 분류 안내">
-        <div><dt>문헌 분류 X</dt><dd>전체 구조·핵심 특징 유사</dd></div>
-        <div><dt>문헌 분류 Y</dt><dd>구조는 다르나 핵심 관계 유사</dd></div>
-        <div><dt>문헌 분류 Z</dt><dd>구조는 유사하나 핵심 대응 부분적</dd></div>
+        <div><dt>X분류</dt><dd>전체 구조·핵심 특징 유사</dd></div>
+        <div><dt>Y분류</dt><dd>구조는 다르나 핵심 관계 유사</dd></div>
+        <div><dt>Z분류</dt><dd>구조는 유사하나 핵심 대응 부분적</dd></div>
       </dl>
       {data.warnings.length > 0 && <p className="notice">일부 검색·검증 단계가 완료되지 않았습니다. 확보한 후보는 보존했으며, 아래 검색 기록에 원인을 표시했습니다.</p>}
       {data.stop_reason === "cancelled" && <p>검색을 중단했습니다. 중단 전 확보한 후보와 근거를 보존했습니다.</p>}

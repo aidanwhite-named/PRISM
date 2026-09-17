@@ -668,13 +668,13 @@ def test_componentless_deferred_status_does_not_block_finalize(tmp_path) -> None
         retrieval.close_documents(corpus)
 
 
-def test_last_valid_finalize_is_kept_when_round_limit_is_reached(tmp_path, monkeypatch) -> None:
-    """이월 action 때문에 보류된 유효 finalize 는 빈 패키지로 잃지 않는다."""
+def test_final_round_can_report_partial_coverage_without_draining_pending(tmp_path, monkeypatch) -> None:
+    """마지막 응답으로 범위를 확정하고 미처리 요청은 그대로 기록한다."""
     from app.providers.base import ExecutionOutcome
     from app.retrieval import agent as agent_module
     from app.retrieval.actions import SearchDocument
 
-    class FallbackProvider(DeterministicTestProvider):
+    class PartialFinalizeProvider(DeterministicTestProvider):
         async def execute(self, request, emit):
             outcome = ExecutionOutcome(cli_path="(test)", cli_version="0")
             # 전송 JSON 은 공백 없는 compact 형식이다. 문자열 모양이 아니라
@@ -718,8 +718,8 @@ def test_last_valid_finalize_is_kept_when_round_limit_is_reached(tmp_path, monke
     corpus, _ = _corpus(tmp_path, [item])
     try:
         agent = agent_module.RetrievalAgent(
-            job_id="job-finalize-fallback",
-            provider=FallbackProvider(),
+            job_id="job-partial-finalize",
+            provider=PartialFinalizeProvider(),
             model=None,
             timeout_seconds=60,
             work_dir=tmp_path,
@@ -750,7 +750,8 @@ def test_last_valid_finalize_is_kept_when_round_limit_is_reached(tmp_path, monke
 
         assert run.finalize is not None
         assert run.finalize.components[0].component_id == "R001"
-        assert any("예산 소진 상태로 채택" in note for note in run.notes)
+        assert run.budget_exhausted and run.deferred_pending
+        assert any("미처리 요청은 검토 범위 제한" in note for note in run.notes)
     finally:
         retrieval.close_documents(corpus)
 

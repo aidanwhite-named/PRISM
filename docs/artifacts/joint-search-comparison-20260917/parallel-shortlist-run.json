@@ -1,0 +1,144 @@
+{
+  "job_id": "6e118d15-ab88-43ee-b116-77d936d4fa9a",
+  "status": "SUCCEEDED",
+  "elapsed_seconds": 253.048437,
+  "candidate_count": 6,
+  "groups": {
+    "B": 3,
+    "C": 1,
+    "unclassified": 2
+  },
+  "deadline_classification": {
+    "attempted": true,
+    "completed": true,
+    "reason": "확보 자료의 마감 분류",
+    "candidate_count": 6,
+    "timeout_seconds": 98,
+    "search_timed_out": true
+  },
+  "api_first_round": [
+    {
+      "tool": "epo_search",
+      "state": "started",
+      "timestamp": "2026-09-17T07:01:38.582776+00:00",
+      "ok": null,
+      "error_code": null
+    },
+    {
+      "tool": "kipris_search",
+      "state": "started",
+      "timestamp": "2026-09-17T07:01:38.586774+00:00",
+      "ok": null,
+      "error_code": null
+    },
+    {
+      "tool": "literature_search",
+      "state": "started",
+      "timestamp": "2026-09-17T07:01:38.590284+00:00",
+      "ok": null,
+      "error_code": null
+    },
+    {
+      "tool": "kipris_search",
+      "state": "completed",
+      "timestamp": "2026-09-17T07:01:38.800447+00:00",
+      "ok": false,
+      "error_code": "KIPRIS.30"
+    },
+    {
+      "tool": "literature_search",
+      "state": "completed",
+      "timestamp": "2026-09-17T07:01:40.063223+00:00",
+      "ok": true,
+      "error_code": null
+    },
+    {
+      "tool": "epo_search",
+      "state": "completed",
+      "timestamp": "2026-09-17T07:01:40.332609+00:00",
+      "ok": true,
+      "error_code": null
+    },
+    {
+      "tool": "epo_search",
+      "state": "started",
+      "timestamp": "2026-09-17T07:03:02.741489+00:00",
+      "ok": null,
+      "error_code": null
+    },
+    {
+      "tool": "epo_search",
+      "state": "completed",
+      "timestamp": "2026-09-17T07:03:03.350093+00:00",
+      "ok": true,
+      "error_code": null
+    },
+    {
+      "tool": "epo_search",
+      "state": "started",
+      "timestamp": "2026-09-17T07:03:08.191152+00:00",
+      "ok": null,
+      "error_code": null
+    }
+  ],
+  "web_starts": [
+    "2026-09-17 07:01:43.335274",
+    "2026-09-17 07:01:59.774440",
+    "2026-09-17 07:02:14.321569",
+    "2026-09-17 07:02:20.211206",
+    "2026-09-17 07:02:28.943438",
+    "2026-09-17 07:02:35.463721",
+    "2026-09-17 07:02:42.409856",
+    "2026-09-17 07:02:48.955856"
+  ],
+  "tool_counts": {
+    "start_collection": 1,
+    "epo_search": 6,
+    "kipris_search": 1,
+    "literature_search": 3,
+    "collect_results": 1,
+    "save_candidates": 1
+  },
+  "candidates": [
+    {
+      "id": "10.1186/s41074-019-0057-z",
+      "group": "B",
+      "title": "Learning 3D joint constraints from vision-based motion capture datasets",
+      "evidence_level": "official_abstract"
+    },
+    {
+      "id": "10.48550/arxiv.2311.10653",
+      "group": "B",
+      "title": "Learning Realistic Joint Space Boundaries for Range of Motion Analysis of Healthy and Impaired Human Arms",
+      "evidence_level": "official_abstract"
+    },
+    {
+      "id": "US2010182329A1",
+      "group": "B",
+      "title": "INFORMATION STORAGE MEDIUM, SKELETON MOTION CONTROL DEVICE, AND SKELETON MOTION CONTROL METHOD",
+      "evidence_level": "official_abstract"
+    },
+    {
+      "id": "CN111739132A",
+      "group": "C",
+      "title": "Whole-body skeleton movement effect modification method based on local controller",
+      "evidence_level": "official_abstract"
+    },
+    {
+      "id": "CN122049993A",
+      "group": null,
+      "title": "Monitoring video-oriented complex space-time multi-target behavior recognition and understanding system",
+      "evidence_level": "official_abstract"
+    },
+    {
+      "id": "JP2007148856A",
+      "group": null,
+      "title": "CALCULATION DEVICE AND CALCULATION METHOD FOR POSITION OF CONTROL POINT OF SKIN, AND PROGRAM",
+      "evidence_level": "official_abstract"
+    }
+  ],
+  "limits": [
+    "Single live run; verified X stop covered by deterministic source-evidence and cancellation tests, not triggered in this run.",
+    "Final standalone API page clamp was added after this run started; tested separately."
+  ]
+}

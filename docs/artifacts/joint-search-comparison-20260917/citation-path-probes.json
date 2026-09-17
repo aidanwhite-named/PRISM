@@ -1,0 +1,180 @@
+[
+  {
+    "seed": "JP7475618B1",
+    "direction": "backward",
+    "explicitly_seeded": true,
+    "references": [],
+    "references_omitted": null,
+    "warning": null,
+    "raw_artifact_id": null,
+    "seed_artifact_id": "974c8ea7b389997c6bf490d852912cfaf7a7cc01d2d40d48842283094ef475d8",
+    "metadata_failures": null,
+    "coverage": null,
+    "records": []
+  },
+  {
+    "seed": "WO2012111622A1",
+    "direction": "backward",
+    "explicitly_seeded": true,
+    "references": [
+      "JP2010170279A",
+      "JP2006323804A"
+    ],
+    "references_omitted": 0,
+    "warning": null,
+    "raw_artifact_id": null,
+    "seed_artifact_id": "5ceb2273c35c2c0a6b44e840f1f4d13c0e7ef261282c0dd62d0ccdb3710a3355",
+    "metadata_failures": [],
+    "coverage": null,
+    "records": [
+      {
+        "document_number": "JP2010170279A",
+        "title": "SKELETON MOTION CONTROL SYSTEM, PROGRAM, AND INFORMATION STORAGE MEDIUM",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DJP2010170279"
+      },
+      {
+        "document_number": "JP2006323804A",
+        "title": "MERCHANDISE PROPOSITION SYSTEM, MERCHANDISE SALES SYSTEM, AND MERCHANDISE DESIGN SUPPORT SYSTEM",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DJP2006323804"
+      }
+    ]
+  },
+  {
+    "seed": "WO2012111622A1",
+    "direction": "forward",
+    "explicitly_seeded": true,
+    "references": null,
+    "references_omitted": null,
+    "warning": null,
+    "raw_artifact_id": "f0a944b26626fc6c4e229605bab236b7344bad7d8cda5ce1687ccfece8a95227",
+    "seed_artifact_id": null,
+    "metadata_failures": null,
+    "coverage": {
+      "returned_records": 2,
+      "unique_documents": 2,
+      "duplicate_records": 0,
+      "result_range": "1-2",
+      "total_results": 2,
+      "more_results_available": false,
+      "returned_fraction": 1.0,
+      "status": "results",
+      "source_stats": [],
+      "unique_families_in_page": 2,
+      "abstracts_in_page": 2,
+      "classification_records_in_page": 2,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+      "next_begin": null,
+      "publication_date_range": {
+        "earliest": "20210716",
+        "latest": "20240430"
+      },
+      "ordering": "provider_default; no relevance ordering requested"
+    },
+    "records": [
+      {
+        "document_number": "JP7475618B1",
+        "title": "SKELETON MODEL POSTURE DETERMINATION METHOD AND PROGRAM",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DJP7475618"
+      },
+      {
+        "document_number": "CN113129414A",
+        "title": "Hand action repairing method and device, equipment and storage medium",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN113129414"
+      }
+    ]
+  },
+  {
+    "seed": "US9208613B2",
+    "direction": "forward",
+    "explicitly_seeded": true,
+    "references": null,
+    "references_omitted": null,
+    "warning": null,
+    "raw_artifact_id": "24f9c9646ec83fffece9af04d3b77cabfbe86265b8177fb59c03e9a23815376e",
+    "seed_artifact_id": null,
+    "metadata_failures": null,
+    "coverage": {
+      "returned_records": 12,
+      "unique_documents": 12,
+      "duplicate_records": 0,
+      "result_range": "1-12",
+      "total_results": 12,
+      "more_results_available": false,
+      "returned_fraction": 1.0,
+      "status": "results",
+      "source_stats": [],
+      "unique_families_in_page": 12,
+      "abstracts_in_page": 12,
+      "classification_records_in_page": 12,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+      "next_begin": null,
+      "publication_date_range": {
+        "earliest": "20210715",
+        "latest": "20250403"
+      },
+      "ordering": "provider_default; no relevance ordering requested"
+    },
+    "records": [
+      {
+        "document_number": "US20250111573A1",
+        "title": "Enhanced system for generation and optimization of facial models and animation",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS20250111573"
+      },
+      {
+        "document_number": "US20240399248A1",
+        "title": "System for generating visual content within a game application environment",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS20240399248"
+      },
+      {
+        "document_number": "US20240135616A1",
+        "title": "Automated system for generation of facial animation rigs",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS20240135616"
+      },
+      {
+        "document_number": "US2022398796A1",
+        "title": "Enhanced system for generation of facial models and animation",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2022398796"
+      },
+      {
+        "document_number": "US2022398797A1",
+        "title": "Enhanced system for generation of facial models and animation",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2022398797"
+      },
+      {
+        "document_number": "US2022398795A1",
+        "title": "Enhanced system for generation of facial models and animation",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2022398795"
+      },
+      {
+        "document_number": "US2021394068A1",
+        "title": "Computer-readable non-transitory storage medium having instructions stored therein, game apparatus, game system, and game processing method",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2021394068"
+      },
+      {
+        "document_number": "US2021308580A1",
+        "title": "Enhanced pose generation based on generative modeling",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2021308580"
+      },
+      {
+        "document_number": "US2022198733A1",
+        "title": "Enhanced pose generation based on conditional modeling of inverse kinematics",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2022198733"
+      },
+      {
+        "document_number": "US2023146141A1",
+        "title": "Color blindness diagnostic system",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2023146141"
+      },
+      {
+        "document_number": "US20240354581A1",
+        "title": "Character controllers using motion variational autoencoders (MVAEs)",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS20240354581"
+      },
+      {
+        "document_number": "US2021217184A1",
+        "title": "Universal body movement translation and character rendering system",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2021217184"
+      }
+    ]
+  }
+]

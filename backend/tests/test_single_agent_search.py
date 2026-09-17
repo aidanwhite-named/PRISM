@@ -155,9 +155,9 @@ def test_query_and_failures_are_recorded_without_consuming_network(tmp_path):
 
 def test_available_tools_do_not_create_independent_searches():
     status = search_channels.availability({"epo_integration_enabled": False,
-        "kiwee_integration_enabled": True, "literature_integration_enabled": True}, "agy")
+        "literature_integration_enabled": True}, "agy")
+    assert set(status) == {"web", "epo", "literature", "kipris"}
     assert status["epo"]["status"] == "disabled"
-    assert status["kiwee"]["status"] == "not_implemented"
     # agy 는 전역 MCP 설정에 등록돼야 쓸 수 있다. 테스트 홈에는 등록이 없다.
     assert status["literature"]["status"] == "not_registered"
     assert search_channels.availability({"literature_integration_enabled": True},
@@ -207,7 +207,8 @@ def test_api_skips_web_reread_when_provenance_transport_is_unavailable(client, m
     job = wait_for_job(client, created["id"])
     assert job["status"] == "SUCCEEDED", job["errors"]
     assert len(calls) == 1
-    assert not job["search_manifest"]["verification_followup"]["attempted"]
+    assert job["search_manifest"]["verification_followup"] is None
+    assert job["search_manifest"]["execution_mode"] == 'model_directed'
     assert job["search_manifest"]["status"] == "verification_incomplete"
     assert job["search_manifest"]["quality"]["verified_candidate_count"] == 0
     assert job["search_manifest"]["version"] == 14

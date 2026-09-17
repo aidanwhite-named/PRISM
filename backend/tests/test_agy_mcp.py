@@ -127,7 +127,7 @@ def test_schema_view_is_allowed_only_for_enabled_prism_tools(agy_home):
     parser = AgyStreamParser()
     parser.feed(json.dumps({"event": "init", "conversation_id": "c1", "init": {}}))
     parser.feed(_step(2, "DONE", "view_file", {"AbsolutePath": str(schemas / "epo_search.json")}))
-    parser.feed(_step(3, "DONE", "view_file", {"AbsolutePath": str(schemas / "kiwee_search.json")}))
+    parser.feed(_step(3, "DONE", "view_file", {"AbsolutePath": str(schemas / "unregistered_search.json")}))
     parser.feed(_step(5, "DONE", "view_file", {"AbsolutePath": str(schemas.parent / "probe" / "echo_env.json")}))
     policy = replace(AGY_WEB_SEARCH, mcp_tools=("mcp__prism-search__epo_search",))
     audit_content_reads(parser.state, policy)

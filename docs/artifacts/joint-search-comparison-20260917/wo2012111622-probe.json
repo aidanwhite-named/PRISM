@@ -1,0 +1,106 @@
+{
+  "purpose": "known-number lookup, not independent discovery",
+  "document_number": "WO2012111622A1",
+  "checks": [
+    {
+      "check": "epo_number_search",
+      "records": [
+        {
+          "number": "WO2012111622A1",
+          "title": "MOVEMENT MODELING DEVICE, METHOD, AND PROGRAM",
+          "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DWO2012111622",
+          "fields": {
+            "abstract:en": 1174,
+            "applicants": 80,
+            "ipc": 123,
+            "publication_date": 8,
+            "family_id": 8
+          }
+        }
+      ],
+      "raw_artifact_id": "f6a90d6de91b166ae27ce2f66dbab5b9567690806a964a3a40137b9a928179b4"
+    },
+    {
+      "check": "epo_bibliography",
+      "records": [
+        {
+          "number": "WO2012111622A1",
+          "title": "MOVEMENT MODELING DEVICE, METHOD, AND PROGRAM",
+          "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DWO2012111622",
+          "fields": {
+            "title:fr": 61,
+            "title:en": 45,
+            "abstract:en": 1174,
+            "abstract:fr": 1261,
+            "applicants": 80,
+            "inventors": 34,
+            "ipc": 123,
+            "publication_date": 8,
+            "family_id": 8,
+            "publication_number": 14,
+            "application_number": 12
+          }
+        }
+      ],
+      "raw_artifact_id": "5ceb2273c35c2c0a6b44e840f1f4d13c0e7ef261282c0dd62d0ccdb3710a3355"
+    },
+    {
+      "check": "epo_claims",
+      "records": [
+        {
+          "number": "WO2012111622A1",
+          "title": "",
+          "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DWO2012111622",
+          "fields": {
+            "claims:ja": 2792,
+            "publication_number": 14
+          }
+        }
+      ],
+      "raw_artifact_id": "6e855f93a3bd518da30a681eeba8881540fdf8faaa308186cdf1b3eb6976e2c6"
+    },
+    {
+      "check": "program_direct_page",
+      "source": {
+        "artifact_id": "2d047ceabd109fc4aed314d92135a27f7994f5cc10ca2b8d0304937b6c54a024",
+        "url": "https://patents.google.com/patent/WO2012111622A1/en",
+        "scope": "claims",
+        "content_type": "text/html",
+        "truncated": false,
+        "title": "WO2012111622A1 - Movement modeling device, method, and program \n        - Google Patents",
+        "section": "claims",
+        "document_number": "WO2012111622A1",
+        "publisher": "Google Patents",
+        "language": "as_served"
+      },
+      "characters": 10434
+    }
+  ],
+  "previous_claim_searches": [
+    {
+      "run": "deep",
+      "job_id": "03ff303a-5829-49c9-890e-326f38f91d58",
+      "matching_candidates": []
+    },
+    {
+      "run": "exhaustive",
+      "job_id": "29633f0e-0db7-4c40-ad00-d4c98463a6c5",
+      "matching_candidates": []
+    },
+    {
+      "run": "improved_exhaustive_v1",
+      "job_id": "b5d17bf4-074b-44b7-8d57-e2063fd0d784",
+      "matching_candidates": []
+    },
+    {
+      "run": "improved_exhaustive_v2",
+      "job_id": "2c29f9f3-bb8e-4f79-a57d-46a42f9cb6f9",
+      "matching_candidates": []
+    },
+    {
+      "run": "improved_final_deep",
+      "job_id": "498fc266-b6ad-4477-b798-fa874521755e",
+      "matching_candidates": []
+    }
+  ]
+}

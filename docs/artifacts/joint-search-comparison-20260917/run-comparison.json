@@ -1,0 +1,3835 @@
+[
+  {
+    "depth": "deep",
+    "job_id": "03ff303a-5829-49c9-890e-326f38f91d58",
+    "work_dir": "C:\\Users\\Administrator\\AppData\\Local\\PRISM\\runs\\03ff303a-5829-49c9-890e-326f38f91d58",
+    "elapsed_seconds": 110.687,
+    "limits": {
+      "seconds": 120,
+      "queries": 12,
+      "pool": 200,
+      "documents": 10,
+      "llm_calls": 5,
+      "input_tokens": 120000
+    },
+    "provider": "agy",
+    "model": "gemini-3.8-flash-medium",
+    "manifest_status": "verification_incomplete",
+    "stop_reason": "bounded_expansion_complete",
+    "classification": {
+      "status": "complete",
+      "target_count": 8,
+      "reviewed_count": 8,
+      "unreviewed_count": 12
+    },
+    "warnings": [
+      "kipris: PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+      "web: inference_timeout"
+    ],
+    "seed_queries": [
+      "coupled joint limit skeletal rotation correction",
+      "interdependent range motion kinematic pose constraint"
+    ],
+    "queries": [
+      {
+        "id": "b6312f00849ebee1798a",
+        "source": "epo",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 2.969
+      },
+      {
+        "id": "87fc97e143a51dac5de4",
+        "source": "epo",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 4.016
+      },
+      {
+        "id": "0f3caa3cbaf17547358b",
+        "source": "kipris",
+        "query": "골격 관절 연동 한계 회전 보정",
+        "feature": "domestic",
+        "status": "failed",
+        "lane": "domestic_search",
+        "error": "PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+        "seconds": 0.235
+      },
+      {
+        "id": "e2c0cb4fc6d3d061ec9a",
+        "source": "openalex",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 1849,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 1849,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 3.625
+      },
+      {
+        "id": "9964ca2771cadb504a48",
+        "source": "openalex",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 3789,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 3789,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 6.125
+      },
+      {
+        "id": "cd71c765f75de841634b",
+        "source": "web",
+        "query": "청구항·기존 후보를 참고한 웹 검색",
+        "feature": "context",
+        "status": "failed",
+        "lane": "fast",
+        "search_scope": "web_exploration",
+        "error": "inference_timeout"
+      }
+    ],
+    "route": [
+      {
+        "lane": "relation_seed",
+        "budget_seconds": 64.5,
+        "outcome": "no_candidates",
+        "candidates": 0,
+        "seconds": 4.078
+      },
+      {
+        "lane": "existing_search",
+        "reason": "collect_metadata",
+        "remaining_seconds": 60.1
+      }
+    ],
+    "first_candidate_seconds": 8.516,
+    "http_fetches": 0,
+    "plan_cache_hit": true,
+    "query_cache_hits": 0,
+    "candidate_count": 20,
+    "candidate_sources": {
+      "openalex": 20
+    },
+    "stage_details": [
+      {
+        "phase": "web_seeds",
+        "seconds": 54.40700000000015,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": null,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"skeletal model\" \"joint limit\" \"exceed\" \"correct\" pose parameters"
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"관절\" \"골격 모델\" \"부모 뼈\" \"자식 뼈\" \"한계\" \"자세 결정 방법\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "\"제1 한계\" \"골격 모델\" \"부모 뼈\" OR \"자식 뼈\" \"자세 결정\""
+            },
+            "index": 3
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-8",
+            "input": {
+              "query": "\"자식 뼈\" \"부모 뼈\" \"자세 결정\" \"파라미터\" \"한계\" 특허"
+            },
+            "index": 4
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-10",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"rotation\" \"exceeds\" limit correct pose patent"
+            },
+            "index": 5
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-12",
+            "input": {
+              "query": "\"at least one parameter affects\" \"limit\" \"pose\" \"skeletal\" OR \"joint\""
+            },
+            "index": 6
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-14",
+            "input": {
+              "query": "\"KR1020260113114A\" OR \"10-2026-0113114\" OR \"KR10-2026-0113114\""
+            },
+            "index": 7
+          }
+        ],
+        "output_partial": null,
+        "timed_out": null,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "triage",
+        "seconds": 44.8130000000001,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": [],
+        "tool_events": null,
+        "output_partial": false,
+        "timed_out": false,
+        "outcome": null,
+        "error": null
+      }
+    ],
+    "candidates": [
+      {
+        "id": "e5654b8896eaf04d1037",
+        "document_number": "10.1038/s41592-022-01634-9",
+        "title": "Estimation of skeletal kinematics in freely moving rodents",
+        "url": "https://doi.org/10.1038/s41592-022-01634-9",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": "Z",
+          "status": "classified",
+          "reason": "관절 운동 한계 제약 기반 골격 모델로 자세를 추정(입력→한계 제약 최적화→자세 출력)하는 구조가 유사하나, 상호의존적 제1 한계 판정 및 보정 세부 링크는 누락됨.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fa0921be38204394e42b",
+        "document_number": "10.1145/3072959.3073596",
+        "title": "VNect",
+        "url": "https://doi.org/10.1145/3072959.3073596",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": "Z",
+          "status": "classified",
+          "reason": "기구학적 골격 피팅으로 3D 자세를 추정(관절 위치 입력→골격 피팅 연산→3D 자세 출력)하는 흐름은 유사하나, 파라미터의 제1 한계 판정 및 보정 링크가 초록에 없음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "c21f552bc7337cbc5a08",
+        "document_number": "10.1109/tpami.2011.33",
+        "title": "Model-Based 3D Hand Pose Estimation from Monocular Video",
+        "url": "https://doi.org/10.1109/tpami.2011.33",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "목적함수 최적화 기반 모델 3D 손 자세 추정을 다루나, 관절 회전 파라미터의 제1 한계 판정 및 상호의존 한계 보정 여부를 판단할 세부 정보가 초록에 부족함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "708ab7347ef2e16b3889",
+        "document_number": "10.1088/1741-2560/3/4/010",
+        "title": "Computational model of a primate arm: from hand position to joint angles, joint torques and muscle forces",
+        "url": "https://doi.org/10.1088/1741-2560/3/4/010",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "마커로부터 골격 관절 각도를 산출하는 모델을 다루나, 회전 파라미터의 한계 초과 판정 및 상호의존적 한계 기반 보정 단계의 개시 여부를 확인할 정보가 초록에 부족함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d50f3d0cdcbbacb38954",
+        "document_number": "10.1186/s12983-017-0223-z",
+        "title": "Experimental determination of three-dimensional cervical joint mobility in the avian neck",
+        "url": "https://doi.org/10.1186/s12983-017-0223-z",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "X선 기반 조류 경추 관절 가동 범위의 생물학적 측정 연구로, 골격 모델 파라미터 판정 및 보정을 통한 컴퓨터 자세 결정 방법과 기술적 분야 및 관계가 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "23c930a44d7dbd22c238",
+        "document_number": "10.1145/3603618",
+        "title": "Deep Learning-based Human Pose Estimation: A Survey",
+        "url": "https://doi.org/10.1145/3603618",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "인간 자세 추정 딥러닝 기법에 대한 종합 서베이 문헌으로, 개별 골격 관절 파라미터 한계 판정 및 보정 메커니즘을 확인할 구체적 알고리즘 정보가 초록에 부족함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "1dfbff013e2368be9a56",
+        "document_number": "10.1016/j.cviu.2021.103225",
+        "title": "Deep 3D human pose estimation: A review",
+        "url": "https://doi.org/10.1016/j.cviu.2021.103225",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "3D 인간 자세 추정 딥러닝 연구에 대한 서베이 논문으로, 관절 파라미터 한계 판정 및 보정에 관한 구체적 알고리즘 정보가 초록에 기재되지 않아 판단 근거가 부족함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fd019445762321564caa",
+        "document_number": "10.1109/iccv.2019.00236",
+        "title": "Exploiting Spatial-Temporal Relationships for 3D Pose Estimation via Graph Convolutional Networks",
+        "url": "https://doi.org/10.1109/iccv.2019.00236",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "GCN 기반 공간·시간 관계를 이용한 3D 자세 추정 연구이나, 관절 파라미터의 한계 초과 판정 및 상호의존 한계 보정 구성이 포함되었는지 초록만으로는 정보가 부족함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "8ef002b06a0ce3e1f30f",
+        "document_number": "10.1002/nbm.4266",
+        "title": "Proton magnetic resonance spectroscopy in skeletal muscle: Experts' consensus recommendations",
+        "url": "https://doi.org/10.1002/nbm.4266",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fe643b3a457faf0a8462",
+        "document_number": "10.1155/2008/520417",
+        "title": "Soft Robotics: Biological Inspiration, State of the Art, and Future Research",
+        "url": "https://doi.org/10.1155/2008/520417",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "4cfb7604bcbd1514f5a8",
+        "document_number": "10.1186/s13013-017-0145-8",
+        "title": "2016 SOSORT guidelines: orthopaedic and rehabilitation treatment of idiopathic scoliosis during growth",
+        "url": "https://doi.org/10.1186/s13013-017-0145-8",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "ac8a471cb7c2e65460fb",
+        "document_number": "10.1007/s00586-008-0817-4",
+        "title": "A three-dimensional retrospective analysis of the evolution of spinal instrumentation for the correction of adolescent idiopathic scoliosis",
+        "url": "https://doi.org/10.1007/s00586-008-0817-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "6d633caf59580dc6fb15",
+        "document_number": "10.1109/tnnls.2013.2287890",
+        "title": "Efficient Exploratory Learning of Inverse Kinematics on a Bionic Elephant Trunk",
+        "url": "https://doi.org/10.1109/tnnls.2013.2287890",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "a36a3278bced9062b00c",
+        "document_number": "10.1016/j.jbiomech.2016.12.005",
+        "title": "Kinematic models of the upper limb joints for multibody kinematics optimisation: An overview",
+        "url": "https://doi.org/10.1016/j.jbiomech.2016.12.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d5c88c365b9e210d1054",
+        "document_number": "10.1145/3130800.3130883",
+        "title": "Embodied hands",
+        "url": "https://doi.org/10.1145/3130800.3130883",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "7e75f65cec61f10cbd58",
+        "document_number": "10.1002/nbm.3563",
+        "title": "Skeletal muscle diffusion tensor‐MRI fiber tracking: rationale, data acquisition and analysis methods, applications and future directions",
+        "url": "https://doi.org/10.1002/nbm.3563",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "eb598bc74f09e8482bcc",
+        "document_number": "10.1016/j.artint.2015.03.005",
+        "title": "Geometric backtracking for combined task and motion planning in robotic systems",
+        "url": "https://doi.org/10.1016/j.artint.2015.03.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "b30115813974c5e75ac7",
+        "document_number": "10.1242/jeb.012385",
+        "title": "Neuromechanical response of musculo-skeletal structures in cockroaches during rapid running on rough terrain",
+        "url": "https://doi.org/10.1242/jeb.012385",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "0d4ffa692c7188bb9f5f",
+        "document_number": "10.1109/access.2021.3140175",
+        "title": "A Metaverse: Taxonomy, Components, Applications, and Open Challenges",
+        "url": "https://doi.org/10.1109/access.2021.3140175",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d1de54908d4b56acb303",
+        "document_number": "10.1007/s12532-018-0139-4",
+        "title": "CasADi: a software framework for nonlinear optimization and optimal control",
+        "url": "https://doi.org/10.1007/s12532-018-0139-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      }
+    ],
+    "lead_ranks": {
+      "same_claim_patent": [],
+      "herda_2003": [],
+      "distance_cones_2010": [],
+      "distance_fields_2012": [],
+      "swing_twist_lead": []
+    }
+  },
+  {
+    "depth": "exhaustive",
+    "job_id": "29633f0e-0db7-4c40-ad00-d4c98463a6c5",
+    "work_dir": "C:\\Users\\Administrator\\AppData\\Local\\PRISM\\runs\\29633f0e-0db7-4c40-ad00-d4c98463a6c5",
+    "elapsed_seconds": 279.797,
+    "limits": {
+      "seconds": 300,
+      "queries": 30,
+      "pool": 500,
+      "documents": 20,
+      "llm_calls": 8,
+      "input_tokens": 240000
+    },
+    "provider": "agy",
+    "model": "gemini-3.8-flash-medium",
+    "manifest_status": "verification_incomplete",
+    "stop_reason": "bounded_expansion_complete",
+    "classification": {
+      "status": "complete",
+      "target_count": 8,
+      "reviewed_count": 8,
+      "unreviewed_count": 12
+    },
+    "warnings": [
+      "kipris: PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+      "web: inference_timeout"
+    ],
+    "seed_queries": [
+      "coupled joint limit skeletal rotation correction",
+      "interdependent range motion kinematic pose constraint"
+    ],
+    "queries": [
+      {
+        "id": "b6312f00849ebee1798a",
+        "source": "epo",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.015
+      },
+      {
+        "id": "87fc97e143a51dac5de4",
+        "source": "epo",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.031
+      },
+      {
+        "id": "0f3caa3cbaf17547358b",
+        "source": "kipris",
+        "query": "골격 관절 연동 한계 회전 보정",
+        "feature": "domestic",
+        "status": "failed",
+        "lane": "domestic_search",
+        "error": "PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+        "seconds": 0.156
+      },
+      {
+        "id": "e2c0cb4fc6d3d061ec9a",
+        "source": "openalex",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 1849,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 1849,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.015
+      },
+      {
+        "id": "9964ca2771cadb504a48",
+        "source": "openalex",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 3789,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 3789,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.078
+      },
+      {
+        "id": "cd71c765f75de841634b",
+        "source": "web",
+        "query": "청구항·기존 후보를 참고한 웹 검색",
+        "feature": "context",
+        "status": "failed",
+        "lane": "fast",
+        "search_scope": "web_exploration",
+        "error": "inference_timeout"
+      }
+    ],
+    "route": [
+      {
+        "lane": "relation_seed",
+        "budget_seconds": 245.0,
+        "outcome": "no_candidates",
+        "candidates": 0,
+        "seconds": 0.046
+      },
+      {
+        "lane": "existing_search",
+        "reason": "collect_metadata",
+        "remaining_seconds": 244.7
+      }
+    ],
+    "first_candidate_seconds": 0.297,
+    "http_fetches": 0,
+    "plan_cache_hit": true,
+    "query_cache_hits": 4,
+    "candidate_count": 20,
+    "candidate_sources": {
+      "openalex": 20
+    },
+    "stage_details": [
+      {
+        "phase": "web_seeds",
+        "seconds": 245.09299999999985,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": null,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"부모 뼈\" \"자식 뼈\" \"회전\" \"파라미터\" \"제1 한계\""
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"KR1020260113114A\" OR \"KR20260113114\" OR \"KR-1020260113114\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"姿勢決定\" OR \"姿勢を決定\" OR \"第１の限界\" OR \"第1の限界\""
+            },
+            "index": 3
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-8",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"関節\" \"補正\" \"第1の限界\" OR \"第１の限界\""
+            },
+            "index": 4
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-10",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"補正\" \"限界\" \"姿勢\""
+            },
+            "index": 5
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-12",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"first limit\" OR \"first boundary\" OR \"joint limit\" \"correcting\""
+            },
+            "index": 6
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-14",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"rotation\" \"exceeds\" \"limit\" \"correcting\""
+            },
+            "index": 7
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-16",
+            "input": {
+              "query": "\"joint limits\" \"parent\" \"child\" \"rotation\" \"exceeds\" \"correcting\""
+            },
+            "index": 8
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-18",
+            "input": {
+              "query": "\"골격 모델\" \"부모 뼈\" \"자식 뼈\" \"회전\""
+            },
+            "index": 9
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-20",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"first limit\""
+            },
+            "index": 10
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-22",
+            "input": {
+              "query": "\"10-2020-0113114\" OR \"10-2021-0113114\" OR \"10-2016-0113114\" OR \"10-2019-0113114\" OR \"10-2022-0113114\""
+            },
+            "index": 11
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-24",
+            "input": {
+              "query": "site:patsnap.com \"parent bone\" \"child bone\""
+            },
+            "index": 12
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-26",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"joint\" \"correcting\" \"parameters\""
+            },
+            "index": 13
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-28",
+            "input": {
+              "query": "\"coupled joint limits\" skeleton OR \"skeletal\" OR \"kinematic\" OR \"pose\""
+            },
+            "index": 14
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-30",
+            "input": {
+              "query": "\"Pose-conditioned joint limits\" Black OR Akhter"
+            },
+            "index": 15
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-32",
+            "input": {
+              "query": "\"joint limit\" \"reach cone\" \"skeleton\" OR \"skeletal\""
+            },
+            "index": 16
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-34",
+            "input": {
+              "query": "\"reach cone\" OR \"reach cones\" \"joint limit\" OR \"joint limits\" enforcement OR enforcing OR projection"
+            },
+            "index": 17
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-36",
+            "input": {
+              "query": "Herda Thalmann \"joint limits\" OR \"joint limit\""
+            },
+            "index": 18
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-38",
+            "input": {
+              "query": "\"joint limit\" \"parent bone\" \"child bone\" OR \"skeletal\" \"correcting\" OR \"corrected\""
+            },
+            "index": 19
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-40",
+            "input": {
+              "query": "\"skeletal model\" \"parent bone\" \"child bone\" \"joint\" \"limit\""
+            },
+            "index": 20
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-42",
+            "input": {
+              "query": "site:patents.google.com \"joint limit\" \"bone\" \"child\" \"rotation\" \"correcting\""
+            },
+            "index": 21
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-44",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"joint limit\""
+            },
+            "index": 22
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-46",
+            "input": {
+              "query": "\"swing-twist\" \"joint limit\" OR \"joint limits\" \"parent\" \"child\""
+            },
+            "index": 23
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-48",
+            "input": {
+              "query": "Baerlocher Boulic \"joint limits\" OR \"joint limit\""
+            },
+            "index": 24
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-50",
+            "input": {
+              "query": "\"Parametrization and Range of Motion of the Ball-and-Socket Joint\" Baerlocher Boulic"
+            },
+            "index": 25
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-52",
+            "input": {
+              "query": "Grassia \"spherical ellipse\" OR \"joint limit\" OR \"joint limits\""
+            },
+            "index": 26
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-54",
+            "input": {
+              "query": "\"joint limit\" \"parent bone\" \"child bone\" \"rotation\""
+            },
+            "index": 27
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-56",
+            "input": {
+              "query": "\"exceeds\" \"first limit\" \"child bone\""
+            },
+            "index": 28
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-58",
+            "input": {
+              "query": "site:patsnap.com \"first limit\" \"exceeds\" \"bone\""
+            },
+            "index": 29
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-60",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"第1の限界\" OR \"第１の限界\""
+            },
+            "index": 30
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-62",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"関節\" \"姿勢\""
+            },
+            "index": 31
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-64",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"関節\" \"姿勢\" \"パラメータ\""
+            },
+            "index": 32
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-66",
+            "input": {
+              "query": "\"CGモデルの動きを実機ロボットに反映\" OR \"両者の骨格構造や関節のパラメータ差を補正\""
+            },
+            "index": 33
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-68",
+            "input": {
+              "query": "\"제1 한계\" \"골격\" \"파라미터\" OR \"관절\""
+            },
+            "index": 34
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-70",
+            "input": {
+              "query": "\"관절\" \"골격 모델\" \"부모\" \"자식\" \"회전\" \"한계\" \"보정\""
+            },
+            "index": 35
+          }
+        ],
+        "output_partial": null,
+        "timed_out": null,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "triage",
+        "seconds": 33.78200000000015,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": [],
+        "tool_events": null,
+        "output_partial": false,
+        "timed_out": false,
+        "outcome": null,
+        "error": null
+      }
+    ],
+    "candidates": [
+      {
+        "id": "e5654b8896eaf04d1037",
+        "document_number": "10.1038/s41592-022-01634-9",
+        "title": "Estimation of skeletal kinematics in freely moving rodents",
+        "url": "https://doi.org/10.1038/s41592-022-01634-9",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": "Z",
+          "status": "classified",
+          "reason": "골격 모델 입력→관절 한계 제약 적용→자세 추정의 구조는 대응하나, 특정 파라미터가 타 파라미터 한계에 영향을 주는 판정·보정 처리의 연결 고리가 결여됨.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fa0921be38204394e42b",
+        "document_number": "10.1145/3072959.3073596",
+        "title": "VNect",
+        "url": "https://doi.org/10.1145/3072959.3073596",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "키네마틱 골격 피팅을 통한 실시간 3D 자세 결정을 다루나, 관절 한계 판정 및 복수 파라미터 보정 처리와 관련된 구체적 동작이 초록에 나타나지 않음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "708ab7347ef2e16b3889",
+        "document_number": "10.1088/1741-2560/3/4/010",
+        "title": "Computational model of a primate arm: from hand position to joint angles, joint torques and muscle forces",
+        "url": "https://doi.org/10.1088/1741-2560/3/4/010",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "마커 기반 관절 각도 계산 골격 모델을 다루나, 파라미터 한계 판정 및 상호의존적 한계 보정에 관한 구체적 기재가 초록에 없어 관련성 판단 정보가 부족함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d50f3d0cdcbbacb38954",
+        "document_number": "10.1186/s12983-017-0223-z",
+        "title": "Experimental determination of three-dimensional cervical joint mobility in the avian neck",
+        "url": "https://doi.org/10.1186/s12983-017-0223-z",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "조류 경추의 3차원 관절 가동 범위를 X선으로 측정·분석하는 생체역학 실험 연구로, 골격 자세 결정 알고리즘과 기술적 과제 및 처리 관계가 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "23c930a44d7dbd22c238",
+        "document_number": "10.1145/3603618",
+        "title": "Deep Learning-based Human Pose Estimation: A Survey",
+        "url": "https://doi.org/10.1145/3603618",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "딥러닝 기반 자세 추정 기법, 데이터셋, 평가 지표를 정리한 서베이 논문으로 관절 파라미터 한계 판정 및 보정에 기반한 자세 결정 관계와 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "1dfbff013e2368be9a56",
+        "document_number": "10.1016/j.cviu.2021.103225",
+        "title": "Deep 3D human pose estimation: A review",
+        "url": "https://doi.org/10.1016/j.cviu.2021.103225",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "딥러닝 기반 3D 인체 자세 추정 분야의 일반적 동향을 개괄하는 문헌 조사 서베이로, 파라미터 한계 판정 및 연계 보정 알고리즘과 기술적 관계가 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fd019445762321564caa",
+        "document_number": "10.1109/iccv.2019.00236",
+        "title": "Exploiting Spatial-Temporal Relationships for 3D Pose Estimation via Graph Convolutional Networks",
+        "url": "https://doi.org/10.1109/iccv.2019.00236",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "2D 관절 검출열로부터 시공간 GCN을 이용해 3D 자세를 회귀하는 딥러닝 신경망 기술로, 관절 회전 파라미터의 한계 판정 및 보정 처리 관계와 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "c21f552bc7337cbc5a08",
+        "document_number": "10.1109/tpami.2011.33",
+        "title": "Model-Based 3D Hand Pose Estimation from Monocular Video",
+        "url": "https://doi.org/10.1109/tpami.2011.33",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "모델 기반 3D 손 자세 최적화 추정을 다루나, 회전 파라미터의 한계 초과 판정 및 다른 파라미터와 연계된 한계 보정 동작에 대한 구체적 기재가 없음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "8ef002b06a0ce3e1f30f",
+        "document_number": "10.1002/nbm.4266",
+        "title": "Proton magnetic resonance spectroscopy in skeletal muscle: Experts' consensus recommendations",
+        "url": "https://doi.org/10.1002/nbm.4266",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fe643b3a457faf0a8462",
+        "document_number": "10.1155/2008/520417",
+        "title": "Soft Robotics: Biological Inspiration, State of the Art, and Future Research",
+        "url": "https://doi.org/10.1155/2008/520417",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "4cfb7604bcbd1514f5a8",
+        "document_number": "10.1186/s13013-017-0145-8",
+        "title": "2016 SOSORT guidelines: orthopaedic and rehabilitation treatment of idiopathic scoliosis during growth",
+        "url": "https://doi.org/10.1186/s13013-017-0145-8",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "ac8a471cb7c2e65460fb",
+        "document_number": "10.1007/s00586-008-0817-4",
+        "title": "A three-dimensional retrospective analysis of the evolution of spinal instrumentation for the correction of adolescent idiopathic scoliosis",
+        "url": "https://doi.org/10.1007/s00586-008-0817-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "6d633caf59580dc6fb15",
+        "document_number": "10.1109/tnnls.2013.2287890",
+        "title": "Efficient Exploratory Learning of Inverse Kinematics on a Bionic Elephant Trunk",
+        "url": "https://doi.org/10.1109/tnnls.2013.2287890",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "a36a3278bced9062b00c",
+        "document_number": "10.1016/j.jbiomech.2016.12.005",
+        "title": "Kinematic models of the upper limb joints for multibody kinematics optimisation: An overview",
+        "url": "https://doi.org/10.1016/j.jbiomech.2016.12.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d5c88c365b9e210d1054",
+        "document_number": "10.1145/3130800.3130883",
+        "title": "Embodied hands",
+        "url": "https://doi.org/10.1145/3130800.3130883",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "7e75f65cec61f10cbd58",
+        "document_number": "10.1002/nbm.3563",
+        "title": "Skeletal muscle diffusion tensor‐MRI fiber tracking: rationale, data acquisition and analysis methods, applications and future directions",
+        "url": "https://doi.org/10.1002/nbm.3563",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "eb598bc74f09e8482bcc",
+        "document_number": "10.1016/j.artint.2015.03.005",
+        "title": "Geometric backtracking for combined task and motion planning in robotic systems",
+        "url": "https://doi.org/10.1016/j.artint.2015.03.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "b30115813974c5e75ac7",
+        "document_number": "10.1242/jeb.012385",
+        "title": "Neuromechanical response of musculo-skeletal structures in cockroaches during rapid running on rough terrain",
+        "url": "https://doi.org/10.1242/jeb.012385",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "0d4ffa692c7188bb9f5f",
+        "document_number": "10.1109/access.2021.3140175",
+        "title": "A Metaverse: Taxonomy, Components, Applications, and Open Challenges",
+        "url": "https://doi.org/10.1109/access.2021.3140175",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d1de54908d4b56acb303",
+        "document_number": "10.1007/s12532-018-0139-4",
+        "title": "CasADi: a software framework for nonlinear optimization and optimal control",
+        "url": "https://doi.org/10.1007/s12532-018-0139-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      }
+    ],
+    "lead_ranks": {
+      "same_claim_patent": [],
+      "herda_2003": [],
+      "distance_cones_2010": [],
+      "distance_fields_2012": [],
+      "swing_twist_lead": []
+    }
+  },
+  {
+    "depth": "improved_exhaustive_v1",
+    "job_id": "b5d17bf4-074b-44b7-8d57-e2063fd0d784",
+    "work_dir": "C:\\Users\\Administrator\\AppData\\Local\\PRISM\\runs\\b5d17bf4-074b-44b7-8d57-e2063fd0d784",
+    "elapsed_seconds": 256.047,
+    "limits": {
+      "seconds": 300,
+      "queries": 30,
+      "pool": 500,
+      "documents": 20,
+      "llm_calls": 8,
+      "input_tokens": 240000
+    },
+    "provider": "agy",
+    "model": "gemini-3.8-flash-medium",
+    "manifest_status": "verification_incomplete",
+    "stop_reason": "bounded_expansion_complete",
+    "classification": {
+      "status": "complete",
+      "target_count": 8,
+      "reviewed_count": 8,
+      "unreviewed_count": 21
+    },
+    "warnings": [
+      "kipris: PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+      "web: inference_timeout",
+      "verification: inference_timeout"
+    ],
+    "seed_queries": [
+      "coupled joint limit skeletal rotation correction",
+      "interdependent range motion kinematic pose constraint"
+    ],
+    "queries": [
+      {
+        "id": "b6312f00849ebee1798a",
+        "source": "epo",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 2.188
+      },
+      {
+        "id": "87fc97e143a51dac5de4",
+        "source": "epo",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 4.187
+      },
+      {
+        "id": "0f3caa3cbaf17547358b",
+        "source": "kipris",
+        "query": "골격 관절 연동 한계 회전 보정",
+        "feature": "domestic",
+        "status": "failed",
+        "lane": "domestic_search",
+        "error": "PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+        "seconds": 0.219
+      },
+      {
+        "id": "e2c0cb4fc6d3d061ec9a",
+        "source": "openalex",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 1849,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 1849,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 2.375
+      },
+      {
+        "id": "9964ca2771cadb504a48",
+        "source": "openalex",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 3789,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 3789,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 4.735
+      },
+      {
+        "id": "bff5b1593022f32b1217",
+        "source": "epo",
+        "query": "joint limits skeletal pose",
+        "feature": "revision",
+        "status": "completed",
+        "lane": "fast",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 1.219
+      },
+      {
+        "id": "6a433a091148a96c45ce",
+        "source": "openalex",
+        "query": "\"joint limits\" \"kinematic skeleton\"",
+        "feature": "revision",
+        "status": "completed",
+        "lane": "fast",
+        "openalex_mode": "title_and_abstract",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 9,
+          "unique_documents": 9,
+          "duplicate_records": 0,
+          "result_range": "1-9",
+          "total_results": 51,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 51,
+              "returned_records": 9,
+              "result_range": "1-9"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 7,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 2.406
+      },
+      {
+        "id": "cd71c765f75de841634b",
+        "source": "web",
+        "query": "청구항·기존 후보를 참고한 웹 검색",
+        "feature": "context",
+        "status": "failed",
+        "lane": "fast",
+        "search_scope": "web_exploration",
+        "hits": 0,
+        "error": "inference_timeout"
+      }
+    ],
+    "route": [
+      {
+        "lane": "relation_seed",
+        "budget_seconds": 170.0,
+        "outcome": "no_candidates",
+        "candidates": 0,
+        "seconds": 4.235
+      },
+      {
+        "lane": "existing_search",
+        "reason": "collect_metadata",
+        "remaining_seconds": 165.4
+      }
+    ],
+    "first_candidate_seconds": 7.0,
+    "http_fetches": 4,
+    "plan_cache_hit": true,
+    "query_cache_hits": 0,
+    "candidate_count": 29,
+    "candidate_sources": {
+      "openalex": 29
+    },
+    "stage_details": [
+      {
+        "phase": "revise_queries",
+        "seconds": 16.171000000000276,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": [],
+        "tool_events": null,
+        "output_partial": false,
+        "timed_out": false,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "web_seeds",
+        "seconds": 140.84400000000005,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": null,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"골격 모델\" \"부모 뼈\" \"자식 뼈\" \"파라미터\" \"한계\""
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"제1 한계\" \"골격 모델\" \"부모\" \"자식\" \"회전\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "site:patents.google.com \"골격 모델\" \"자식 뼈\" \"제1 한계\""
+            },
+            "index": 3
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-8",
+            "input": {
+              "query": "\"KR1020260113114A\" OR \"1020260113114\" OR \"KR10-2026-0113114\" OR \"20260113114\""
+            },
+            "index": 4
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-10",
+            "input": {
+              "query": "\"부모 뼈와 자식 뼈가 연결된 골격 모델\" OR \"부모 뼈에 대한 자식 뼈의 회전을 정의하는\""
+            },
+            "index": 5
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-12",
+            "input": {
+              "query": "site:patents.google.com \"parent bone\" \"child bone\" \"rotation\" \"pose\" limit"
+            },
+            "index": 6
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-14",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"first limit\""
+            },
+            "index": 7
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-16",
+            "input": {
+              "query": "site:patsnap.com \"parent bone\" \"child bone\" \"first limit\""
+            },
+            "index": 8
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-18",
+            "input": {
+              "query": "\"骨格モデル\" \"親ボーン\" \"子ボーン\" \"限界\""
+            },
+            "index": 9
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-20",
+            "input": {
+              "query": "\"親ボーン\" \"子ボーン\" \"第1の限界\" OR \"第１の限界\""
+            },
+            "index": 10
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-22",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"姿勢\" \"パラメータ\" \"限界\""
+            },
+            "index": 11
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-24",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"相対角度\" \"可動限界\" site:patents.google.com"
+            },
+            "index": 12
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-26",
+            "input": {
+              "query": "\"角度範囲境界円\" OR \"親骨に対する子骨の関節における角度範囲を制限\""
+            },
+            "index": 13
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-28",
+            "input": {
+              "query": "\"JP2012-168765\" OR \"JP2012168765\" OR \"2012-168765\""
+            },
+            "index": 14
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-30",
+            "input": {
+              "query": "site:patents.google.com \"角度範囲境界円\""
+            },
+            "index": 15
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-32",
+            "input": {
+              "query": "\"角度範囲境界\" \"親骨\" \"子骨\""
+            },
+            "index": 16
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-34",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"rotation\" \"first limit\" site:patents.google.com"
+            },
+            "index": 17
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-36",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"first limit\""
+            },
+            "index": 18
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-38",
+            "input": {
+              "query": "\"다른 두 개 이상의 파라미터\" OR \"두 개 이상의 파라미터와 관련된 한계\""
+            },
+            "index": 19
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-40",
+            "input": {
+              "query": "\"coupled joint limits\" OR \"interdependent joint limits\" \"skeleton\" OR \"kinematic\""
+            },
+            "index": 20
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-42",
+            "input": {
+              "query": "site:ucl.ac.uk \"joint limits\" \"skeleton\" OR \"posture\" OR \"pose\""
+            },
+            "index": 21
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-44",
+            "input": {
+              "query": "\"Inverse Kinematics Techniques for the Interactive Posture Control of Articulated Figures\""
+            },
+            "index": 22
+          }
+        ],
+        "output_partial": null,
+        "timed_out": true,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "triage",
+        "seconds": 30.32799999999952,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": [],
+        "tool_events": null,
+        "output_partial": false,
+        "timed_out": false,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "verify",
+        "seconds": 45.48499999999967,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": null,
+        "tool_events": null,
+        "output_partial": null,
+        "timed_out": true,
+        "outcome": null,
+        "error": null
+      }
+    ],
+    "candidates": [
+      {
+        "id": "145db24dcd7bb400dac7",
+        "document_number": "10.1111/cgf.13089",
+        "title": "Multi‐Variate Gaussian‐Based Inverse Kinematics",
+        "url": "https://doi.org/10.1111/cgf.13089",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": "Y",
+          "status": "classified",
+          "reason": "다변량 가우시안 공분산으로 복수 파라미터 연계 한계를 규정하고 IK로 자세를 결정하는 핵심 관계가 유사하나, 판정·보정 구조는 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": [
+          {
+            "url": "https://doi.org/10.1111/cgf.13089",
+            "status": "failed",
+            "error": "http_403"
+          },
+          {
+            "artifact_id": "e718b5866c58fae0ff850038b33b6eb06859cdbd4f84e8561e2ae07b6299bc7a",
+            "url": "https://doi.org/10.1111/cgf.13089",
+            "scope": "abstract",
+            "section": "abstract",
+            "content_type": "text/plain",
+            "truncated": true,
+            "status": "acquired",
+            "characters": 1200
+          }
+        ]
+      },
+      {
+        "id": "e5654b8896eaf04d1037",
+        "document_number": "10.1038/s41592-022-01634-9",
+        "title": "Estimation of skeletal kinematics in freely moving rodents",
+        "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=3539a154-e513-422e-b457-1c9f564d764e",
+        "source": "openalex",
+        "data_status": "FULL_TEXT",
+        "document_classification": {
+          "group": "Z",
+          "status": "classified",
+          "reason": "관절 가동 한계를 적용한 골격 모델로 자세를 추정하나, 다중 파라미터 상호 연계 한계 판정 및 초과 시 보정 구성은 초록에서 확인되지 않음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": [
+          {
+            "artifact_id": "9e9ccf6fdeb60c32b142bebd33974a6b2d62f4019bdad15f18b130d3e195d0d1",
+            "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=3539a154-e513-422e-b457-1c9f564d764e",
+            "scope": "full_text",
+            "content_type": "application/pdf",
+            "truncated": false,
+            "title": "Estimation of skeletal kinematics in freely moving rodents",
+            "status": "acquired",
+            "characters": 88217
+          }
+        ]
+      },
+      {
+        "id": "1cfd92b30994d28ff9db",
+        "document_number": "10.1145/3414685.3417877",
+        "title": "PhysCap",
+        "url": "https://doi.org/10.1145/3414685.3417877",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "역운동학으로 관절 각도를 추정하여 3D 자세를 도출하나, 다중 파라미터 한계 판정 및 보정 관계에 대한 구체적 정보가 초록에 부족함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": [
+          {
+            "url": "https://dl.acm.org/doi/pdf/10.1145/3414685.3417877",
+            "status": "failed",
+            "error": "http_403"
+          },
+          {
+            "url": "https://doi.org/10.1145/3414685.3417877",
+            "status": "failed",
+            "error": "http_403"
+          },
+          {
+            "artifact_id": "e718b5866c58fae0ff850038b33b6eb06859cdbd4f84e8561e2ae07b6299bc7a",
+            "url": "https://doi.org/10.1145/3414685.3417877",
+            "scope": "abstract",
+            "section": "abstract",
+            "content_type": "text/plain",
+            "truncated": true,
+            "status": "acquired",
+            "characters": 1200
+          }
+        ]
+      },
+      {
+        "id": "708ab7347ef2e16b3889",
+        "document_number": "10.1088/1741-2560/3/4/010",
+        "title": "Computational model of a primate arm: from hand position to joint angles, joint torques and muscle forces",
+        "url": "https://doi.org/10.1088/1741-2560/3/4/010",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "팔 마커 좌표로부터 관절 각도와 근력을 도출하는 생체역학 분석 모델로, 연계 한계 초과 판정 및 파라미터 보정 처리 관계가 없어 무관함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d50f3d0cdcbbacb38954",
+        "document_number": "10.1186/s12983-017-0223-z",
+        "title": "Experimental determination of three-dimensional cervical joint mobility in the avian neck",
+        "url": "https://doi.org/10.1186/s12983-017-0223-z",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "조류 경추의 관절 가동범위를 X선으로 실측 분석한 생체 연구로, 골격 모델 알고리즘 기반 자세 판정 및 보정과 기술 분야 및 관계가 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "42c555e253bf36631546",
+        "document_number": "10.3928/0147-7447-19870301-11",
+        "title": "A Technique for Studying the Kinematics of Human Joints: Part II: The Humeroscapular Joint",
+        "url": "https://doi.org/10.3928/0147-7447-19870301-11",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "사체 계측을 통해 상완견갑관절 가동범위와 인대 역할을 분석한 의학/생체 연구로, 파라미터 보정 기반 컴퓨터 자세 결정 기술과 무관함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "2fb278824d67091b14ce",
+        "document_number": "10.1007/s00371-016-1297-x",
+        "title": "Inverse kinematics using dynamic joint parameters: inverse kinematics animation synthesis learnt from sub-divided motion micro-segments",
+        "url": "https://doi.org/10.1007/s00371-016-1297-x",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "23c930a44d7dbd22c238",
+        "document_number": "10.1145/3603618",
+        "title": "Deep Learning-based Human Pose Estimation: A Survey",
+        "url": "https://doi.org/10.1145/3603618",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fa0921be38204394e42b",
+        "document_number": "10.1145/3072959.3073596",
+        "title": "VNect",
+        "url": "https://doi.org/10.1145/3072959.3073596",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "단일 RGB 영상에서 기구학적 골격 피팅으로 자세를 복원하나, 관절 파라미터의 연계 한계 판정 및 보정 단계에 관한 정보가 초록에 없음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "6b987d0001f9acaa4279",
+        "document_number": "openalex:W3176919274",
+        "title": "Estimation of Joint Types and Joint Limits from Motion Capture Data",
+        "url": "http://hdl.handle.net/11025/10882",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "모션 캡처 데이터에서 관절 한계를 자동 추정하는 모델링 기술로, 한계 판정 및 보정을 통해 자세를 결정하는 청구항과 기술적 관계가 다름.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "1dfbff013e2368be9a56",
+        "document_number": "10.1016/j.cviu.2021.103225",
+        "title": "Deep 3D human pose estimation: A review",
+        "url": "https://doi.org/10.1016/j.cviu.2021.103225",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fd019445762321564caa",
+        "document_number": "10.1109/iccv.2019.00236",
+        "title": "Exploiting Spatial-Temporal Relationships for 3D Pose Estimation via Graph Convolutional Networks",
+        "url": "https://doi.org/10.1109/iccv.2019.00236",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "c21f552bc7337cbc5a08",
+        "document_number": "10.1109/tpami.2011.33",
+        "title": "Model-Based 3D Hand Pose Estimation from Monocular Video",
+        "url": "https://doi.org/10.1109/tpami.2011.33",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "8ef002b06a0ce3e1f30f",
+        "document_number": "10.1002/nbm.4266",
+        "title": "Proton magnetic resonance spectroscopy in skeletal muscle: Experts' consensus recommendations",
+        "url": "https://doi.org/10.1002/nbm.4266",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "9039fca138457be37e6e",
+        "document_number": "10.31675/1607-1859-2022-24-3-180-190",
+        "title": "Progressive collapse analysis of experimental building skeleton based on stress-strain state of columns and joints",
+        "url": "https://doi.org/10.31675/1607-1859-2022-24-3-180-190",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "4cfb7604bcbd1514f5a8",
+        "document_number": "10.1186/s13013-017-0145-8",
+        "title": "2016 SOSORT guidelines: orthopaedic and rehabilitation treatment of idiopathic scoliosis during growth",
+        "url": "https://doi.org/10.1186/s13013-017-0145-8",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "ac8a471cb7c2e65460fb",
+        "document_number": "10.1007/s00586-008-0817-4",
+        "title": "A three-dimensional retrospective analysis of the evolution of spinal instrumentation for the correction of adolescent idiopathic scoliosis",
+        "url": "https://doi.org/10.1007/s00586-008-0817-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "7e75f65cec61f10cbd58",
+        "document_number": "10.1002/nbm.3563",
+        "title": "Skeletal muscle diffusion tensor‐MRI fiber tracking: rationale, data acquisition and analysis methods, applications and future directions",
+        "url": "https://doi.org/10.1002/nbm.3563",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fe643b3a457faf0a8462",
+        "document_number": "10.1155/2008/520417",
+        "title": "Soft Robotics: Biological Inspiration, State of the Art, and Future Research",
+        "url": "https://doi.org/10.1155/2008/520417",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d5c88c365b9e210d1054",
+        "document_number": "10.1145/3130800.3130883",
+        "title": "Embodied hands",
+        "url": "https://doi.org/10.1145/3130800.3130883",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "a36a3278bced9062b00c",
+        "document_number": "10.1016/j.jbiomech.2016.12.005",
+        "title": "Kinematic models of the upper limb joints for multibody kinematics optimisation: An overview",
+        "url": "https://doi.org/10.1016/j.jbiomech.2016.12.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "84f7e2fe3683cd4402c4",
+        "document_number": "10.1371/journal.pone.0295152",
+        "title": "AddBiomechanics: Automating model scaling, inverse kinematics, and inverse dynamics from human motion data through sequential optimization",
+        "url": "https://doi.org/10.1371/journal.pone.0295152",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "6d633caf59580dc6fb15",
+        "document_number": "10.1109/tnnls.2013.2287890",
+        "title": "Efficient Exploratory Learning of Inverse Kinematics on a Bionic Elephant Trunk",
+        "url": "https://doi.org/10.1109/tnnls.2013.2287890",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "6a109ce27457e738d134",
+        "document_number": "10.1101/2023.06.15.545116",
+        "title": "AddBiomechanics: Automating model scaling, inverse kinematics, and inverse dynamics from human motion data through sequential optimization",
+        "url": "https://doi.org/10.1101/2023.06.15.545116",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "cae7220e3760cc2fb732",
+        "document_number": "10.1016/j.artmed.2018.12.007",
+        "title": "Normal and pathological gait classification LSTM model",
+        "url": "https://doi.org/10.1016/j.artmed.2018.12.007",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "eb598bc74f09e8482bcc",
+        "document_number": "10.1016/j.artint.2015.03.005",
+        "title": "Geometric backtracking for combined task and motion planning in robotic systems",
+        "url": "https://doi.org/10.1016/j.artint.2015.03.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "b30115813974c5e75ac7",
+        "document_number": "10.1242/jeb.012385",
+        "title": "Neuromechanical response of musculo-skeletal structures in cockroaches during rapid running on rough terrain",
+        "url": "https://doi.org/10.1242/jeb.012385",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "0d4ffa692c7188bb9f5f",
+        "document_number": "10.1109/access.2021.3140175",
+        "title": "A Metaverse: Taxonomy, Components, Applications, and Open Challenges",
+        "url": "https://doi.org/10.1109/access.2021.3140175",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d1de54908d4b56acb303",
+        "document_number": "10.1007/s12532-018-0139-4",
+        "title": "CasADi: a software framework for nonlinear optimization and optimal control",
+        "url": "https://doi.org/10.1007/s12532-018-0139-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      }
+    ],
+    "lead_ranks": {
+      "same_claim_patent": [],
+      "herda_2003": [],
+      "distance_cones_2010": [],
+      "distance_fields_2012": [],
+      "swing_twist_lead": []
+    }
+  },
+  {
+    "depth": "improved_exhaustive_v2",
+    "job_id": "2c29f9f3-bb8e-4f79-a57d-46a42f9cb6f9",
+    "work_dir": "C:\\Users\\Administrator\\AppData\\Local\\PRISM\\runs\\2c29f9f3-bb8e-4f79-a57d-46a42f9cb6f9",
+    "elapsed_seconds": 247.297,
+    "limits": {
+      "seconds": 300,
+      "queries": 30,
+      "pool": 500,
+      "documents": 20,
+      "llm_calls": 8,
+      "input_tokens": 240000
+    },
+    "provider": "agy",
+    "model": "gemini-3.8-flash-medium",
+    "manifest_status": "verification_incomplete",
+    "stop_reason": "bounded_expansion_complete",
+    "classification": {
+      "status": "complete",
+      "target_count": 8,
+      "reviewed_count": 8,
+      "unreviewed_count": 12
+    },
+    "warnings": [
+      "kipris: PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+      "web: inference_timeout"
+    ],
+    "seed_queries": [
+      "coupled joint limit skeletal rotation correction",
+      "interdependent range motion kinematic pose constraint"
+    ],
+    "queries": [
+      {
+        "id": "b6312f00849ebee1798a",
+        "source": "epo",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.016
+      },
+      {
+        "id": "87fc97e143a51dac5de4",
+        "source": "epo",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.032
+      },
+      {
+        "id": "0f3caa3cbaf17547358b",
+        "source": "kipris",
+        "query": "골격 관절 연동 한계 회전 보정",
+        "feature": "domestic",
+        "status": "failed",
+        "lane": "domestic_search",
+        "error": "PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+        "seconds": 0.141
+      },
+      {
+        "id": "e2c0cb4fc6d3d061ec9a",
+        "source": "openalex",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 1849,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 1849,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 1.875
+      },
+      {
+        "id": "9964ca2771cadb504a48",
+        "source": "openalex",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 3789,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 3789,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 5.61
+      },
+      {
+        "id": "bff5b1593022f32b1217",
+        "source": "epo",
+        "query": "joint limits skeletal pose",
+        "feature": "revision",
+        "status": "completed",
+        "lane": "fast",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.0
+      },
+      {
+        "id": "8387f9ccf5452ba77b8e",
+        "source": "openalex",
+        "query": "\"coupled joint limits\" pose",
+        "feature": "revision",
+        "status": "completed",
+        "lane": "fast",
+        "openalex_mode": "title_and_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "zero_results",
+              "total_results": 0,
+              "returned_records": 0,
+              "result_range": null
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": false,
+        "failed_sources": [],
+        "seconds": 0.906
+      },
+      {
+        "id": "cd71c765f75de841634b",
+        "source": "web",
+        "query": "청구항·기존 후보를 참고한 웹 검색",
+        "feature": "context",
+        "status": "failed",
+        "lane": "fast",
+        "search_scope": "web_exploration",
+        "hits": 0,
+        "error": "inference_timeout"
+      }
+    ],
+    "route": [
+      {
+        "lane": "relation_seed",
+        "budget_seconds": 170.0,
+        "outcome": "no_candidates",
+        "candidates": 0,
+        "seconds": 0.062
+      },
+      {
+        "lane": "existing_search",
+        "reason": "collect_metadata",
+        "remaining_seconds": 169.7
+      }
+    ],
+    "first_candidate_seconds": 2.157,
+    "http_fetches": 4,
+    "plan_cache_hit": true,
+    "query_cache_hits": 3,
+    "candidate_count": 20,
+    "candidate_sources": {
+      "openalex": 20
+    },
+    "stage_details": [
+      {
+        "phase": "revise_queries",
+        "seconds": 16.21900000000005,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": [],
+        "tool_events": null,
+        "output_partial": false,
+        "timed_out": false,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "web_seeds",
+        "seconds": 147.1880000000001,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": null,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"부모 뼈\" \"자식 뼈\" \"제1 한계\" \"보정\""
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"parent bone\" \"child bone\" \"first limit\" \"correcting\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "site:patents.google.com \"parent bone\" \"child bone\" \"first limit\""
+            },
+            "index": 3
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-8",
+            "input": {
+              "query": "\"KR1020260113114\" OR \"1020260113114\" OR \"KR10-2026-0113114\""
+            },
+            "index": 4
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-10",
+            "input": {
+              "query": "\"The first limit may be a limit including a limit\" OR \"parent bone and a child bone connected by a joint\""
+            },
+            "index": 5
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-12",
+            "input": {
+              "query": "\"Method and program for determining\" \"parent bone\" \"child bone\""
+            },
+            "index": 6
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-14",
+            "input": {
+              "query": "\"자세 결정 방법\" \"제1 한계\" OR \"자세 결정 장치\""
+            },
+            "index": 7
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-16",
+            "input": {
+              "query": "\"親ボーン\" \"子ボーン\" \"第1の限界\" OR \"限界\" \"姿勢\""
+            },
+            "index": 8
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-18",
+            "input": {
+              "query": "site:patents.google.com \"parent bone\" \"child bone\" \"plurality of parameters\""
+            },
+            "index": 9
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-20",
+            "input": {
+              "query": "site:patsnap.com \"KR1020260113114\" OR \"KR1020260113114A\""
+            },
+            "index": 10
+          },
+          {
+            "name": "read_url_content",
+            "id": "agy-step-22",
+            "input": {
+              "url": "https://analytics.patsnap.com/patent/KR1020260113114A"
+            },
+            "index": 11
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-24",
+            "input": {
+              "query": "\"KR1020260113114A\" OR \"KR 10-2026-0113114\""
+            },
+            "index": 12
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-26",
+            "input": {
+              "query": "\"Method and program for determining the\" \"bone postures\" OR \"complex bone postures\""
+            },
+            "index": 13
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-28",
+            "input": {
+              "query": "\"Method and program for determining the complex bone postures\""
+            },
+            "index": 14
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-30",
+            "input": {
+              "query": "\"unipolar spherical\" \"bone\" OR \"joint\" OR \"posture\" OR \"pose\""
+            },
+            "index": 15
+          }
+        ],
+        "output_partial": null,
+        "timed_out": true,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "triage",
+        "seconds": 37.5630000000001,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": [],
+        "tool_events": null,
+        "output_partial": false,
+        "timed_out": false,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "verify",
+        "seconds": 29.342999999999847,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": [],
+        "tool_events": null,
+        "output_partial": false,
+        "timed_out": false,
+        "outcome": null,
+        "error": null
+      }
+    ],
+    "candidates": [
+      {
+        "id": "e5654b8896eaf04d1037",
+        "document_number": "10.1038/s41592-022-01634-9",
+        "title": "Estimation of skeletal kinematics in freely moving rodents",
+        "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=e076fce9-c25d-48f6-b669-56906338703c",
+        "source": "openalex",
+        "data_status": "FULL_TEXT",
+        "document_classification": {
+          "group": "Z",
+          "status": "classified",
+          "reason": "골격 모델과 각도 제한을 이용한 자세 추정의 전반적 틀은 유사하나, 다중 파라미터 연동 한계 판정 및 보정의 핵심 관계가 결여됨",
+          "basis": "retrieved_passages",
+          "provisional": false,
+          "evidence_status": "quotes_available"
+        },
+        "evidence": [
+          {
+            "candidate_id": "e5654b8896eaf04d1037",
+            "feature": "A",
+            "match": "partial",
+            "quote": "knowledge of the \nskeletal anatomy and biomechanics as well as motion restrictions of \njoints9, because animal poses are limited by both bone lengths and \njoint angle limits.",
+            "quote_verified": true,
+            "quote_match_method": "exact",
+            "relation": "골격 해부학, 관절의 동작 제한 및 뼈 길이를 바탕으로 골격 운동학을 추정함",
+            "difference": "부모 뼈와 자식 뼈의 명시적인 계층적 관절 연결 관계 한정은 구체적으로 서술되지 않음",
+            "locator": {
+              "artifact_id": "9e9ccf6fdeb60c32b142bebd33974a6b2d62f4019bdad15f18b130d3e195d0d1",
+              "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=e076fce9-c25d-48f6-b669-56906338703c",
+              "scope": "full_text",
+              "section": "full_text",
+              "page": 2,
+              "chunk_id": "P0002-002",
+              "offset": 1226
+            },
+            "scope_limit": "retrieved_passages_only"
+          },
+          {
+            "candidate_id": "e5654b8896eaf04d1037",
+            "feature": "B",
+            "match": "partial",
+            "quote": "3 variables for 3D location of the skeleton plus 47 variables \nfor bone rotations",
+            "quote_verified": true,
+            "quote_match_method": "exact",
+            "relation": "골격 자세를 표현하기 위해 47개의 뼈 회전 변수를 상태 변수로 사용함을 개시함",
+            "difference": "부모 뼈에 대한 상대적인 자식 뼈의 회전을 정의하는 파라미터 형태인지는 불명확함",
+            "locator": {
+              "artifact_id": "9e9ccf6fdeb60c32b142bebd33974a6b2d62f4019bdad15f18b130d3e195d0d1",
+              "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=e076fce9-c25d-48f6-b669-56906338703c",
+              "scope": "full_text",
+              "section": "full_text",
+              "page": 12,
+              "chunk_id": "P0012-007",
+              "offset": 6465
+            },
+            "scope_limit": "retrieved_passages_only"
+          },
+          {
+            "candidate_id": "e5654b8896eaf04d1037",
+            "feature": "C",
+            "match": "partial",
+            "quote": "T ogether the fully constrained skeleton enabled the \nreconstruction of skeleton poses and kinematic quantification during \ngap-crossing, jumping and reaching tasks",
+            "quote_verified": true,
+            "quote_match_method": "exact",
+            "relation": "제약이 부여된 골격 모델을 통해 동작 중 골격 자세의 재구성 및 정량화를 수행함",
+            "difference": "보정된 파라미터를 적용하여 자식 뼈의 자세를 결정하는 구체적 처리 방식은 기재되지 않음",
+            "locator": {
+              "artifact_id": "9e9ccf6fdeb60c32b142bebd33974a6b2d62f4019bdad15f18b130d3e195d0d1",
+              "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=e076fce9-c25d-48f6-b669-56906338703c",
+              "scope": "full_text",
+              "section": "full_text",
+              "page": 2,
+              "chunk_id": "P0002-003",
+              "offset": 2083
+            },
+            "scope_limit": "retrieved_passages_only"
+          },
+          {
+            "candidate_id": "e5654b8896eaf04d1037",
+            "feature": "D",
+            "match": "partial",
+            "quote": "modeled bones (black lines) and joints (black dots) as \nwell as enforced joint angle limits for flexion and extension (red dashed lines)",
+            "quote_verified": true,
+            "quote_match_method": "exact",
+            "relation": "골격 모델에 굴곡 및 신전을 위한 관절 각도 한계를 적용함",
+            "difference": "파라미터가 한계를 초과하는지 여부를 판정하는 구체적 판정 단계는 명시되지 않음",
+            "locator": {
+              "artifact_id": "9e9ccf6fdeb60c32b142bebd33974a6b2d62f4019bdad15f18b130d3e195d0d1",
+              "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=e076fce9-c25d-48f6-b669-56906338703c",
+              "scope": "full_text",
+              "section": "full_text",
+              "page": 2,
+              "chunk_id": "P0002-005",
+              "offset": 4350
+            },
+            "scope_limit": "retrieved_passages_only"
+          },
+          {
+            "candidate_id": "e5654b8896eaf04d1037",
+            "feature": "E",
+            "match": "absent",
+            "quote": "jumped across the gap, changes in the bone angles and their \nderivatives (Fig. 5i) were correlated with distances that the animals \njumped (Fig. 5j).",
+            "quote_verified": true,
+            "quote_match_method": "exact",
+            "relation": "뼈의 각도 변화 및 미분값이 점프 거리와 상관관계를 가짐을 설명함",
+            "difference": "하나의 파라미터가 다른 둘 이상의 파라미터 한계에 영향을 주는 제1 한계 관계가 전혀 없음",
+            "locator": {
+              "artifact_id": "9e9ccf6fdeb60c32b142bebd33974a6b2d62f4019bdad15f18b130d3e195d0d1",
+              "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=e076fce9-c25d-48f6-b669-56906338703c",
+              "scope": "full_text",
+              "section": "full_text",
+              "page": 8,
+              "chunk_id": "P0008-004",
+              "offset": 2844
+            },
+            "scope_limit": "retrieved_passages_only"
+          }
+        ],
+        "acquisitions": [
+          {
+            "artifact_id": "9e9ccf6fdeb60c32b142bebd33974a6b2d62f4019bdad15f18b130d3e195d0d1",
+            "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=e076fce9-c25d-48f6-b669-56906338703c",
+            "scope": "full_text",
+            "content_type": "application/pdf",
+            "truncated": false,
+            "title": "Estimation of skeletal kinematics in freely moving rodents",
+            "status": "acquired",
+            "characters": 88217
+          }
+        ]
+      },
+      {
+        "id": "fa0921be38204394e42b",
+        "document_number": "10.1145/3072959.3073596",
+        "title": "VNect",
+        "url": "https://doi.org/10.1145/3072959.3073596",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "골격 모델 기반 기구학 피팅으로 3D 자세를 복원하나, 복수 파라미터 연동 한계 판정 및 초과 시 보정 처리의 구체적 내용이 초록에 없어 정보 부족.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [
+          {
+            "candidate_id": "fa0921be38204394e42b",
+            "feature": "A",
+            "match": "partial",
+            "quote": "A real-time kinematic skeleton fitting method uses the CNN output to yield temporally stable 3D global pose reconstructions on the basis of a coherent kinematic skeleton.",
+            "quote_verified": true,
+            "quote_match_method": "exact",
+            "relation": "운동학적 골격을 기반으로 CNN 출력을 사용해 3차원 전역 골격 자세를 재구성함",
+            "difference": "관절로 연결된 부모 뼈와 자식 뼈의 구체적인 연결 모델 구성은 제시되지 않음",
+            "locator": {
+              "artifact_id": "f5de08f1a950b73e77ed0e0c719e72b13edb922a75094adb16e46b34245c60a2",
+              "url": "https://doi.org/10.1145/3072959.3073596",
+              "scope": "abstract",
+              "section": "abstract",
+              "page": null,
+              "chunk_id": "P0001-001",
+              "offset": 432
+            },
+            "scope_limit": "retrieved_passages_only"
+          }
+        ],
+        "acquisitions": [
+          {
+            "url": "https://doi.org/10.1145/3072959.3073596",
+            "status": "failed",
+            "error": "http_403"
+          },
+          {
+            "artifact_id": "f5de08f1a950b73e77ed0e0c719e72b13edb922a75094adb16e46b34245c60a2",
+            "url": "https://doi.org/10.1145/3072959.3073596",
+            "scope": "abstract",
+            "section": "abstract",
+            "content_type": "text/plain",
+            "truncated": true,
+            "status": "acquired",
+            "characters": 1200
+          }
+        ]
+      },
+      {
+        "id": "708ab7347ef2e16b3889",
+        "document_number": "10.1088/1741-2560/3/4/010",
+        "title": "Computational model of a primate arm: from hand position to joint angles, joint torques and muscle forces",
+        "url": "https://doi.org/10.1088/1741-2560/3/4/010",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "마커 좌표로부터 관절 각도를 산출하는 모델을 개시하나, 파라미터의 연동 한계 판정 및 보정 단계에 관한 구체적 처리가 초록에 없어 정보 부족.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [
+          {
+            "candidate_id": "708ab7347ef2e16b3889",
+            "feature": "A",
+            "match": "partial",
+            "quote": "computational musculoskeletal model of the macaque arm that translates the coordinates of eight tracking markers placed on the arm into joint angles, joint torques, musculotendon lengt",
+            "quote_verified": true,
+            "quote_match_method": "exact",
+            "relation": "트래킹 마커 좌표를 관절 각도 등으로 변환하는 7자유도 근골격 모델을 제시함",
+            "difference": "부모 뼈와 자식 뼈의 상대 회전 정의 및 골격 모델 세부 구조는 구체적으로 나타나지 않음",
+            "locator": {
+              "artifact_id": "e640f7a0345754d1b8a1738b41e04b8275d75dc1a96b0c5d521a44d8b41b2365",
+              "url": "https://doi.org/10.1088/1741-2560/3/4/010",
+              "scope": "abstract",
+              "section": "abstract",
+              "page": null,
+              "chunk_id": "P0001-001",
+              "offset": 616
+            },
+            "scope_limit": "retrieved_passages_only"
+          }
+        ],
+        "acquisitions": [
+          {
+            "url": "https://iopscience.iop.org/article/10.1088/1741-2560/3/4/010/pdf",
+            "status": "failed",
+            "error": "document_title_not_confirmed"
+          },
+          {
+            "url": "https://doi.org/10.1088/1741-2560/3/4/010",
+            "status": "failed",
+            "error": "document_title_not_confirmed"
+          },
+          {
+            "artifact_id": "e640f7a0345754d1b8a1738b41e04b8275d75dc1a96b0c5d521a44d8b41b2365",
+            "url": "https://doi.org/10.1088/1741-2560/3/4/010",
+            "scope": "abstract",
+            "section": "abstract",
+            "content_type": "text/plain",
+            "truncated": true,
+            "status": "acquired",
+            "characters": 1200
+          }
+        ]
+      },
+      {
+        "id": "d50f3d0cdcbbacb38954",
+        "document_number": "10.1186/s12983-017-0223-z",
+        "title": "Experimental determination of three-dimensional cervical joint mobility in the avian neck",
+        "url": "https://doi.org/10.1186/s12983-017-0223-z",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "조류 목 관절 가동 범위를 X선으로 측정하는 생체 역학 실험 연구로, 파라미터 판정 및 한계 보정을 통한 골격 자세 결정 기술과 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "23c930a44d7dbd22c238",
+        "document_number": "10.1145/3603618",
+        "title": "Deep Learning-based Human Pose Estimation: A Survey",
+        "url": "https://doi.org/10.1145/3603618",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "딥러닝 기반 자세 추정 모델 및 데이터셋을 비교하는 기술 동향 서베이 논문으로, 독자적인 골격 파라미터 보정 메커니즘을 다루지 않음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "1dfbff013e2368be9a56",
+        "document_number": "10.1016/j.cviu.2021.103225",
+        "title": "Deep 3D human pose estimation: A review",
+        "url": "https://doi.org/10.1016/j.cviu.2021.103225",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "딥러닝 기반 3D 인체 자세 추정 분야의 전반적인 동향을 정리한 서베이 논문으로, 특정 골격 파라미터 판정 및 보정 알고리즘을 제안하지 않음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fd019445762321564caa",
+        "document_number": "10.1109/iccv.2019.00236",
+        "title": "Exploiting Spatial-Temporal Relationships for 3D Pose Estimation via Graph Convolutional Networks",
+        "url": "https://doi.org/10.1109/iccv.2019.00236",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "2D 검출 결과를 그래프 합성곱 신경망(GCN)으로 처리하여 3D 자세를 회귀하는 방식으로, 파라미터 한계 판정 및 연동 보정 기술과 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "c21f552bc7337cbc5a08",
+        "document_number": "10.1109/tpami.2011.33",
+        "title": "Model-Based 3D Hand Pose Estimation from Monocular Video",
+        "url": "https://doi.org/10.1109/tpami.2011.33",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "모델 기반 목적함수 최적화로 손 자세를 추정하나, 관절 파라미터의 다중 연동 한계 판정 및 보정 알고리즘의 구체적 내용이 초록에 없어 정보 부족.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "8ef002b06a0ce3e1f30f",
+        "document_number": "10.1002/nbm.4266",
+        "title": "Proton magnetic resonance spectroscopy in skeletal muscle: Experts' consensus recommendations",
+        "url": "https://doi.org/10.1002/nbm.4266",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fe643b3a457faf0a8462",
+        "document_number": "10.1155/2008/520417",
+        "title": "Soft Robotics: Biological Inspiration, State of the Art, and Future Research",
+        "url": "https://doi.org/10.1155/2008/520417",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "4cfb7604bcbd1514f5a8",
+        "document_number": "10.1186/s13013-017-0145-8",
+        "title": "2016 SOSORT guidelines: orthopaedic and rehabilitation treatment of idiopathic scoliosis during growth",
+        "url": "https://doi.org/10.1186/s13013-017-0145-8",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "ac8a471cb7c2e65460fb",
+        "document_number": "10.1007/s00586-008-0817-4",
+        "title": "A three-dimensional retrospective analysis of the evolution of spinal instrumentation for the correction of adolescent idiopathic scoliosis",
+        "url": "https://doi.org/10.1007/s00586-008-0817-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "6d633caf59580dc6fb15",
+        "document_number": "10.1109/tnnls.2013.2287890",
+        "title": "Efficient Exploratory Learning of Inverse Kinematics on a Bionic Elephant Trunk",
+        "url": "https://doi.org/10.1109/tnnls.2013.2287890",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "a36a3278bced9062b00c",
+        "document_number": "10.1016/j.jbiomech.2016.12.005",
+        "title": "Kinematic models of the upper limb joints for multibody kinematics optimisation: An overview",
+        "url": "https://doi.org/10.1016/j.jbiomech.2016.12.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d5c88c365b9e210d1054",
+        "document_number": "10.1145/3130800.3130883",
+        "title": "Embodied hands",
+        "url": "https://doi.org/10.1145/3130800.3130883",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "7e75f65cec61f10cbd58",
+        "document_number": "10.1002/nbm.3563",
+        "title": "Skeletal muscle diffusion tensor‐MRI fiber tracking: rationale, data acquisition and analysis methods, applications and future directions",
+        "url": "https://doi.org/10.1002/nbm.3563",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "eb598bc74f09e8482bcc",
+        "document_number": "10.1016/j.artint.2015.03.005",
+        "title": "Geometric backtracking for combined task and motion planning in robotic systems",
+        "url": "https://doi.org/10.1016/j.artint.2015.03.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "b30115813974c5e75ac7",
+        "document_number": "10.1242/jeb.012385",
+        "title": "Neuromechanical response of musculo-skeletal structures in cockroaches during rapid running on rough terrain",
+        "url": "https://doi.org/10.1242/jeb.012385",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "0d4ffa692c7188bb9f5f",
+        "document_number": "10.1109/access.2021.3140175",
+        "title": "A Metaverse: Taxonomy, Components, Applications, and Open Challenges",
+        "url": "https://doi.org/10.1109/access.2021.3140175",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d1de54908d4b56acb303",
+        "document_number": "10.1007/s12532-018-0139-4",
+        "title": "CasADi: a software framework for nonlinear optimization and optimal control",
+        "url": "https://doi.org/10.1007/s12532-018-0139-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      }
+    ],
+    "lead_ranks": {
+      "same_claim_patent": [],
+      "herda_2003": [],
+      "distance_cones_2010": [],
+      "distance_fields_2012": [],
+      "swing_twist_lead": []
+    }
+  },
+  {
+    "depth": "improved_final_deep",
+    "job_id": "498fc266-b6ad-4477-b798-fa874521755e",
+    "work_dir": "C:\\Users\\Administrator\\AppData\\Local\\PRISM\\runs\\498fc266-b6ad-4477-b798-fa874521755e",
+    "elapsed_seconds": 115.625,
+    "limits": {
+      "seconds": 120,
+      "queries": 12,
+      "pool": 200,
+      "documents": 10,
+      "llm_calls": 5,
+      "input_tokens": 120000
+    },
+    "provider": "agy",
+    "model": "gemini-3.8-flash-medium",
+    "manifest_status": "verification_incomplete",
+    "stop_reason": "deadline_reserve",
+    "classification": {
+      "status": "complete",
+      "target_count": 8,
+      "reviewed_count": 8,
+      "unreviewed_count": 12
+    },
+    "warnings": [
+      "kipris: PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+      "query_revision: inference_timeout",
+      "web: inference_timeout",
+      "verification: inference_timeout"
+    ],
+    "seed_queries": [
+      "coupled joint limit skeletal rotation correction",
+      "interdependent range motion kinematic pose constraint"
+    ],
+    "queries": [
+      {
+        "id": "b6312f00849ebee1798a",
+        "source": "epo",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.0
+      },
+      {
+        "id": "87fc97e143a51dac5de4",
+        "source": "epo",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "relation_seed",
+        "search_scope": "title_abstract",
+        "hits": 0,
+        "coverage": {
+          "returned_records": 0,
+          "unique_documents": 0,
+          "duplicate_records": 0,
+          "result_range": null,
+          "total_results": 0,
+          "more_results_available": false,
+          "returned_fraction": null,
+          "status": "zero_results",
+          "source_stats": [],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 0,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+          "next_begin": null,
+          "publication_date_range": null,
+          "ordering": "provider_default; no relevance ordering requested"
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.031
+      },
+      {
+        "id": "0f3caa3cbaf17547358b",
+        "source": "kipris",
+        "query": "골격 관절 연동 한계 회전 보정",
+        "feature": "domestic",
+        "status": "failed",
+        "lane": "domestic_search",
+        "error": "PatentSearchError: 키프리스 API 오류: API 키, 서비스 승인 및 월간 한도를 확인하세요.",
+        "seconds": 0.157
+      },
+      {
+        "id": "e2c0cb4fc6d3d061ec9a",
+        "source": "openalex",
+        "query": "interdependent range motion kinematic pose constraint",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 1849,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 1849,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.032
+      },
+      {
+        "id": "9964ca2771cadb504a48",
+        "source": "openalex",
+        "query": "coupled joint limit skeletal rotation correction",
+        "feature": "seed",
+        "status": "completed",
+        "lane": "fast",
+        "hits": 10,
+        "coverage": {
+          "returned_records": 10,
+          "unique_documents": 10,
+          "duplicate_records": 0,
+          "result_range": "1-10",
+          "total_results": 3789,
+          "more_results_available": true,
+          "returned_fraction": null,
+          "status": "results",
+          "source_stats": [
+            {
+              "source": "openalex",
+              "status": "results",
+              "total_results": 3789,
+              "returned_records": 10,
+              "result_range": "1-10"
+            }
+          ],
+          "unique_families_in_page": null,
+          "abstracts_in_page": 8,
+          "classification_records_in_page": 0,
+          "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+        },
+        "cache_hit": true,
+        "failed_sources": [],
+        "seconds": 0.078
+      },
+      {
+        "id": "cd71c765f75de841634b",
+        "source": "web",
+        "query": "청구항·기존 후보를 참고한 웹 검색",
+        "feature": "context",
+        "status": "failed",
+        "lane": "fast",
+        "search_scope": "web_exploration",
+        "hits": 0,
+        "error": "inference_timeout"
+      }
+    ],
+    "route": [
+      {
+        "lane": "relation_seed",
+        "budget_seconds": 44.0,
+        "outcome": "no_candidates",
+        "candidates": 0,
+        "seconds": 0.063
+      },
+      {
+        "lane": "existing_search",
+        "reason": "collect_metadata",
+        "remaining_seconds": 43.7
+      }
+    ],
+    "first_candidate_seconds": 0.313,
+    "http_fetches": 3,
+    "plan_cache_hit": true,
+    "query_cache_hits": 4,
+    "candidate_count": 20,
+    "candidate_sources": {
+      "openalex": 20
+    },
+    "stage_details": [
+      {
+        "phase": "revise_queries",
+        "seconds": 15.765999999999622,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": null,
+        "tool_events": null,
+        "output_partial": null,
+        "timed_out": true,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "web_seeds",
+        "seconds": 28.235000000000582,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": null,
+        "tool_events": [
+          {
+            "name": "search_web",
+            "id": "agy-step-2",
+            "input": {
+              "query": "\"joint limit\" \"parent bone\" \"child bone\" rotation pose correction"
+            },
+            "index": 1
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-4",
+            "input": {
+              "query": "\"부모 뼈\" \"자식 뼈\" \"골격 모델\" \"한계\" \"회전\" \"파라미터\""
+            },
+            "index": 2
+          },
+          {
+            "name": "search_web",
+            "id": "agy-step-6",
+            "input": {
+              "query": "\"親骨\" \"子骨\" \"回転\" \"パラメータ\" \"姿勢\" \"限界\""
+            },
+            "index": 3
+          }
+        ],
+        "output_partial": null,
+        "timed_out": true,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "triage",
+        "seconds": 32.84400000000005,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": [],
+        "tool_events": null,
+        "output_partial": false,
+        "timed_out": false,
+        "outcome": null,
+        "error": null
+      },
+      {
+        "phase": "verify",
+        "seconds": 26.20300000000043,
+        "model": "gemini-3.8-flash-medium",
+        "tool_calls": null,
+        "tool_events": null,
+        "output_partial": null,
+        "timed_out": true,
+        "outcome": null,
+        "error": null
+      }
+    ],
+    "candidates": [
+      {
+        "id": "e5654b8896eaf04d1037",
+        "document_number": "10.1038/s41592-022-01634-9",
+        "title": "Estimation of skeletal kinematics in freely moving rodents",
+        "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=7a6d5587-ed00-4ed2-bf9c-3a541ebe5296",
+        "source": "openalex",
+        "data_status": "FULL_TEXT",
+        "document_classification": {
+          "group": "Z",
+          "status": "classified",
+          "reason": "골격 모델과 관절 가동 한계를 이용해 자세를 추정하는 전체 구조는 유사하나, 다자 파라미터 간 상호 한계 판정 및 보정 관계의 구체적 내용이 초록에 결여됨.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": [
+          {
+            "artifact_id": "9e9ccf6fdeb60c32b142bebd33974a6b2d62f4019bdad15f18b130d3e195d0d1",
+            "url": "https://www.nature.com/articles/s41592-022-01634-9.pdf?error=cookies_not_supported&code=7a6d5587-ed00-4ed2-bf9c-3a541ebe5296",
+            "scope": "full_text",
+            "content_type": "application/pdf",
+            "truncated": false,
+            "title": "Estimation of skeletal kinematics in freely moving rodents",
+            "status": "acquired",
+            "characters": 88217
+          }
+        ]
+      },
+      {
+        "id": "fa0921be38204394e42b",
+        "document_number": "10.1145/3072959.3073596",
+        "title": "VNect",
+        "url": "https://doi.org/10.1145/3072959.3073596",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "CNN 출력 기반 기구학적 골격 피팅으로 3D 자세를 추정하나, 관절 파라미터 한계 초과 판정 및 상호의존 한계를 반영한 보정 관계가 초록에 나타나지 않음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": [
+          {
+            "url": "https://doi.org/10.1145/3072959.3073596",
+            "status": "failed",
+            "error": "http_403"
+          },
+          {
+            "artifact_id": "f5de08f1a950b73e77ed0e0c719e72b13edb922a75094adb16e46b34245c60a2",
+            "url": "https://doi.org/10.1145/3072959.3073596",
+            "scope": "abstract",
+            "section": "abstract",
+            "content_type": "text/plain",
+            "truncated": true,
+            "status": "acquired",
+            "characters": 1200
+          }
+        ]
+      },
+      {
+        "id": "c21f552bc7337cbc5a08",
+        "document_number": "10.1109/tpami.2011.33",
+        "title": "Model-Based 3D Hand Pose Estimation from Monocular Video",
+        "url": "https://doi.org/10.1109/tpami.2011.33",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "목적함수 최소화를 통해 3D 손 자세를 추정하는 모델 기반 접근법이나, 관절 회전 파라미터 한계 판정 및 이를 사용한 보정 절차가 초록에 구체화되지 않음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": [
+          {
+            "url": "https://doi.org/10.1109/tpami.2011.33",
+            "status": "failed",
+            "error": "unsafe_url"
+          },
+          {
+            "artifact_id": "f5de08f1a950b73e77ed0e0c719e72b13edb922a75094adb16e46b34245c60a2",
+            "url": "https://doi.org/10.1109/tpami.2011.33",
+            "scope": "abstract",
+            "section": "abstract",
+            "content_type": "text/plain",
+            "truncated": true,
+            "status": "acquired",
+            "characters": 950
+          }
+        ]
+      },
+      {
+        "id": "708ab7347ef2e16b3889",
+        "document_number": "10.1088/1741-2560/3/4/010",
+        "title": "Computational model of a primate arm: from hand position to joint angles, joint torques and muscle forces",
+        "url": "https://doi.org/10.1088/1741-2560/3/4/010",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "insufficient_information",
+          "reason": "마커 좌표로부터 관절 각도 등을 계산하는 근골격 모델을 다루나, 파라미터 한계 판정 및 한계 초과 시 보정 연산에 대한 세부 내용이 초록에 개시되지 않음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d50f3d0cdcbbacb38954",
+        "document_number": "10.1186/s12983-017-0223-z",
+        "title": "Experimental determination of three-dimensional cervical joint mobility in the avian neck",
+        "url": "https://doi.org/10.1186/s12983-017-0223-z",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "조류 목 관절 가동 범위를 X선으로 측정·분석하는 생물학적 실험 연구로, 골격 파라미터의 판정 및 보정을 통한 자세 결정이라는 기술적 관계와 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "23c930a44d7dbd22c238",
+        "document_number": "10.1145/3603618",
+        "title": "Deep Learning-based Human Pose Estimation: A Survey",
+        "url": "https://doi.org/10.1145/3603618",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "딥러닝 기반 포즈 추정 기법들을 비교·분석하는 종합 서베이 논문으로, 청구항의 관절 파라미터 한계 판정 및 보정에 기반한 자세 결정 관계와 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "1dfbff013e2368be9a56",
+        "document_number": "10.1016/j.cviu.2021.103225",
+        "title": "Deep 3D human pose estimation: A review",
+        "url": "https://doi.org/10.1016/j.cviu.2021.103225",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "딥러닝 기반 3D 인체 포즈 추정 전반을 다루는 서베이 논문으로, 관절 파라미터 한계 판정 및 보정 처리와 관련된 구체적 기구학적 기술 관계를 개시하지 않음.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fd019445762321564caa",
+        "document_number": "10.1109/iccv.2019.00236",
+        "title": "Exploiting Spatial-Temporal Relationships for 3D Pose Estimation via Graph Convolutional Networks",
+        "url": "https://doi.org/10.1109/iccv.2019.00236",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": {
+          "group": null,
+          "status": "low_relevance",
+          "reason": "2D 검출 결과로부터 GCN을 통해 3D 포즈를 추정하는 신경망 구조 제안 문헌으로, 골격 회전 파라미터의 한계 판정 및 보정이라는 기술적 관계와 상이함.",
+          "basis": "abstract",
+          "evidence_status": "unverified",
+          "provisional": true
+        },
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "8ef002b06a0ce3e1f30f",
+        "document_number": "10.1002/nbm.4266",
+        "title": "Proton magnetic resonance spectroscopy in skeletal muscle: Experts' consensus recommendations",
+        "url": "https://doi.org/10.1002/nbm.4266",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "fe643b3a457faf0a8462",
+        "document_number": "10.1155/2008/520417",
+        "title": "Soft Robotics: Biological Inspiration, State of the Art, and Future Research",
+        "url": "https://doi.org/10.1155/2008/520417",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "4cfb7604bcbd1514f5a8",
+        "document_number": "10.1186/s13013-017-0145-8",
+        "title": "2016 SOSORT guidelines: orthopaedic and rehabilitation treatment of idiopathic scoliosis during growth",
+        "url": "https://doi.org/10.1186/s13013-017-0145-8",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "ac8a471cb7c2e65460fb",
+        "document_number": "10.1007/s00586-008-0817-4",
+        "title": "A three-dimensional retrospective analysis of the evolution of spinal instrumentation for the correction of adolescent idiopathic scoliosis",
+        "url": "https://doi.org/10.1007/s00586-008-0817-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "6d633caf59580dc6fb15",
+        "document_number": "10.1109/tnnls.2013.2287890",
+        "title": "Efficient Exploratory Learning of Inverse Kinematics on a Bionic Elephant Trunk",
+        "url": "https://doi.org/10.1109/tnnls.2013.2287890",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "a36a3278bced9062b00c",
+        "document_number": "10.1016/j.jbiomech.2016.12.005",
+        "title": "Kinematic models of the upper limb joints for multibody kinematics optimisation: An overview",
+        "url": "https://doi.org/10.1016/j.jbiomech.2016.12.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d5c88c365b9e210d1054",
+        "document_number": "10.1145/3130800.3130883",
+        "title": "Embodied hands",
+        "url": "https://doi.org/10.1145/3130800.3130883",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "7e75f65cec61f10cbd58",
+        "document_number": "10.1002/nbm.3563",
+        "title": "Skeletal muscle diffusion tensor‐MRI fiber tracking: rationale, data acquisition and analysis methods, applications and future directions",
+        "url": "https://doi.org/10.1002/nbm.3563",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "eb598bc74f09e8482bcc",
+        "document_number": "10.1016/j.artint.2015.03.005",
+        "title": "Geometric backtracking for combined task and motion planning in robotic systems",
+        "url": "https://doi.org/10.1016/j.artint.2015.03.005",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "b30115813974c5e75ac7",
+        "document_number": "10.1242/jeb.012385",
+        "title": "Neuromechanical response of musculo-skeletal structures in cockroaches during rapid running on rough terrain",
+        "url": "https://doi.org/10.1242/jeb.012385",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "0d4ffa692c7188bb9f5f",
+        "document_number": "10.1109/access.2021.3140175",
+        "title": "A Metaverse: Taxonomy, Components, Applications, and Open Challenges",
+        "url": "https://doi.org/10.1109/access.2021.3140175",
+        "source": "openalex",
+        "data_status": "ABSTRACT_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      },
+      {
+        "id": "d1de54908d4b56acb303",
+        "document_number": "10.1007/s12532-018-0139-4",
+        "title": "CasADi: a software framework for nonlinear optimization and optimal control",
+        "url": "https://doi.org/10.1007/s12532-018-0139-4",
+        "source": "openalex",
+        "data_status": "METADATA_ONLY",
+        "document_classification": null,
+        "evidence": [],
+        "acquisitions": []
+      }
+    ],
+    "lead_ranks": {
+      "same_claim_patent": [],
+      "herda_2003": [],
+      "distance_cones_2010": [],
+      "distance_fields_2012": [],
+      "swing_twist_lead": []
+    }
+  }
+]

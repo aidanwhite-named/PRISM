@@ -92,7 +92,7 @@ flowchart LR
 
 | 항목 | 코드에서 확인한 상태 |
 |---|---|
-| Patent API | EPO OPS 실구현. Kiwee는 사용 가능한 실제 검색 대안이 아님 |
+| Patent API | EPO OPS 실구현 |
 | Academic API | Crossref, Europe PMC, OpenAlex, arXiv 경로 존재. 설치 상태와 별개 |
 | Web Search | Provider 내장 도구. 결과·페이지 관측 가능 범위가 Provider별로 다름 |
 | Query generation | 검색 prompt의 LLM 판단. 안정된 planner 출력 계약·버전별 평가 없음 |

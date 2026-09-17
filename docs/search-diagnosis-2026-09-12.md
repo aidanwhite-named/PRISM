@@ -7,7 +7,7 @@
 - 현재 모델 Flash와 다른 계열 `gemini-3.1-pro-low`에서 각각 검색을 정확히 한 번 요청했다. 두 실행 모두 모델 응답은 완료되고 `auth_required=false`였지만 `search_web`은 `no summary returned from GenerateContent`로 실패했다.
 - agy 자체 `~/.gemini/antigravity-cli/cli.log`에도 `search_web_handler.go:89`의 동일 오류가 있다. PRISM의 출력 해석만 잘못된 경우가 아니다.
 - 따라서 로그인 만료나 특정 선택 모델에만 생기는 오류라는 증거는 없다. 공통 검색 내부 단계가 필요한 요약 응답을 못 받는 현상이다. CLI 회귀와 서버 측 장애 중 어느 것인지는 공개된 오류 정보만으로 확정할 수 없다. 로그인 초기화·CLI 교체를 임의로 하지 않았다.
-- PRISM의 agy 어댑터에는 실행별 EPO/논문 MCP 연결이 구현되지 않았다. 이는 agy 자체가 MCP를 전혀 지원하지 않는다는 뜻은 아니다. Kiwee는 별도로 미구현이다. 따라서 웹 검색이 막히면 현재 PRISM agy 경로는 사용할 검색 채널이 없다.
+- PRISM의 agy 어댑터에는 실행별 EPO/논문 MCP 연결이 구현되지 않았다. 이는 agy 자체가 MCP를 전혀 지원하지 않는다는 뜻은 아니다. 따라서 웹 검색이 막히면 현재 PRISM agy 경로는 사용할 검색 채널이 없다.
 - 검색 도구 확인 API가 저장된 선택 모델을 실제 테스트에 넘기도록 수정했다. 이전에는 CLI 기본 모델로 확인했다.
 
 진단용 모델 호출에는 사용량이 발생했다. 실패한 사용자 작업의 사용량과 구분해야 한다.

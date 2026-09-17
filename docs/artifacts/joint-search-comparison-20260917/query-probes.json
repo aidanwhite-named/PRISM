@@ -1,0 +1,518 @@
+[
+  {
+    "source": "openalex",
+    "query": "joint limits dependencies",
+    "cache_hit": false,
+    "coverage": {
+      "returned_records": 10,
+      "unique_documents": 10,
+      "duplicate_records": 0,
+      "result_range": "1-10",
+      "total_results": 419083,
+      "more_results_available": true,
+      "returned_fraction": null,
+      "status": "results",
+      "source_stats": [
+        {
+          "source": "openalex",
+          "status": "results",
+          "total_results": 419083,
+          "returned_records": 10,
+          "result_range": "1-10"
+        }
+      ],
+      "unique_families_in_page": null,
+      "abstracts_in_page": 9,
+      "classification_records_in_page": 0,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+    },
+    "failed_sources": [],
+    "records": [
+      {
+        "rank": 1,
+        "document_number": "10.48550/arxiv.1409.0473",
+        "title": "Neural Machine Translation by Jointly Learning to Align and Translate",
+        "url": "https://doi.org/10.48550/arxiv.1409.0473"
+      },
+      {
+        "rank": 2,
+        "document_number": "10.3115/1608858.1608859",
+        "title": "The Stanford typed dependencies representation",
+        "url": "https://doi.org/10.3115/1608858.1608859"
+      },
+      {
+        "rank": 3,
+        "document_number": "10.3115/1220575.1220666",
+        "title": "A shortest path dependency kernel for relation extraction",
+        "url": "https://doi.org/10.3115/1220575.1220666"
+      },
+      {
+        "rank": 4,
+        "document_number": "10.4230/lipics.itp.2023.19",
+        "title": "Exploiting Generative AI to Scale up Intelligent Tutoring Systems",
+        "url": "https://doi.org/10.4230/lipics.itp.2023.19"
+      },
+      {
+        "rank": 5,
+        "document_number": "10.1016/0888-613x(90)90022-t",
+        "title": "Probabilistic arithmetic. I. Numerical methods for calculating convolutions and dependency bounds",
+        "url": "https://doi.org/10.1016/0888-613x(90)90022-t"
+      },
+      {
+        "rank": 6,
+        "document_number": "10.1086/684581",
+        "title": "Carbon Taxes, Path Dependency, and Directed Technical Change: Evidence from the Auto Industry",
+        "url": "https://doi.org/10.1086/684581"
+      },
+      {
+        "rank": 7,
+        "document_number": "10.1162/tacl_a_00115",
+        "title": "Assessing the Ability of LSTMs to Learn Syntax-Sensitive Dependencies",
+        "url": "https://doi.org/10.1162/tacl_a_00115"
+      },
+      {
+        "rank": 8,
+        "document_number": "10.1109/icassp.2018.8462506",
+        "title": "Speech-Transformer: A No-Recurrence Sequence-to-Sequence Model for Speech Recognition",
+        "url": "https://doi.org/10.1109/icassp.2018.8462506"
+      },
+      {
+        "rank": 9,
+        "document_number": "10.1051/0004-6361/201423413",
+        "title": "Improved cosmological constraints from a joint analysis of the SDSS-II and SNLS supernova samples",
+        "url": "https://doi.org/10.1051/0004-6361/201423413"
+      },
+      {
+        "rank": 10,
+        "document_number": "10.1109/proc.1985.13340",
+        "title": "Vector quantization in speech coding",
+        "url": "https://doi.org/10.1109/proc.1985.13340"
+      }
+    ],
+    "seconds": 2.156
+  },
+  {
+    "source": "openalex",
+    "query": "joint constraints projection",
+    "cache_hit": false,
+    "coverage": {
+      "returned_records": 10,
+      "unique_documents": 10,
+      "duplicate_records": 0,
+      "result_range": "1-10",
+      "total_results": 337116,
+      "more_results_available": true,
+      "returned_fraction": null,
+      "status": "results",
+      "source_stats": [
+        {
+          "source": "openalex",
+          "status": "results",
+          "total_results": 337116,
+          "returned_records": 10,
+          "result_range": "1-10"
+        }
+      ],
+      "unique_families_in_page": null,
+      "abstracts_in_page": 9,
+      "classification_records_in_page": 0,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+    },
+    "failed_sources": [],
+    "records": [
+      {
+        "rank": 1,
+        "document_number": "10.1038/s41586-020-2308-7",
+        "title": "The mutational constraint spectrum quantified from variation in 141,456 humans",
+        "url": "https://doi.org/10.1038/s41586-020-2308-7"
+      },
+      {
+        "rank": 2,
+        "document_number": "10.1137/141000439",
+        "title": "Iterative Bregman Projections for Regularized Transportation Problems",
+        "url": "https://doi.org/10.1137/141000439"
+      },
+      {
+        "rank": 3,
+        "document_number": "10.1109/iccv.1995.466920",
+        "title": "Matching constraints and the joint image",
+        "url": "https://doi.org/10.1109/iccv.1995.466920"
+      },
+      {
+        "rank": 4,
+        "document_number": "10.1016/j.cirp.2016.05.004",
+        "title": "Design for Additive Manufacturing: Trends, opportunities, considerations, and constraints",
+        "url": "https://doi.org/10.1016/j.cirp.2016.05.004"
+      },
+      {
+        "rank": 5,
+        "document_number": "10.1137/0111030",
+        "title": "An Algorithm for Least-Squares Estimation of Nonlinear Parameters",
+        "url": "https://doi.org/10.1137/0111030"
+      },
+      {
+        "rank": 6,
+        "document_number": "10.3386/w1202",
+        "title": "Forecasting and Conditional Projection Using Realistic Prior Distributions",
+        "url": "https://doi.org/10.3386/w1202"
+      },
+      {
+        "rank": 7,
+        "document_number": "10.1109/tcomm.2020.2973976",
+        "title": "Joint Radar and Communication Design: Applications, State-of-the-Art, and the Road Ahead",
+        "url": "https://doi.org/10.1109/tcomm.2020.2973976"
+      },
+      {
+        "rank": 8,
+        "document_number": "10.48550/arxiv.1406.4773",
+        "title": "Deep Learning Face Representation by Joint Identification-Verification",
+        "url": "https://doi.org/10.48550/arxiv.1406.4773"
+      },
+      {
+        "rank": 9,
+        "document_number": "10.1175/2009jcli3361.1",
+        "title": "Challenges in Combining Projections from Multiple Climate Models",
+        "url": "https://doi.org/10.1175/2009jcli3361.1"
+      },
+      {
+        "rank": 10,
+        "document_number": "10.1080/01621459.1987.10478427",
+        "title": "Exploratory Projection Pursuit",
+        "url": "https://doi.org/10.1080/01621459.1987.10478427"
+      }
+    ],
+    "seconds": 1.969
+  },
+  {
+    "source": "openalex",
+    "query": "joint limits quaternion",
+    "cache_hit": false,
+    "coverage": {
+      "returned_records": 8,
+      "unique_documents": 8,
+      "duplicate_records": 0,
+      "result_range": "1-8",
+      "total_results": 11177,
+      "more_results_available": true,
+      "returned_fraction": null,
+      "status": "results",
+      "source_stats": [
+        {
+          "source": "openalex",
+          "status": "results",
+          "total_results": 11177,
+          "returned_records": 8,
+          "result_range": "1-8"
+        }
+      ],
+      "unique_families_in_page": null,
+      "abstracts_in_page": 7,
+      "classification_records_in_page": 0,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage."
+    },
+    "failed_sources": [],
+    "records": [
+      {
+        "rank": 1,
+        "document_number": "10.1177/0278364903022006005",
+        "title": "Automatic Determination of Shoulder Joint Limits Using Quaternion Field Boundaries",
+        "url": "https://doi.org/10.1177/0278364903022006005"
+      },
+      {
+        "rank": 2,
+        "document_number": "10.48550/arxiv.2211.01466",
+        "title": "Inverse Kinematics with Dual-Quaternions, Exponential-Maps, and Joint Limits",
+        "url": "https://doi.org/10.48550/arxiv.2211.01466"
+      },
+      {
+        "rank": 3,
+        "document_number": "10.1109/afgr.2002.1004138",
+        "title": "An automatic method for determining quaternion field boundaries for ball-and-socket joint limits",
+        "url": "https://doi.org/10.1109/afgr.2002.1004138"
+      },
+      {
+        "rank": 4,
+        "document_number": "10.3390/s140406891",
+        "title": "IMU-Based Joint Angle Measurement for Gait Analysis",
+        "url": "https://doi.org/10.3390/s140406891"
+      },
+      {
+        "rank": 5,
+        "document_number": "10.1016/j.bspc.2017.07.029",
+        "title": "Verification of the blobby quaternion model of human joint limits",
+        "url": "https://doi.org/10.1016/j.bspc.2017.07.029"
+      },
+      {
+        "rank": 6,
+        "document_number": "10.2514/1.g000054",
+        "title": "Adaptive Position and Attitude-Tracking Controller for Satellite Proximity Operations Using Dual Quaternions",
+        "url": "https://doi.org/10.2514/1.g000054"
+      },
+      {
+        "rank": 7,
+        "document_number": "10.1109/tsipn.2015.2448520",
+        "title": "Joint Optimization of Radio and Computational Resources for Multicell Mobile-Edge Computing",
+        "url": "https://doi.org/10.1109/tsipn.2015.2448520"
+      },
+      {
+        "rank": 8,
+        "document_number": "10.1088/1751-8113/46/26/265201",
+        "title": "Products of independent quaternion Ginibre matrices and their correlation functions",
+        "url": "https://doi.org/10.1088/1751-8113/46/26/265201"
+      },
+      {
+        "rank": 9,
+        "document_number": "openalex:W1516027685",
+        "title": "The complexity of robot motion planning",
+        "url": "https://ci.nii.ac.jp/ncid/BA04404978"
+      },
+      {
+        "rank": 10,
+        "document_number": "openalex:W2121299598",
+        "title": "The Parameterization of Joint Rotation with the Unit Quaternion",
+        "url": "http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.304.8735"
+      }
+    ],
+    "seconds": 2.594
+  },
+  {
+    "source": "epo",
+    "query": "skeletal posture parameters",
+    "cache_hit": false,
+    "coverage": {
+      "returned_records": 10,
+      "unique_documents": 10,
+      "duplicate_records": 0,
+      "result_range": "1-10",
+      "total_results": 10,
+      "more_results_available": false,
+      "returned_fraction": 1.0,
+      "status": "results",
+      "source_stats": [],
+      "unique_families_in_page": 10,
+      "abstracts_in_page": 10,
+      "classification_records_in_page": 10,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+      "next_begin": null,
+      "publication_date_range": {
+        "earliest": "20090923",
+        "latest": "20260407"
+      },
+      "ordering": "provider_default; no relevance ordering requested"
+    },
+    "failed_sources": [],
+    "records": [
+      {
+        "rank": 1,
+        "document_number": "CN121812141A",
+        "title": "Dance posture optimization system based on real-time monitoring",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN121812141"
+      },
+      {
+        "rank": 2,
+        "document_number": "CN121580462A",
+        "title": "Intelligent costume design and template generation method and system",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN121580462"
+      },
+      {
+        "rank": 3,
+        "document_number": "CN120672920A",
+        "title": "Skeletal animation display method and device, equipment and storage medium",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN120672920"
+      },
+      {
+        "rank": 4,
+        "document_number": "CN119295615A",
+        "title": "Digital human generation method and device and storage medium",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN119295615"
+      },
+      {
+        "rank": 5,
+        "document_number": "CN115797307A",
+        "title": "Skeletal coronal balance parameter detection system",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN115797307"
+      },
+      {
+        "rank": 6,
+        "document_number": "CN109086754A",
+        "title": "A human posture recognition method based on depth learning",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN109086754"
+      },
+      {
+        "rank": 7,
+        "document_number": "CN105765609A",
+        "title": "Memory facilitation using directed acyclic graphs",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN105765609"
+      },
+      {
+        "rank": 8,
+        "document_number": "CN102467749A",
+        "title": "Three-dimensional virtual human body movement generation method based on key frames and spatiotemporal restrictions",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN102467749"
+      },
+      {
+        "rank": 9,
+        "document_number": "US2011279368A1",
+        "title": "INFERRING USER INTENT TO ENGAGE A MOTION CAPTURE SYSTEM",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DUS2011279368"
+      },
+      {
+        "rank": 10,
+        "document_number": "KR20090099678A",
+        "title": "SYSTEM AND METHOD FOR THE DESIGN OF AN OCCUPANT PACKAGING LAYOUT USING MUSCULO-SKELETAL HUMAN MODEL",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DKR20090099678"
+      }
+    ],
+    "seconds": 2.875
+  },
+  {
+    "source": "epo",
+    "query": "bone rotation limit",
+    "cache_hit": false,
+    "coverage": {
+      "returned_records": 20,
+      "unique_documents": 20,
+      "duplicate_records": 0,
+      "result_range": "1-20",
+      "total_results": 159,
+      "more_results_available": true,
+      "returned_fraction": 0.125786,
+      "status": "results",
+      "source_stats": [],
+      "unique_families_in_page": 20,
+      "abstracts_in_page": 20,
+      "classification_records_in_page": 20,
+      "meaning": "Page/response coverage only; not technical relevance, recall, or claim coverage.",
+      "next_begin": 21,
+      "publication_date_range": {
+        "earliest": "20231219",
+        "latest": "20260714"
+      },
+      "ordering": "provider_default; no relevance ordering requested"
+    },
+    "failed_sources": [],
+    "records": [
+      {
+        "rank": 1,
+        "document_number": "CN122376313A",
+        "title": "Femoral stem prosthesis for severe dysplasia of hip joints",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN122376313"
+      },
+      {
+        "rank": 2,
+        "document_number": "CN122340114A",
+        "title": "Network synchronization method and system suitable for low-dynamic interaction scene of nursing operation",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN122340114"
+      },
+      {
+        "rank": 3,
+        "document_number": "CN224112850U",
+        "title": "Angle-adjustable external fixation splint for orthopedics department",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN224112850"
+      },
+      {
+        "rank": 4,
+        "document_number": "CN120477973A",
+        "title": "Dental implant system",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN120477973"
+      },
+      {
+        "rank": 5,
+        "document_number": "CN223169854U",
+        "title": "Biological tibia prosthesis and biological knee joint prosthesis",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN223169854"
+      },
+      {
+        "rank": 6,
+        "document_number": "CN120036857A",
+        "title": "Anchor, nailing device and bone anchoring device",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN120036857"
+      },
+      {
+        "rank": 7,
+        "document_number": "CN222708463U",
+        "title": "Limiting type movable single-condyle prosthesis assembly",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN222708463"
+      },
+      {
+        "rank": 8,
+        "document_number": "CN222693610U",
+        "title": "High-stability anterior cervical fixation interbody fusion cage with coating",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN222693610"
+      },
+      {
+        "rank": 9,
+        "document_number": "CN119200256A",
+        "title": "Glasses leg hinge module and intelligent glasses",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN119200256"
+      },
+      {
+        "rank": 10,
+        "document_number": "CN221932123U",
+        "title": "Fixing device and tracing assembly",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN221932123"
+      },
+      {
+        "rank": 11,
+        "document_number": "WO2025260561A1",
+        "title": "BIONIC ACETABULAR PROSTHESIS",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DWO2025260561"
+      },
+      {
+        "rank": 12,
+        "document_number": "CN118633891A",
+        "title": "Active bending section, insertion part and endoscope",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN118633891"
+      },
+      {
+        "rank": 13,
+        "document_number": "EP4420637A1",
+        "title": "ARTIFICIAL INTERVERTEBRAL DISC",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DEP4420637"
+      },
+      {
+        "rank": 14,
+        "document_number": "CN221556142U",
+        "title": "Proximal radius prosthesis for reconstructing proximal radius defect",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN221556142"
+      },
+      {
+        "rank": 15,
+        "document_number": "CN221266855U",
+        "title": "Rotary buckle structure of first-aid transfer breathing machine",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN221266855"
+      },
+      {
+        "rank": 16,
+        "document_number": "CN221180377U",
+        "title": "Angle adjusting device and disposable bronchoscope",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN221180377"
+      },
+      {
+        "rank": 17,
+        "document_number": "CN221045073U",
+        "title": "Cartilage shaping scissors",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN221045073"
+      },
+      {
+        "rank": 18,
+        "document_number": "CN122319466A",
+        "title": "Method and program for determining attitude of bone model",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN122319466"
+      },
+      {
+        "rank": 19,
+        "document_number": "CN117462230A",
+        "title": "Bone cement injection system with pressure relief function and robot system",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN117462230"
+      },
+      {
+        "rank": 20,
+        "document_number": "CN220193075U",
+        "title": "Bone wax filler",
+        "url": "https://worldwide.espacenet.com/patent/search?q=pn%3DCN220193075"
+      }
+    ],
+    "seconds": 3.172
+  }
+]

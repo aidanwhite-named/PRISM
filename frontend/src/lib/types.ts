@@ -299,8 +299,10 @@ export interface SearchReview {
   stop_reason?: string; expansion_summary?: string; sampling_review?: string; remaining_gaps?: string[];
 }
 export interface SearchManifestV14 {
+  time_budget?: { total_seconds: number; search_seconds: number; classification_reserve_seconds: number; save_reserve_seconds: number };
+  deadline_classification?: { attempted: boolean; completed: boolean; reason: string; candidate_count?: number } | null;
   engine?: ProgressiveSearchSnapshot;
-  version: 14; status: "complete" | "incomplete" | "verification_incomplete" | "search_incomplete" | "in_progress"; provider: string; model: string;
+  version: 14; status: "complete" | "incomplete" | "classification_incomplete" | "verification_incomplete" | "search_incomplete" | "in_progress"; provider: string; model: string;
   quality?: { execution_status: string; verification_status: string; search_coverage: string;
     search_audit?: { status: "incomplete" | "recorded"; unaccounted_fetches: string[];
       broad_searches: unknown[]; missing_review_fields: string[]; reported_review: SearchReview };
@@ -335,6 +337,7 @@ export interface LegacySearchManifest {
 export type SearchManifest = SearchManifestV14 | LegacySearchManifest;
 
 export interface ProgressiveSearchSnapshot {
+  classification?: { status: "complete" | "incomplete" | "not_applicable"; target_count: number; reviewed_count: number; unreviewed_count: number };
   verified_match?: boolean;
   can_continue?: boolean;
   version: number; phase: string; stop_reason: string; depth: string;
@@ -343,7 +346,8 @@ export interface ProgressiveSearchSnapshot {
   features: { id: string; text: string; relation: string }[];
   candidates: { id: string; document_number: string; title: string; url: string;
       publication_date: string; family_id: string; data_status: string; date_status: string;
-      document_classification?: { group: SearchGroup; reason: string; basis: string; evidence_status: string } | null;
+      document_classification?: { group: SearchGroup; reason: string; basis: string; evidence_status: string;
+        status?: "classified" | "insufficient_information" | "low_relevance"; provisional?: boolean } | null;
     acquisitions: { status: string; scope?: string; error?: string }[];
     evidence: { feature: string; match: string; relation: string; difference: string;
       quote: string; quote_verified: boolean;
@@ -677,7 +681,6 @@ export interface AppSettings {
     embedding_cache_max_mb: number;
     /** 기본 꺼짐. 켜도 라이브러리·모델이 없으면 키워드 검색만으로 진행한다. */
     retrieval_semantic_enabled: boolean;
-    kiwee_integration_enabled: boolean;
     /** EPO OPS 도구 연동. 실행별 MCP를 지원하는 Provider에서 사용한다. */
     epo_integration_enabled: boolean;
     kipris_integration_enabled?: boolean;
