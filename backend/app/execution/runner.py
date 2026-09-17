@@ -40,7 +40,6 @@ from .. import (
     settings_service,
 )
 from ..config import PATHS
-from ..runtime import search_server_command
 from .. import search_budget as search_limits
 from ..db import session_scope
 from ..enums import DeliveryPlan, ErrorCode, JobKind, JobStatus, RetrievalMode
@@ -74,13 +73,13 @@ search_spec = job_assembly.search_spec
 
 def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int) -> dict:
     """Per-run MCP config.  No credentials are placed in CLI arguments."""
-    launch = search_server_command()
+    backend_root = Path(__file__).resolve().parents[2]
     return {
         "prism-search": {
-            "command": launch["command"],
-            "args": launch["args"],
+            "command": sys.executable,
+            "args": ["-m", "app.search_mcp_server"],
             "env": {
-                **launch["env"],
+                "PYTHONPATH": str(backend_root),
                 "PRISM_SEARCH_WORK_DIR": str(work_dir.resolve()),
                 "PRISM_DATA_DIR": str(PATHS.data_dir.resolve()),
                 "PRISM_SEARCH_CUTOFF": cutoff or "",

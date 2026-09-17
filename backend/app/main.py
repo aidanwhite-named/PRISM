@@ -23,14 +23,13 @@ from . import answer_extraction
 from .config import HOST, PATHS, PORT
 from .db import init_engine
 from .prompt_store import PROMPT_STORE
-from .runtime import resource_root
 
 # Windows 에서 asyncio 서브프로세스는 Proactor 이벤트 루프에서만 동작한다.
 # Selector 루프면 create_subprocess_exec 이 NotImplementedError 를 던진다.
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-FRONTEND_DIST = resource_root() / "frontend" / "dist"
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 # 변경 요청에 요구하는 전용 헤더. 교차 출처에서는 preflight 없이 붙일 수 없다.
 CLIENT_HEADER = "X-PRISM-Client"

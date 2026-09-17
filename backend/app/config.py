@@ -12,18 +12,13 @@ import os
 import sys
 from pathlib import Path
 
-from .runtime import is_frozen, resource_root
-
-
-PROJECT_ROOT = resource_root()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def default_prompt_dir() -> Path:
     override = os.environ.get("PRISM_PROMPT_DIR")
     if override:
         return Path(override)
-    if is_frozen():
-        return default_data_dir() / "prompts"
     return PROJECT_ROOT / "prompt"
 
 

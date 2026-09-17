@@ -13,8 +13,7 @@
 
 ## 시작하기
 
-소스 실행 방법은 아래와 같습니다. Windows EXE와 설치 프로그램을 만드는
-빌드 스크립트는 [배포 안내](docs/windows-distribution.md)에 정리되어 있습니다.
+소스 실행 방법은 아래와 같습니다.
 
 Windows 10/11, Python 3.11 이상, Node.js 18 이상과 사용할 AI CLI 하나를 준비합니다.
 각 CLI의 실행 조건은 해당 도구의 설치 안내를 따릅니다.
@@ -55,11 +54,7 @@ EPO·KIPRIS·OpenAlex 등의 검색 서비스 자격증명은 Settings에서 별
 - CLI마다 도구 제어 범위가 다릅니다. Codex·agy의 파일·명령 도구는 PRISM이 완전히 차단하지 못합니다.
 - AI의 분석과 검색 결과는 원문 근거와 함께 확인해야 합니다.
 
-## 배포와 개발
-
-권장 배포 방식은 **Python 런타임을 포함한 PRISM EXE + 필요한 AI CLI 별도 설치**입니다.
-프론트엔드는 빌드 결과만 포함하고, AI CLI와 로그인 정보는 배포 파일에 넣지 않습니다.
-다른 Windows PC에서 만드는 방법은 [Windows EXE 배포 안내](docs/windows-distribution.md)를 참고하세요.
+## 개발 안내
 
 - [상세 사용법·설계·테스트 안내](docs/technical-guide.md)
 - [KIPRIS 연동 안내](docs/kipris-integration.md)
