@@ -35,6 +35,8 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backend = Join-Path $root 'backend'
 $frontend = Join-Path $root 'frontend'
 $venvPython = Join-Path $backend '.venv\Scripts\python.exe'
+. (Join-Path $root 'scripts\windows-common.ps1')
+Update-PrismPath
 
 function Write-Step($message) { Write-Host "==> $message" -ForegroundColor Cyan }
 function Write-Warn($message) { Write-Host "!!  $message" -ForegroundColor Yellow }
@@ -42,14 +44,9 @@ function Write-Err($message)  { Write-Host "!!  $message" -ForegroundColor Red }
 
 # --------------------------------------------------------------- 사전 점검
 
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Err 'python 을 찾을 수 없습니다. Python 3.11 이상을 설치하십시오.'
-    exit 1
-}
-
 if ($Setup -or $Rebuild) {
-    if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-        Write-Err 'npm 을 찾을 수 없습니다. Node.js 18 이상을 설치하십시오.'
+    if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) {
+        Write-Err 'npm 을 찾을 수 없습니다. Node.js LTS를 설치하십시오.'
         exit 1
     }
 }
@@ -58,19 +55,21 @@ if ($Setup -or $Rebuild) {
 
 if ($Setup) {
     if (-not (Test-Path $venvPython)) {
+        $python = Find-PrismPython
+        if (-not $python) { throw 'Python 3.11/3.12 x64가 필요합니다. 배포본은 setup.ps1을 실행하십시오.' }
         Write-Step '가상환경을 만듭니다'
-        python -m venv (Join-Path $backend '.venv')
+        Invoke-Checked $python @('-m', 'venv', (Join-Path $backend '.venv'))
     }
     Write-Step '백엔드 의존성을 설치합니다'
-    & $venvPython -m pip install --upgrade pip --quiet
-    & $venvPython -m pip install -r (Join-Path $backend 'requirements.txt') --quiet
+    Invoke-Checked $venvPython @('-m', 'pip', 'install', '--upgrade', 'pip')
+    Invoke-Checked $venvPython @('-m', 'pip', 'install', '-r', (Join-Path $backend 'requirements.txt'))
 
     Write-Step '프론트엔드 의존성을 설치합니다'
     Push-Location $frontend
     try {
-        npm install
+        Invoke-Checked 'npm.cmd' @('ci')
         Write-Step '프론트엔드를 빌드합니다'
-        npm run build
+        Invoke-Checked 'npm.cmd' @('run', 'build')
     } finally {
         Pop-Location
     }
@@ -78,18 +77,22 @@ if ($Setup) {
 elseif ($Rebuild) {
     Write-Step '프론트엔드를 다시 빌드합니다'
     Push-Location $frontend
-    try { npm run build } finally { Pop-Location }
+    try { Invoke-Checked 'npm.cmd' @('run', 'build') } finally { Pop-Location }
 }
 
 if (-not (Test-Path $venvPython)) {
-    Write-Err "가상환경이 없습니다. 먼저 다음을 실행하십시오:  .\start-prism.ps1 -Setup"
+    Write-Err '가상환경이 없습니다. 처음설치.cmd를 먼저 실행하십시오. 개발 환경은 -Setup을 사용합니다.'
     exit 1
 }
 
 if (-not (Test-Path (Join-Path $frontend 'dist\index.html'))) {
-    Write-Warn '프론트엔드가 빌드되지 않았습니다. API 만 동작합니다.'
+    Write-Err '프론트엔드가 없습니다. 배포 ZIP을 다시 압축 해제하십시오.'
     Write-Warn "빌드하려면:  .\start-prism.ps1 -Rebuild"
+    exit 1
 }
+
+if (-not (Test-PrismPython $venvPython)) { throw '가상환경이 손상되었거나 호환되지 않습니다. 사용안내.txt를 확인하십시오.' }
+Invoke-Checked $venvPython @('-c', 'import uvicorn,fastapi,sqlalchemy,winpty')
 
 # --------------------------------------------------------------- 포트 확인
 
@@ -155,8 +158,10 @@ $uvicornArgs = @(
 
 try {
     & $venvPython @uvicornArgs
+    $serverExit = $LASTEXITCODE
 } finally {
     Get-Job | Where-Object { $_.State -ne 'Running' } | Remove-Job -Force -ErrorAction SilentlyContinue
     Write-Host ''
     Write-Step 'PRISM 을 종료했습니다.'
 }
+exit $serverExit

@@ -1,0 +1,92 @@
+﻿[CmdletBinding()]
+param(
+    [ValidateSet('ask', 'claude', 'codex', 'both', 'agy', 'skip')]
+    [string]$Cli = 'ask'
+)
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'scripts\windows-common.ps1')
+
+try {
+    if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
+        throw 'This distribution supports Windows x64.'
+    }
+    Update-PrismPath
+    Write-Host 'PRISM 최초 설치' -ForegroundColor Cyan
+    Write-Host 'Python과 선택한 AI CLI를 확인하고, 없는 항목을 설치합니다.'
+    if (-not (Test-Path (Join-Path $PSScriptRoot 'frontend\dist\index.html'))) {
+        throw 'Built UI is missing. Use the release ZIP, or build frontend first (see README).'
+    }
+    if ($Cli -eq 'ask') {
+        Write-Host '1. Claude Code   2. Codex   3. 둘 다   4. agy(이미 설치됨)   5. CLI는 나중에 설치'
+        switch (Read-Host '사용할 도구 번호를 입력하세요 [1-5]') {
+            '1' { $Cli = 'claude' }
+            '2' { $Cli = 'codex' }
+            '3' { $Cli = 'both' }
+            '4' { $Cli = 'agy' }
+            '5' { $Cli = 'skip' }
+            default { throw 'Choose a number from 1 to 5. Run setup again.' }
+        }
+    }
+    $venv = Join-Path $PSScriptRoot 'backend\.venv\Scripts\python.exe'
+    if (-not (Test-PrismPython $venv)) {
+        if (Test-Path (Join-Path $PSScriptRoot 'backend\.venv')) {
+            throw 'Existing backend\.venv is incompatible or damaged. Rename it, then run setup again.'
+        }
+        $python = Find-PrismPython
+        if (-not $python) {
+            Write-Host 'Installing Python 3.11 x64...'
+            Install-PrismPackage 'Python.Python.3.11' 'https://www.python.org/downloads/windows/' -UserScope
+            $python = Find-PrismPython
+        }
+        if (-not $python) { throw 'Python 3.11/3.12 x64 was not found. Reopen setup after installation.' }
+        Invoke-Checked $python @('-m', 'venv', (Join-Path $PSScriptRoot 'backend\.venv'))
+    }
+    Write-Host 'Installing Python dependencies...' -ForegroundColor Cyan
+    Invoke-Checked $venv @('-m', 'pip', 'install', '--upgrade', 'pip')
+    Invoke-Checked $venv @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'backend\requirements.txt'))
+    Invoke-Checked $venv @('-m', 'pip', 'check')
+    Invoke-Checked $venv @('-c', 'import fastapi,uvicorn,sqlalchemy,pypdf,arxiv,pyalex,truststore,winpty')
+
+    if ($Cli -in @('claude', 'both')) {
+        $claude = Find-PrismCli 'claude'
+        if (-not $claude) {
+            Install-PrismPackage 'Anthropic.ClaudeCode' 'https://code.claude.com/docs/en/setup'
+            $claude = Find-PrismCli 'claude'
+        }
+        if (-not $claude) { throw 'Claude CLI was not found. Reopen setup or check the official installation guide.' }
+        Invoke-Checked $claude @('--version')
+    }
+    if ($Cli -in @('codex', 'both')) {
+        $codex = Find-PrismCli 'codex'
+        if (-not $codex) {
+            $node = Get-Command node.exe -ErrorAction SilentlyContinue
+            $nodeOk = $false
+            if ($node) {
+                & $node.Source -e 'process.exit(Number(process.versions.node.split(String.fromCharCode(46))[0]) >= 22 ? 0 : 1)'
+                $nodeOk = $LASTEXITCODE -eq 0
+            }
+            if (-not $nodeOk) { Install-PrismPackage 'OpenJS.NodeJS.LTS' 'https://nodejs.org/en/download' }
+            $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+            if (-not $npm) { throw 'npm was not found. Reopen setup after installing Node.js LTS.' }
+            Invoke-Checked $npm.Source @('install', '-g', '@openai/codex')
+            Update-PrismPath
+            $codex = Find-PrismCli 'codex'
+        }
+        if (-not $codex) { throw 'Codex CLI was not found. Check npm global PATH and reopen setup.' }
+        Invoke-Checked $codex @('--version')
+    }
+    if ($Cli -eq 'agy') {
+        $agy = Find-PrismCli 'agy'
+        if (-not $agy) { throw 'Install your compatible agy CLI and add it to PATH, then retry. Google Gemini CLI is not a substitute.' }
+        $env:AGY_CLI_DISABLE_AUTO_UPDATE = 'true'
+        Invoke-Checked $agy @('--version')
+    }
+    Write-Host 'PRISM setup complete. Open PRISM launcher, then log in through Settings.' -ForegroundColor Green
+    Write-Host '설치가 완료되었습니다. PRISM실행.cmd를 열고 Settings에서 로그인하세요.' -ForegroundColor Green
+    if ($Cli -eq 'skip') { Write-Host 'AI CLI installation/login is still required before analysis.' -ForegroundColor Yellow }
+    exit 0
+} catch {
+    Write-Host "Setup failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host 'Resolve the error above and run setup again. Completed installations can be reused.'
+    exit 1
+}

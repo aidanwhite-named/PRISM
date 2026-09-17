@@ -13,9 +13,13 @@
 
 ## 시작하기
 
+배포 ZIP을 받은 경우 압축을 풀고 **처음설치.cmd → PRISM실행.cmd** 순서로 실행합니다.
+Python과 필요한 CLI를 설치하고, 미리 빌드한 화면을 사용합니다.
+자세한 내용은 [사용안내.txt](사용안내.txt)를 참고하세요.
+
 소스 실행 방법은 아래와 같습니다.
 
-Windows 10/11, Python 3.11 이상, Node.js 18 이상과 사용할 AI CLI 하나를 준비합니다.
+Windows 10/11 x64, Python 3.11/3.12 x64, Node.js LTS와 사용할 AI CLI 하나를 준비합니다.
 각 CLI의 실행 조건은 해당 도구의 설치 안내를 따릅니다.
 
 프로젝트 폴더의 PowerShell에서 최초 한 번 실행합니다.
@@ -55,6 +59,18 @@ EPO·KIPRIS·OpenAlex 등의 검색 서비스 자격증명은 Settings에서 별
 - AI의 분석과 검색 결과는 원문 근거와 함께 확인해야 합니다.
 
 ## 개발 안내
+
+- 배포 ZIP 생성: `powershell -NoProfile -ExecutionPolicy Bypass -File .\build-release.ps1`
+- 결과: `release/PRISM-<버전>-windows-x64.zip` 및 SHA-256 파일
+- 프론트엔드를 `npm ci`와 `npm run build`로 빌드하고, 실행에 필요한 소스만 포함합니다.
+- `.venv`, `node_modules`, DB·로그인 정보·개인 설정은 포함하지 않습니다.
+- 프롬프트는 로컬 편집본 대신 Git HEAD의 기본 템플릿을 포함합니다.
+- ZIP 설치는 `setup.ps1`, 개발 환경 설치·화면 빌드는 `start-prism.ps1 -Setup`을 사용합니다.
+- CLI 선택을 지정하려면 `powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Cli claude`를 사용합니다.
+  `codex`, `both`, `agy`(기존 설치 확인), `skip`(나중에 설치)도 지원합니다.
+- 설치 실패·기존 CLI 재사용 검증: `python scripts/test_windows_setup.py`
+- ZIP 설치·실행 검증: `python scripts/smoke_release.py release/PRISM-2.0.0-windows-x64.zip`
+  임시 가상환경에 의존성을 실제 설치합니다. 시스템 Python·CLI 설치와 계정 로그인은 수행하지 않습니다.
 
 - [상세 사용법·설계·테스트 안내](docs/technical-guide.md)
 - [KIPRIS 연동 안내](docs/kipris-integration.md)
