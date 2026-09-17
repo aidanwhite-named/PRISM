@@ -40,6 +40,8 @@ class ErrorCode(StrEnum):
     SEARCH_NOT_PERFORMED = "SEARCH_NOT_PERFORMED"
     # 허용된 도구 호출 횟수를 넘겨서 PRISM 이 프로세스를 끊었다.
     SEARCH_BUDGET_EXCEEDED = "SEARCH_BUDGET_EXCEEDED"
+    SEARCH_CHECKPOINT_FAILED = "SEARCH_CHECKPOINT_FAILED"
+    SEARCH_CLASSIFICATION_FAILED = "SEARCH_CLASSIFICATION_FAILED"
     # 검색 프롬프트 파일을 읽지 못했거나 placeholder 가 없다.
     SEARCH_PROMPT_ERROR = "SEARCH_PROMPT_ERROR"
     # 비대화형 Provider 가 검색/페이지 열람 권한을 요청했지만 승인할 사람이 없어

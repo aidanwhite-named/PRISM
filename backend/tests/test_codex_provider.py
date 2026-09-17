@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from app.providers.base import CODEX_WEB_SEARCH, NO_TOOLS, ExecutionRequest
@@ -64,6 +65,33 @@ def test_search_run_turns_web_search_on(tmp_path: Path) -> None:
 def test_no_tools_policy_does_not_enable_search(tmp_path: Path) -> None:
     args = CodexCliProvider().build_args(_request(tmp_path, tool_policy=NO_TOOLS))
     assert "tools.web_search=false" in args
+
+
+def test_only_enabled_job_checkpoint_tool_is_preapproved(tmp_path):
+    import tomllib
+    from app.search_mcp_server import _SAVE_CANDIDATES
+    servers = {'prism-search': {'command': 'python', 'args': ['-m', 'app.search_mcp_server']}}
+    for names in (('mcp__prism-search__epo_search',),
+                  ('mcp__prism-search__save_candidates', 'mcp__prism-search__epo_search')):
+        args = CodexCliProvider().build_args(_request(tmp_path,
+            tool_policy=replace(CODEX_WEB_SEARCH, mcp_tools=names), mcp_servers=servers))
+        overrides = [args[i + 1] for i, arg in enumerate(args) if arg == '-c']
+        config = tomllib.loads('\n'.join(overrides))['mcp_servers']['prism-search']
+        assert config['default_tools_approval_mode'] == 'writes'
+        assert config.get('tools', {}) == ({'save_candidates': {'approval_mode': 'approve'}}
+            if 'mcp__prism-search__save_candidates' in names else {})
+        assert args[args.index('--sandbox') + 1] == 'read-only'
+    assert _SAVE_CANDIDATES['annotations']['readOnlyHint'] is False
+
+
+def test_checkpoint_denial_event_identifies_the_exact_tool():
+    events = _feed(CodexStreamParser(), {'type': 'item.completed', 'item': {
+        'id': 'save-1', 'type': 'mcp_tool_call', 'server': 'prism-search', 'tool': 'save_candidates',
+        'status': 'failed', 'error': {'message': 'MCP tool call requires approval, but approval policy is never'}}})
+    error = next(payload for kind, payload in events if kind == 'tool_error')
+    assert error['name'] == 'mcp__prism-search__save_candidates'
+    assert error['id'] == 'save-1'
+    assert 'approval policy is never' in error['detail']
 
 
 def test_never_bypasses_sandbox_or_approvals(tmp_path: Path) -> None:

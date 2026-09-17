@@ -235,8 +235,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const [searchPromptId, setSearchPromptId] = useState("");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [promptId, setPromptId] = useState("");
-  // 검색 깊이에 따라 검색·후속 탐색·원문 확인의 공통 예산을 정한다.
-  const [searchDepth, setSearchDepth] = useState<"deep" | "exhaustive">("deep");
   // 빈 문자열 = 지정 안 함. 제한된 안전성 Provider 가 자동으로 선택되면
   // 사용자가 위험을 확인하지 않은 채 실행하게 된다.
   // 두 작업은 기본 도구를 따로 둔다. 분석 화면에서도 검색 도구가 필요하다 —
@@ -505,7 +503,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           provider: providerId,
           prompt_id: (searching ? searchPromptId : promptId) || null,
           claim_text: activeClaim,
-          search_depth: searching ? searchDepth : undefined,
           batch_id: activeBatchId,
           selected_attachment_ids: activeSelection,
           source_job_id: lineage?.sourceJobId ?? null,
@@ -530,7 +527,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     providerId,
     promptId,
     searchPromptId,
-    searchDepth,
     searching,
     activeClaim,
     activeBatchId,
@@ -656,7 +652,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         // 사용자가 넣지 않은 조건이 생기고, 같은 청구항의 검색 범위가 실행한
         // 날에 따라 달라진다.
         search_cutoff_date: searchCutoffDate.trim() || null,
-        search_depth: searchDepth,
       });
       setJob(created);
       navigate(workspacePath("similarity_search"), { replace: true });
@@ -690,7 +685,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         source_job_id: job.id,
         search_component_ids: selectedGapIds,
         search_cutoff_date: searchCutoffDate.trim() || null,
-        search_depth: searchDepth,
       });
       setSearchClaimText(created.claim_text);
       setJob(created);
@@ -1059,13 +1053,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               </div>
             )}
 
-            <section className="input-panel search-panel-input">
-              <label className="search-cutoff-field">
-                <span><input type="checkbox" checked={searchDepth === "exhaustive"} disabled={running}
-                  onChange={e => setSearchDepth(e.target.checked ? "exhaustive" : "deep")} /> 정밀 검색</span>
-                <span className="hint">기본 검색은 빠른 검색에서 심층 검색으로 자동 확장합니다. 원문 근거가 확인된 X·Y가 없으면 정밀 검색을 제안합니다. 체크하면 처음부터 정밀 검색 예산으로 진행합니다.</span>
-              </label>
-            </section>
             <div className="notice info search-depth-notice">
               {progressiveSearch ? preflight?.message : "심층 검색 · 최대 80회 / 5분"}
               <div className="hint">구성별 검색으로 후보를 모으고, 원문에서 관계와 근거를 확인합니다.</div>
@@ -1436,12 +1423,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
                   ? ` + 물려받은 ${inheritedAnalysisAttachmentCount}건`
                   : ""}
               </strong>
-            </div>
-          )}
-          {searching && (
-            <div className="run-ready-row">
-              <span>검색 깊이</span>
-              <strong>{{ deep: "기본 검색 · 빠른 → 심층 자동", exhaustive: "정밀 검색" }[searchDepth]}</strong>
             </div>
           )}
           {searching && (

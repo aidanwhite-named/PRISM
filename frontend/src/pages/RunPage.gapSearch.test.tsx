@@ -112,17 +112,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('shows one precision checkbox before the claim and defaults to automatic basic search', async () => {
+it('shows the fixed search allowance without a precision option', async () => {
   window.location.hash = '#/search';
   render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
-  const depth = await screen.findByRole('checkbox', { name: /정밀 검색/ });
-  const claim = screen.getByRole('textbox', { name: '검색할 청구항' });
-  expect(depth.compareDocumentPosition(claim) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await screen.findByRole('textbox', { name: '검색할 청구항' });
+  expect(screen.queryByRole('checkbox', { name: /정밀 검색/ })).toBeNull();
+  expect(screen.getByText('심층 검색 · 최대 80회 / 5분')).toBeTruthy();
   expect(screen.queryByRole('combobox', { name: '검색 전략 프롬프트' })).toBeNull();
-  expect((depth as HTMLInputElement).checked).toBe(false);
   expect(screen.queryByRole('combobox', { name: '검색 깊이' })).toBeNull();
-  await userEvent.click(depth);
-  expect((depth as HTMLInputElement).checked).toBe(true);
+  expect(screen.queryByText('검색 깊이')).toBeNull();
 });
 
 it.each([

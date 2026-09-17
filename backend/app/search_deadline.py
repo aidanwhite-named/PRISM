@@ -149,6 +149,8 @@ def merge_usage(first, second):
 
 async def finish(provider, request, initial, emit, *, claim, deadline, cancelled, keep_raw=False):
     audit = {'attempted': False, 'completed': False, 'reason': '모델이 탐색 중 결과를 완성함'}
+    if initial.terminal_reason == 'search_checkpoint_failed':
+        return initial, {**audit, 'reason': '후보 저장 실패로 분류 중단', 'error': initial.error_message}
     if initial.terminal_reason == 'verified_x_early_stop' and not cancelled():
         return initial, {**audit, 'reason': '원문 근거 대조를 통과한 X 후보로 탐색 조기 종료'}
     if cancelled() or (initial.cancelled and not initial.tool_budget_exceeded) or initial.auth_required or initial.rate_limited:
@@ -214,7 +216,10 @@ async def finish(provider, request, initial, emit, *, claim, deadline, cancelled
     try:
         final = await provider.execute(follow_request, emit)
     except Exception as exc:
-        return initial, {**audit, 'reason': '분류 실행 오류; 기존 후보 보존', 'error': type(exc).__name__}
+        failed = copy.deepcopy(initial)
+        failed.terminal_reason = 'search_classification_failed'
+        failed.error_message = '검색 후보 분류 실행 중 오류가 발생했습니다: ' + type(exc).__name__
+        return failed, {**audit, 'reason': '분류 실행 오류; 기존 후보 보존', 'error': type(exc).__name__}
     (folder / 'output.txt').write_text(final.result_text, encoding='utf-8')
     write_json(folder / 'usage.json', final.usage)
     if keep_raw:
@@ -231,9 +236,10 @@ async def finish(provider, request, initial, emit, *, claim, deadline, cancelled
             raise ValueError(str(final_verdict.error_code))
         updated, missing = apply_assessments(report, final.result_text)
     except (ValueError, TypeError, KeyError, sm.SearchLogError) as exc:
-        if not merged.timed_out and not merged.tool_budget_exceeded:
-            merged.is_error = True
-            merged.error_message = '마감 분류를 완료하지 못했습니다.'
+        merged.is_error = True
+        merged.terminal_reason = 'search_classification_failed'
+        merged.error_message = ('검색 후보 분류 제한 시간을 초과했습니다.' if final.timed_out
+                                else '검색 후보 분류를 완료하지 못했습니다: ' + str(exc)[:300])
         return merged, {**audit, 'reason': '분류 미완료; 기존 후보 보존', 'error': str(exc)}
     # Only a valid model assessment completes the soft search timeout. Original
     # tool traces remain subject to normal policy/evidence checks in the runner.
@@ -241,7 +247,8 @@ async def finish(provider, request, initial, emit, *, claim, deadline, cancelled
     if missing:
         write_json(request.work_dir / search_agent_tools.CHECKPOINT, updated)
         # Preserve successful assessments without declaring missing rows complete.
-        merged.timed_out = True
+        merged.terminal_reason = 'search_classification_failed'
+        merged.error_message = f'검색 후보 {len(missing)}건의 분류 응답이 누락되었습니다. 완료된 분류는 보존했습니다.'
         return merged, {**audit, 'reason': '일부 후보 분류 미완료', 'missing_candidate_ids': missing}
     merged.timed_out = merged.tool_budget_exceeded = merged.content_read_budget_exceeded = False
     merged.cancelled = False

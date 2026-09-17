@@ -431,7 +431,7 @@ class CodexStreamParser:
                 detail = str(item.get("error") or status or "실패")[:300]
                 call["ok"] = False
                 call["error"] = detail
-                events.append(("tool_error", {"detail": detail, "name": item_type}))
+                events.append(("tool_error", {"detail": detail, "name": audit_name, "id": call_id}))
             elif status in _SUCCESS_STATUSES:
                 # 알려진 성공값을 실제로 보고한 항목만 성공으로 확정한다.
                 call["ok"] = True

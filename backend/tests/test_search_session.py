@@ -213,6 +213,61 @@ async def test_runner_stops_on_verified_x_without_overriding_user_cancel(tmp_pat
         assert done.is_set()
 
 
+@pytest.mark.parametrize('failure', ['approval', 'disk'])
+@pytest.mark.parametrize('user_cancelled', [False, True])
+async def test_checkpoint_failure_stops_search_and_preserves_prior_candidates(tmp_path, monkeypatch, failure, user_cancelled):
+    from app.providers.codex_stream import CodexStreamParser
+    from app.providers.base import ExecutionOutcome, ExecutionRequest
+    from app.evaluation.evaluator import evaluate
+    from app.enums import ErrorCode
+    from app import search_agent_tools
+
+    tools = SearchTools(values={}, work_dir=tmp_path)
+    original = {'candidates': [{'doc_number': 'JP7475618B1', 'group': None, 'note': '초기 후보'}]}
+    tools.call('save_candidates', {'report': original})
+    done = asyncio.Event()
+    events = []
+
+    class Provider:
+        stopped = False
+
+        async def execute(self, request, emit):
+            if failure == 'approval':
+                parser = CodexStreamParser()
+                for kind, payload in parser.feed(json.dumps({'type': 'item.completed', 'item': {
+                    'id': 'save-1', 'type': 'mcp_tool_call', 'server': 'prism-search', 'tool': 'save_candidates',
+                    'status': 'failed', 'error': {'message': 'MCP tool call requires approval, but approval policy is never'}}})):
+                    await emit(kind, payload)
+            else:
+                def fail_write(*args):
+                    raise OSError('disk full')
+                monkeypatch.setattr('app.search_engine.models.write_json', fail_write)
+                with pytest.raises(OSError, match='disk full'):
+                    tools.call('save_candidates', {'report': original})
+            if not user_cancelled:
+                await asyncio.wait_for(done.wait(), timeout=2)
+            return ExecutionOutcome(cancelled=True, timed_out=True)
+
+        async def cancel(self, job_id):
+            self.stopped = True
+            done.set()
+            return True
+
+    async def emit(kind, payload):
+        events.append((kind, payload))
+
+    provider = Provider()
+    outcome = await search_session.execute(provider, ExecutionRequest(job_id='test', work_dir=tmp_path,
+        system_prompt='', user_message=''), emit, cancelled=lambda: user_cancelled)
+    verdict = evaluate(outcome)
+    assert verdict.error_code == (ErrorCode.CANCELLED if user_cancelled else ErrorCode.SEARCH_CHECKPOINT_FAILED)
+    assert provider.stopped is not user_cancelled
+    assert search_agent_tools.load_checkpoint(tmp_path)['candidates'][0]['doc_number'] == 'JP7475618B1'
+    if not user_cancelled:
+        assert any(p.get('stage') == 'checkpoint_failed' for _, p in events)
+        assert ('approval policy is never' if failure == 'approval' else 'disk full') in verdict.errors[-1]
+
+
 def test_expired_kipris_code_and_no_repeat_within_run(tmp_path, monkeypatch):
     from app.patent_search import kipris_backend
     with pytest.raises(KiprisAPIError, match='이용기간 만료') as error:

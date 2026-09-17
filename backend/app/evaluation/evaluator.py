@@ -268,6 +268,17 @@ def evaluate(
     ):
         return Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, errors)
 
+    # These stages may stop the CLI internally or follow a soft search timeout.
+    # Preserve the actual failure instead of reporting the earlier search timer.
+    search_failures = {
+        'search_checkpoint_failed': (ErrorCode.SEARCH_CHECKPOINT_FAILED, '검색 후보를 저장하지 못했습니다.'),
+        'search_classification_failed': (ErrorCode.SEARCH_CLASSIFICATION_FAILED, '검색 후보 분류를 완료하지 못했습니다.'),
+    }
+    if outcome.terminal_reason in search_failures:
+        code, message = search_failures[outcome.terminal_reason]
+        errors.append(outcome.error_message or message)
+        return Verdict(JobStatus.FAILED, code, errors)
+
     # 최종 결과를 다 받은 뒤 CLI 가 안 죽어서 PRISM 이 끊은 실행은 타임아웃이
     # 아니다. 결과 텍스트·사용량·도구 기록이 전부 있으므로 아래의 인증·사용량·
     # 도구 정책 검사를 그대로 통과해야만 성공이 된다. 여기서 성공으로 건너뛰지

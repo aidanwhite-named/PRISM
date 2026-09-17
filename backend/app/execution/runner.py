@@ -980,7 +980,8 @@ class JobRunner:
                             "실행이 정상 완료되지 않아 최종 후보로 확정하지 않았습니다."
                         )
                     if not search_manifest.has_retrieval_attempt(outcome.tool_calls, outcome.tool_uses, journal):
-                        verdict = Verdict(JobStatus.FAILED, ErrorCode.SEARCH_NOT_PERFORMED, ["실제 검색 도구 호출이 없습니다."])
+                        if verdict.error_code not in (ErrorCode.SEARCH_CHECKPOINT_FAILED, ErrorCode.SEARCH_CLASSIFICATION_FAILED):
+                            verdict = Verdict(JobStatus.FAILED, ErrorCode.SEARCH_NOT_PERFORMED, ["실제 검색 도구 호출이 없습니다."])
                         raise search_manifest.SearchLogError("실제 검색 도구 호출이 없습니다.")
                     try:
                         reported, notes = search_manifest.parse(outcome.result_text, observed)

@@ -126,11 +126,31 @@ def review_x(tools, report, review):
 async def execute(provider, request, emit, *, cancelled):
     """Watch independently of model progress so a stalled CLI can still finish."""
     from types import SimpleNamespace
-    task = asyncio.create_task(provider.execute(request, emit))
+    save_error = None
+
+    async def observe(event_type, payload):
+        nonlocal save_error
+        if (event_type == 'tool_error' and payload.get('name') == 'mcp__prism-search__save_candidates'):
+            save_error = str(payload.get('detail') or '후보 저장 도구 호출 실패')[:300]
+        await emit(event_type, payload)
+
+    task = asyncio.create_task(provider.execute(request, observe))
     stop = None
     try:
         while not task.done():
             await asyncio.wait({task}, timeout=0.25)
+            # Server-side validation/filesystem errors are recorded even when a
+            # provider reports a successful MCP transport instead of tool_error.
+            if not save_error:
+                save_error = next((str(row.get('detail') or row.get('error_code') or '후보 저장 실패')[:300]
+                    for row in sm.read_tool_journal(request.work_dir)
+                    if row.get('tool') == 'save_candidates' and row.get('ok') is False), None)
+            if save_error and not cancelled():
+                if not task.done():
+                    await provider.cancel(request.job_id)
+                await emit('stage', {'stage': 'checkpoint_failed',
+                    'message': '검색 후보 저장에 실패하여 탐색을 중단합니다: ' + save_error})
+                break
             path = request.work_dir / STOP_FILE
             if cancelled() or not path.exists():
                 continue
@@ -151,6 +171,12 @@ async def execute(provider, request, emit, *, cancelled):
         if not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+    if save_error and not cancelled():
+        outcome.cancelled = False  # Internal stop, not user cancellation.
+        outcome.is_error = True
+        outcome.terminal_reason = 'search_checkpoint_failed'
+        outcome.error_message = '검색 후보 저장에 실패하여 탐색을 중단했습니다: ' + save_error
+        return outcome
     if stop is not None and not cancelled() and not (outcome.is_error or outcome.auth_required or outcome.rate_limited
             or outcome.tool_budget_exceeded or outcome.content_read_budget_exceeded or outcome.permission_denials):
         outcome.result_text = json.dumps(stop, ensure_ascii=False)

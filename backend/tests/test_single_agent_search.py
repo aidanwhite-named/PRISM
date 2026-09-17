@@ -264,6 +264,7 @@ def test_codex_cli_override_keys_are_not_quoted(tmp_path):
     assert any(arg.startswith("mcp_servers.prism-search.env.PRISM_DATA_DIR=") for arg in args)
     assert not any('mcp_servers."' in arg for arg in args)
     assert 'mcp_servers.prism-search.default_tools_approval_mode="writes"' in args
+    assert 'mcp_servers.prism-search.tools.save_candidates.approval_mode="approve"' in args
 
 def test_mcp_protocol_is_utf8_and_tool_errors_are_not_protocol_errors(client, tmp_path):
     import os

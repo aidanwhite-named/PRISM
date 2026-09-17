@@ -311,9 +311,10 @@ class CodexCliProvider(Provider):
                 ]
             enabled = [name.removeprefix("mcp__prism-search__") for name in policy.mcp_tools]
             args += ["-c", f"{prefix}.enabled_tools={json.dumps(enabled)}"]
-            # Only PRISM's explicitly listed, read-only tools are unattended.
-            # Keep approval requirements for any write-capable tool.
+            # Keep approval requirements for writes except the job-local shortlist.
             args += ["-c", f'{prefix}.default_tools_approval_mode="writes"']
+            if "save_candidates" in enabled:
+                args += ["-c", f'{prefix}.tools.save_candidates.approval_mode="approve"']
             args += ["-c", f"{prefix}.required=true"]
         # 마지막 인수. 프롬프트를 stdin 에서 읽는다 — Windows 의 명령행 길이
         # 제한(32,767자) 때문에 인수로는 긴 프롬프트를 넘길 수 없다.

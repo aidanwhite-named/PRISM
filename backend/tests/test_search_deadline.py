@@ -112,6 +112,47 @@ async def test_soft_search_timeout_finishes_with_classification_in_remaining_tim
     assert search_agent_tools.load_checkpoint(tmp_path)['candidates'][0]['group'] == 'A'
 
 
+async def test_checkpoint_failure_does_not_start_classification(tmp_path):
+    initial = ExecutionOutcome(terminal_reason='search_checkpoint_failed', error_message='후보 저장 승인 거부')
+    provider = Finisher()
+    outcome, audit = await deadline.finish(provider,
+        ExecutionRequest(job_id='x', work_dir=tmp_path, system_prompt='', user_message=''), initial, noop,
+        claim='청구항', deadline=time.monotonic() + 100, cancelled=lambda: False)
+    assert outcome is initial and not audit['attempted']
+    assert not provider.requests
+    assert audit['error'] == initial.error_message
+
+
+@pytest.mark.parametrize('failure', ['timeout', 'invalid_json', 'missing', 'exception'])
+async def test_classification_failure_is_distinct_from_search_timeout(tmp_path, failure):
+    from app.evaluation.evaluator import evaluate
+    from app.enums import ErrorCode
+    SearchTools(values={}, work_dir=tmp_path).call('save_candidates', {'report': report()})
+    initial = ExecutionOutcome(timed_out=True, terminal_reason='timeout', tool_policy=WEB_SEARCH,
+        tool_calls=[{'name': 'WebSearch', 'input': {'query': 'joint'}, 'ok': True}], tool_uses=['WebSearch'])
+    output = ExecutionOutcome(exit_code=0, tool_policy=NO_TOOLS,
+        timed_out=failure == 'timeout', result_text=('not JSON' if failure == 'invalid_json' else
+                                                   json.dumps({'assessments': [assessment()]})))
+    provider = Finisher(output)
+    if failure == 'exception':
+        async def raise_error(*args):
+            raise RuntimeError('classification process failed')
+        provider.execute = raise_error
+    merged, audit = await deadline.finish(provider,
+        ExecutionRequest(job_id='x', work_dir=tmp_path, system_prompt='', user_message=''), initial, noop,
+        claim='청구항', deadline=time.monotonic() + 100, cancelled=lambda: False)
+    verdict = evaluate(merged)
+    assert verdict.error_code == ErrorCode.SEARCH_CLASSIFICATION_FAILED
+    assert '실행 제한 시간을 초과했습니다.' not in verdict.errors
+    assert audit['attempted'] and not audit['completed']
+    saved = search_agent_tools.load_checkpoint(tmp_path)['candidates']
+    assert len(saved) == 2
+    if failure == 'missing':
+        assert saved[0]['group'] == 'A' and saved[1]['group'] is None
+    if failure == 'timeout':
+        assert '분류 제한 시간' in verdict.errors[-1]
+
+
 @pytest.mark.parametrize('cancelled,remaining', [(True, 100), (False, 3)])
 async def test_cancellation_and_overall_deadline_do_not_start_new_model(tmp_path, cancelled, remaining):
     SearchTools(values={}, work_dir=tmp_path).call('save_candidates', {'report': report()})
@@ -161,3 +202,21 @@ def test_runner_soft_deadline_is_success_after_model_classifies(client, monkeypa
     assert manifest['deadline_classification']['completed']
     assert manifest['reported']['candidates'][0]['group'] == 'A'
     assert manifest['reported']['candidates'][1]['note'].startswith('자료 부족:')
+
+
+@pytest.mark.usefixtures('legacy_search')
+def test_runner_preserves_checkpoint_failure_instead_of_timeout_or_no_search(client, monkeypatch):
+    from .fake_provider import DeterministicSearchProvider
+    from .conftest import wait_for_job
+    async def execute(self, request, emit):
+        await emit('tool_error', {'name': 'mcp__prism-search__save_candidates',
+            'detail': 'MCP tool call requires approval, but approval policy is never'})
+        return ExecutionOutcome(timed_out=True, tool_policy=request.tool_policy)
+    monkeypatch.setattr(DeterministicSearchProvider, 'execute', execute)
+    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
+                                          'claim_text': '청구항 1. 센서를 포함하는 장치'}).json()
+    job = wait_for_job(client, created['id'])
+    assert job['status'] == 'FAILED'
+    assert job['error_code'] == 'SEARCH_CHECKPOINT_FAILED', job['errors']
+    assert 'approval policy is never' in ' '.join(job['errors'])
+    assert not job['search_manifest']['deadline_classification']['attempted']
