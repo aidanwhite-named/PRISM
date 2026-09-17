@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import AnswerContextView from "../components/AnswerContextView";
+import SearchContinuation from "../components/SearchContinuation";
 
 import GapSearchPanel from "../components/GapSearchPanel";
 import AnalysisDegreeOverview from "../components/AnalysisDegreeOverview";
@@ -235,7 +236,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [promptId, setPromptId] = useState("");
   // 검색 깊이에 따라 검색·후속 탐색·원문 확인의 공통 예산을 정한다.
-  const [searchDepth, setSearchDepth] = useState<"fast" | "deep" | "exhaustive">("deep");
+  const [searchDepth, setSearchDepth] = useState<"deep" | "exhaustive">("deep");
   // 빈 문자열 = 지정 안 함. 제한된 안전성 Provider 가 자동으로 선택되면
   // 사용자가 위험을 확인하지 않은 채 실행하게 된다.
   // 두 작업은 기본 도구를 따로 둔다. 분석 화면에서도 검색 도구가 필요하다 —
@@ -1060,14 +1061,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
             <section className="input-panel search-panel-input">
               <label className="search-cutoff-field">
-                검색 깊이
-                <select aria-label="검색 깊이" value={searchDepth} disabled={running}
-                  onChange={e => setSearchDepth(e.target.value as "fast" | "deep" | "exhaustive")}>
-                  <option value="fast">빠른 검색 · 후보 우선 확인</option>
-                  <option value="deep">심층 검색 · 필요할 때 자동 확장</option>
-                  <option value="exhaustive">정밀 검색 · 더 많은 후보·원문 확인</option>
-                </select>
-                <span className="hint">검색·원문 확인에 사용할 시간과 후보 수를 정합니다. X가 미확인이고 관련 후보와 예산이 남으면 인용·피인용 문헌도 조회합니다.</span>
+                <span><input type="checkbox" checked={searchDepth === "exhaustive"} disabled={running}
+                  onChange={e => setSearchDepth(e.target.checked ? "exhaustive" : "deep")} /> 정밀 검색</span>
+                <span className="hint">기본 검색은 빠른 검색에서 심층 검색으로 자동 확장합니다. 원문 근거가 확인된 X·Y가 없으면 정밀 검색을 제안합니다. 체크하면 처음부터 정밀 검색 예산으로 진행합니다.</span>
               </label>
             </section>
             <div className="notice info search-depth-notice">
@@ -1445,7 +1441,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           {searching && (
             <div className="run-ready-row">
               <span>검색 깊이</span>
-              <strong>{{ fast: "빠른 검색", deep: "심층 검색", exhaustive: "정밀 검색" }[searchDepth]}</strong>
+              <strong>{{ deep: "기본 검색 · 빠른 → 심층 자동", exhaustive: "정밀 검색" }[searchDepth]}</strong>
             </div>
           )}
           {searching && (
@@ -1599,6 +1595,12 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
       {activeTab === "result" && job && (
         <div className="card result-card">
+          <SearchContinuation key={job.id} job={job} disabled={busy || submitting}
+            onContinued={continued => {
+              setJob(continued);
+              navigate(workspacePath("similarity_search"), { replace: true });
+              setActiveTab("result");
+            }} />
           <div className="split" style={{ marginBottom: 12 }}>
             <h2 style={{ margin: 0 }}>
               {job.job_kind === "similarity_search"
@@ -1755,7 +1757,14 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           {job.job_kind === "patent_analysis" &&
             !running &&
             job.analysis_manifest && (
-              <AnalysisDegreeOverview components={job.analysis_manifest.items} />
+              <>
+                {job.analysis_manifest.evidence_review && <div className={`notice ${job.analysis_manifest.evidence_review.status === "reviewed" ? "info" : "warn"}`}>
+                  {job.analysis_manifest.evidence_review.status === "reviewed"
+                    ? "원문 후보의 의미 대응을 별도로 재검토했습니다. AI 평가이며 검토 후보 범위에 한정됩니다."
+                    : "근거 재검토가 완료되지 않은 부분이 있습니다. 미검증 초안의 점수·발췌·문헌 순위를 확정 결과로 보지 마세요."}
+                </div>}
+                <AnalysisDegreeOverview components={job.analysis_manifest.items} />
+              </>
             )}
 
           {job.job_kind === "patent_analysis" && !running && <>

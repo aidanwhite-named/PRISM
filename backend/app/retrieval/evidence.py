@@ -48,7 +48,7 @@ BUNDLE_STATUSES = (
 )
 
 STATUS_LABEL = {
-    STATUS_MATCHED: "검토 범위에서 대응 구간을 확인함",
+    STATUS_MATCHED: "원문 후보 구간 확보 · 의미 대응은 별도 재검토 필요",
     STATUS_NOT_FOUND_SCOPE: NOT_FOUND_PHRASE,
     STATUS_COVERAGE: "검토 범위가 부족해 대응 여부를 확정하지 못함",
     STATUS_UNREADABLE: "텍스트를 얻지 못한 문헌이 있어 확인하지 못함",
@@ -367,8 +367,7 @@ class EvidenceBuilder:
                     )
 
         if findings:
-            # 근거가 있으면 대응을 확인한 것이다. 다만 검토 범위 제한은 그대로
-            # 남겨서 최종 분석이 그것을 보고 판단하게 한다.
+            # Legacy status name means a real source span was found, not semantic entailment.
             return STATUS_MATCHED, reasons
 
         # 근거가 없는 경우에만 "없음"에 가까운 상태가 후보가 된다.
@@ -483,6 +482,7 @@ class EvidenceBuilder:
             components.append(
                 {
                     "component_id": state.id,
+                    "semantic_verified": False,
                     "claim_component": state.label,
                     "feature": state.feature,
                     "declared_importance": state.declared_importance,

@@ -111,15 +111,34 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it('shows search depth before the claim and hides the search strategy selector', async () => {
+it('shows one precision checkbox before the claim and defaults to automatic basic search', async () => {
   window.location.hash = '#/search';
   render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
-  const depth = await screen.findByRole('combobox', { name: '검색 깊이' });
+  const depth = await screen.findByRole('checkbox', { name: /정밀 검색/ });
   const claim = screen.getByRole('textbox', { name: '검색할 청구항' });
   expect(depth.compareDocumentPosition(claim) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByRole('combobox', { name: '검색 전략 프롬프트' })).toBeNull();
-  await userEvent.selectOptions(depth, 'exhaustive');
-  expect((depth as HTMLSelectElement).value).toBe('exhaustive');
+  expect((depth as HTMLInputElement).checked).toBe(false);
+  expect(screen.queryByRole('combobox', { name: '검색 깊이' })).toBeNull();
+  await userEvent.click(depth);
+  expect((depth as HTMLInputElement).checked).toBe(true);
+});
+
+it.each([
+  ['reviewed', '원문 후보의 의미 대응을 별도로 재검토했습니다.'],
+  ['incomplete', '근거 재검토가 완료되지 않은 부분이 있습니다.'],
+])('shows the evidence review status %s before the report', async (status, message) => {
+  const { api } = await import('../lib/api');
+  vi.mocked(api.historyItem).mockResolvedValueOnce({
+    ...job,
+    analysis_manifest: { ...job.analysis_manifest!, evidence_review: { status, issues: [], calls: 1 } },
+  });
+  window.location.hash = `#/analysis?job=${JOB_ID}`;
+  render(<RunSessionProvider><HashRouter><RunPage kind="patent_analysis" /></HashRouter></RunSessionProvider>);
+  const notice = await screen.findByText((text) => text.startsWith(message));
+  const report = document.querySelector('.result');
+  expect(report).toBeTruthy();
+  expect(notice.compareDocumentPosition(report!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 describe("종속항 추가 분석", () => {

@@ -56,6 +56,11 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, depth, v
     engine = Engine(claim=claim, directory=work_dir, inference=inference, values=values, depth=depth,
                     cutoff=cutoff, strategy=strategy, specification=specification, focus=focus,
                     emit=publish, cancelled=cancelled)
+    resume_path = work_dir / 'resume-search.json'
+    if resume_path.exists():
+        checkpoint = json.loads(resume_path.read_text(encoding='utf-8'))
+        engine.restore(checkpoint)
+        inference.calls = list(checkpoint['snapshot']['usage'].get('stages', []))
     error = None
     try:
         await engine.run()
@@ -75,6 +80,7 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, depth, v
         data = manifest(snapshot, claim=claim, provider=provider.id, model=model, **prompt_metadata)
         text = render(snapshot)
         write_json(work_dir / 'engine.json', snapshot)
+        write_json(work_dir / 'checkpoint.json', engine.checkpoint())
         write_json(work_dir / 'search_manifest.json', data)
         (work_dir / 'result.md').write_text(text, encoding='utf-8')
         status = JobStatus.CANCELLED if cancelled() else JobStatus.FAILED if error else JobStatus.SUCCEEDED

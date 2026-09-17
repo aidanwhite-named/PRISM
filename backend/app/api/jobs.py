@@ -1295,6 +1295,61 @@ async def cancel_job(job_id: str, session: Session = Depends(get_db)) -> dict:
     return {"cancelled": cancelled}
 
 
+@router.post("/jobs/{job_id}/continue-search", response_model=JobOut, status_code=201)
+async def continue_search(job_id: str, session: Session = Depends(get_db)) -> JobOut:
+    """Create an isolated continuation, keeping the original result and cumulative budgets."""
+    source = session.get(ExecutionJob, job_id)
+    if source is None:
+        raise HTTPException(404, "작업을 찾을 수 없습니다.")
+    values = settings_service.get_all(session)
+    snapshot = (source.search_manifest or {}).get('engine') or {}
+    if (source.job_kind != JobKind.SIMILARITY_SEARCH or source.status != JobStatus.SUCCEEDED
+            or source.search_depth == 'exhaustive' or not snapshot.get('can_continue')
+            or not values.get('progressive_search_enabled', True)):
+        raise HTTPException(409, "완료된 기본 검색에서만 정밀 검색을 이어갈 수 있습니다.")
+    # Repeated clicks/requests return the same continuation instead of spending twice.
+    existing = session.query(ExecutionJob).filter_by(
+        source_job_id=source.id, job_kind=JobKind.SIMILARITY_SEARCH,
+        search_depth='exhaustive').first()
+    if existing is not None:
+        return _job_out(existing)
+    try:
+        checkpoint = json.loads((Path(source.work_dir) / 'checkpoint.json').read_text(encoding='utf-8'))
+        if checkpoint.get('version') != 2:
+            raise ValueError('unsupported checkpoint')
+    except (OSError, ValueError, TypeError) as exc:
+        raise HTTPException(409, "이 검색의 이어가기 자료를 읽을 수 없습니다.") from exc
+    from ..search_engine.models import Limits, write_json
+    limits = Limits.for_depth('exhaustive', values)
+    if limits.seconds - checkpoint['snapshot']['elapsed_seconds'] < 30:
+        raise HTTPException(409, "정밀 검색의 총 시간 예산이 부족합니다. 환경설정의 검색 예산을 확인하십시오.")
+    copied = {name: getattr(source, name) for name in (
+        'prompt_id', 'prompt_name', 'prompt_snapshot', 'prompt_capabilities', 'output_mode',
+        'claim_text', 'search_focus', 'search_cutoff_date', 'provider', 'model')}
+    job = ExecutionJob(**copied, job_kind=JobKind.SIMILARITY_SEARCH,
+                       search_depth='exhaustive', status=JobStatus.QUEUED,
+                       source_job_id=source.id, source_job_label=source_label(source))
+    session.add(job)
+    session.flush()
+    work_dir = PATHS.run_dir(job.id)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    job.work_dir = str(work_dir)
+    try:
+        _clone_parent_attachments(session, source, job, work_dir, None)
+    except AttachmentCloneError as exc:
+        raise HTTPException(409, f"명세서를 이어받지 못했습니다: {exc}") from exc
+    write_json(work_dir / 'resume-search.json', checkpoint)
+    # Pin shared evidence before the source job can be deleted or retention runs.
+    from ..patent_search import retention
+    from ..execution.runner import _evidence_artifact_ids
+    for aid in _evidence_artifact_ids(source.search_manifest):
+        retention.reference(session, job.id, aid)
+    session.commit()
+    session.refresh(job)
+    await RUNNER.submit(job.id)
+    return _job_out(job)
+
+
 @router.get("/jobs/{job_id}/events")
 async def stream_events(job_id: str, request: Request, after: int = 0) -> StreamingResponse:
     """SSE. 단방향이므로 WebSocket 대신 이걸 쓴다. 취소는 별도 POST."""

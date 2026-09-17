@@ -253,6 +253,7 @@ export interface AnalysisComponent {
 }
 
 export interface AnalysisManifest {
+  evidence_review?: { status: string; issues: string[]; calls: number };
   version: number;
   threshold: number;
   items: AnalysisComponent[];
@@ -334,6 +335,8 @@ export interface LegacySearchManifest {
 export type SearchManifest = SearchManifestV14 | LegacySearchManifest;
 
 export interface ProgressiveSearchSnapshot {
+  verified_match?: boolean;
+  can_continue?: boolean;
   version: number; phase: string; stop_reason: string; depth: string;
   elapsed_seconds: number; first_candidate_seconds: number | null;
   route?: { lane: string; outcome?: string; reason?: string; seconds?: number }[];

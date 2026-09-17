@@ -8,6 +8,7 @@ from .categories import DEFINITIONS, normalize, display_order
 MATCHES = {'explicit': '명시적 대응', 'semantic': '의미상 대응', 'partial': '부분 대응',
            'absent': '검토 passage에 대응 없음', 'unknown': '미확인'}
 STOPS = {'running': '검색 중', 'verified_feature_coverage': '구성별 원문 근거 확보',
+         'verified_xy': '원문 근거가 확인된 X·Y 문헌 확보',
          'bounded_expansion_complete': '정해진 범위의 확장 완료', 'fast_budget_complete': '빠른 검색 범위 완료',
          'deadline_reserve': '시간 예산 종료 · 확보한 후보 보존', 'cancelled': '사용자 중단 · 확보한 후보 보존',
          'engine_error': '오류 · 확보한 후보 보존'}
@@ -48,10 +49,13 @@ def render(snapshot):
     if snapshot.get('route'):
         lines += ['', '## 검색 경로', '']
         for step in snapshot['route']:
-            label = {'relation_seed': '관계 중심 검색', 'citations': '인용·피인용 검색'}.get(step['lane'], '기존 특허·논문 검색')
+            label = {'relation_seed': '관계 중심 검색', 'citations': '인용·피인용 검색',
+                     'continuation': '정밀 검색 이어서 진행'}.get(step['lane'], '기존 특허·논문 검색')
             outcome = {'verified_x': '구성별 원문 근거가 있는 X 후보 확인', 'no_verified_x': 'X 미확인',
+                       'verified_xy': '원문 근거가 있는 X·Y 후보 확인', 'no_verified_xy': 'X·Y 미확인',
+                       'resumed': '이전 후보·원문 근거와 사용량을 이어받음',
                        'candidates_merged': '발견한 후보를 합쳐 원문 검증 대상으로 전달',
-                       'skipped': '지원되는 후보·검색어 또는 잔여 예산 부족으로 생략'}.get(step.get('outcome'), 'X 미확인으로 후속 검색')
+                       'skipped': '지원되는 후보·검색어 또는 잔여 예산 부족으로 생략'}.get(step.get('outcome'), 'X·Y 미확인으로 후속 검색')
             lines += [f'- {label}: {outcome}']
     candidates = display_order([c for c in snapshot['candidates'] if c['date_status'] != 'after_cutoff'])
     lines += ['', f'## 후보 {len(candidates)}건', '']

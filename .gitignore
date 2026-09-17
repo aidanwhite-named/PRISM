@@ -20,3 +20,4 @@ data/
 
 # 빌드 캐시
 frontend/tsconfig.tsbuildinfo
+.pnpm/

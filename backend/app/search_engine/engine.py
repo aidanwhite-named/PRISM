@@ -11,7 +11,7 @@ from ..config import PATHS
 from ..patent_search.artifacts import ArtifactStore
 from ..patent_search.literature_client import arxiv_identity
 from ..retrieval.extraction import PageRecord
-from .models import Limits, Ledger, identifier, write_json, tokens
+from .models import Candidate, Feature, Limits, Ledger, identifier, write_json, tokens
 from .planner import PLAN_SYSTEM, RECOVERY_SYSTEM, parse_plan, fallback_plan, initial_queries, expanded_queries, seed_queries
 from .ranking import rank, diverse_top, metadata_excerpt, seed_shortlist
 from .sources import Sources
@@ -61,6 +61,7 @@ class Engine:
         self.route = []
         self.stage_deadline = None
         self.citation_edges = []
+        self.resumed = False
 
     def remaining(self, reserve=5):
         deadline = min(self.deadline, self.stage_deadline or self.deadline)
@@ -80,11 +81,40 @@ class Engine:
                 for call in self.inference.usage().get('stages', []) if call.get('output_partial')], 'usage': self.inference.usage(),
             'elapsed_seconds': round(time.monotonic() - self.started, 3),
             'first_candidate_seconds': self.first_candidate_seconds, 'http_fetches': self.http_fetches,
+            'verified_match': self.sufficient(),
+            'can_continue': self.phase == 'complete' and self.depth != 'exhaustive'
+                and self.stop_reason not in ('cancelled', 'engine_error'),
             'coverage': 'not_established', 'cutoff': self.cutoff or None}
+
+    def checkpoint(self):
+        return {'version': 2, 'snapshot': self.snapshot(), 'context': self.context,
+                'passages': self.passages, 'verified': list(self.verified),
+                'attempted_documents': list(self.attempted_documents),
+                'failed_sources': list(self.failed_sources)}
+
+    def restore(self, checkpoint):
+        """Continue within cumulative budgets; time spent waiting for the user is excluded."""
+        saved = checkpoint['snapshot']
+        self.features = [Feature(**row) for row in saved['features']]
+        self.ledger.candidates = {row['id']: Candidate(**row) for row in saved['candidates']}
+        self.context = checkpoint['context']
+        self.passages = checkpoint['passages']
+        self.verified = set(checkpoint['verified'])
+        self.attempted_documents = set(checkpoint['attempted_documents'])
+        self.failed_sources = set(checkpoint['failed_sources'])
+        for name in ('queries', 'seed_queries', 'route', 'citation_edges', 'warnings',
+                     'first_candidate_seconds', 'http_fetches'):
+            setattr(self, name, saved.get(name, getattr(self, name)))
+        self.started = time.monotonic() - saved['elapsed_seconds']
+        self.deadline = self.started + self.limits.seconds
+        self.resumed = True
+        self.route.append({'lane': 'continuation', 'outcome': 'resumed',
+                           'previous_seconds': saved['elapsed_seconds']})
 
     async def publish(self):
         self.ledger.save()
         write_json(self.directory / 'engine.json', self.snapshot())
+        write_json(self.directory / 'checkpoint.json', self.checkpoint())
         if self.emit:
             await self.emit(self.snapshot())
 
@@ -205,11 +235,14 @@ class Engine:
         tasks = []
         # Alternate sources so every feature gets a first attempt within the small budget.
         for index, (feature, query) in enumerate(queries):
-            source = 'epo' if index % 2 == 0 else 'openalex'
+            source = 'epo' if index % 2 == 0 and self.values.get('epo_integration_enabled', False) else 'openalex'
             if source == 'openalex' and self.context:
                 query = ' '.join(dict.fromkeys((self.context + ' ' + query).split()))
             tasks.append(self.query(source, query, feature))
-        if queries:
+        if len(queries) == 1 and self.values.get('epo_integration_enabled', False):
+            feature, query = queries[0]
+            tasks.append(self.query('openalex', query, feature))
+        if queries and self.arxiv_relevant():
             # Abstract indexes often omit the relation's input. Keep a broader
             # operation/domain branch alongside the narrow relation query.
             feature, query = queries[-2] if len(queries) > 2 else queries[-1]
@@ -221,6 +254,21 @@ class Engine:
         # With no API candidates there is nothing to verify, so use web immediately.
         if not self.ledger.candidates and self.remaining() > 40:
             await self.web_seeds(queries)
+
+    def arxiv_relevant(self):
+        # Only seed a small parallel arXiv branch for matching subject areas.
+        text = ' '.join([self.claim, self.context] + [t for f in self.features for t in f.terms]).lower()
+        return bool(re.search(r'\b(neural|transformer|gaussian|quantum|robotics|splatting|'
+                              r'machine learning|deep learning|computer vision|language model|'
+                              r'physics|astronomy)\b|신경망|딥러닝|기계학습|양자|컴퓨터\s*비전', text))
+
+    async def supplement_arxiv(self):
+        if self.sufficient() or any(q['source'] == 'arxiv' for q in self.queries):
+            return
+        queries = initial_queries(self.features, self.context)
+        if queries and self.remaining() > 25:
+            feature, query = queries[-1]
+            await self.query('arxiv', query, feature)
 
     async def triage(self):
         """A small metadata shortlist, never evidence or a claim match verdict."""
@@ -388,15 +436,24 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
         await self.publish()
 
     def sufficient(self):
-        # A direct, evidenced single-document match can stop; separate papers do not combine into anticipation.
-        return any(normalize((c.document_classification or {}).get('group')) == 'X'
-                   and all(any(e['feature'] == f.id and e['match'] in ('explicit', 'semantic')
-                           and e['quote_verified'] and e['locator']['scope'] in ('full_text', 'claims', 'description')
-                           for e in c.evidence) for f in self.features)
-                   for c in self.ordered() if c.date_status in ('no_date_limit', 'within_cutoff'))
+        # X needs every feature; Y needs a verified core relation. Abstract labels cannot stop search.
+        for candidate in self.ordered():
+            if candidate.date_status not in ('no_date_limit', 'within_cutoff'):
+                continue
+            group = normalize((candidate.document_classification or {}).get('group'))
+            matched = {e['feature'] for e in candidate.evidence
+                       if e['match'] in ('explicit', 'semantic') and e.get('quote_verified')
+                       and (e.get('locator') or {}).get('scope') in ('full_text', 'claims', 'description')}
+            if group == 'X' and self.features and all(f.id in matched for f in self.features):
+                return True
+            if group == 'Y' and any(e['feature'] in matched and e.get('relation', '').strip()
+                                    for e in candidate.evidence):
+                return True
+        return False
 
     async def expand(self):
         self.phase = 'deep'
+        await self.supplement_arxiv()
         discovered = {d['feature'] for c in self.ledger.candidates.values() for d in c.discoveries}
         missing = [(feature, query) for feature, query in initial_queries(self.features, self.context)
                    if feature != 'context' and feature not in discovered]
@@ -408,7 +465,7 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
         for i, (feature, query) in enumerate(branches):
             if self.remaining() < 25 or self.cancelled():
                 break
-            source = 'epo' if i % 2 == 0 else 'openalex'
+            source = 'epo' if i % 2 == 0 and self.values.get('epo_integration_enabled', False) else 'openalex'
             await self.query(source, query, feature, **({'fulltext': True} if source == 'epo' else {}))
         # Classification from an actual seed is a separate discovery branch, never a global filter.
         seed = next((c for c in self.ordered() if c.fields.get('ipc')), None)
@@ -419,11 +476,15 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
                                  fulltext=True, classification=match.group().replace(' ', ''))
 
     async def run(self):
-        await self.plan()
-        if not self.cancelled():
+        if not self.resumed:
+            await self.plan()
+            if self.depth != 'fast':
+                self.stage_deadline = min(self.deadline,
+                    self.started + Limits.for_depth('fast', self.values).seconds)
+        if not self.resumed and not self.cancelled():
             await self.search_relation_seeds()
-        if not self.sufficient() and not self.cancelled():
-            self.route.append({'lane': 'existing_search', 'reason': 'no_verified_x',
+        if not self.resumed and not self.sufficient() and not self.cancelled():
+            self.route.append({'lane': 'existing_search', 'reason': 'no_verified_xy',
                                'remaining_seconds': round(self.remaining(), 1)})
             self.ledger.event('search_transition', **self.route[-1])
             await self.discover()
@@ -436,8 +497,9 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
                 await self.triage()
             if not self.cancelled():
                 await self.verify_candidates(2)
-        if self.sufficient():
-            self.stop_reason = 'verified_feature_coverage'
+        self.stage_deadline = None
+        if self.sufficient() and not self.resumed:
+            self.stop_reason = 'verified_xy'
         elif self.depth != 'fast' and self.remaining() > 30 and not self.cancelled():
             await self.expand()
             await self.verify_candidates(3 if self.depth == 'deep' else 5)
@@ -452,7 +514,7 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
                     await self.query('epo', row['query'], row['feature'], fulltext=row.get('fulltext', False), begin=coverage['next_begin'])
             await self.verify_candidates(5)
         if self.sufficient():
-            self.stop_reason = 'verified_feature_coverage'
+            self.stop_reason = 'verified_xy'
         if self.cancelled():
             self.stop_reason = 'cancelled'
         elif self.remaining() <= 1:
@@ -462,10 +524,10 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
         return self.snapshot()
 
     async def search_citations(self, *, verify=True):
-        """One hop from at most one patent and one paper, only after X is unconfirmed."""
+        """One hop from at most one patent and one paper, only after X/Y is unconfirmed."""
         if self.sufficient() or self.cancelled():
             return
-        route = {'lane': 'citations', 'reason': 'no_verified_x'}
+        route = {'lane': 'citations', 'reason': 'no_verified_xy'}
         self.route.append(route)
         calls = len(self.inference.usage().get('stages', []))
         if (self.remaining() < 35 or len(self.queries) + 2 > self.limits.queries
@@ -495,7 +557,8 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
         before = set(self.ledger.candidates)
         self.phase = 'citations'
         # Leave a verification window. All stages still share the global deadline.
-        self.stage_deadline = min(self.deadline - 25, started + 30)
+        previous_deadline = self.stage_deadline
+        self.stage_deadline = min(self.deadline - 25, previous_deadline or self.deadline, started + 30)
         try:
             for direction in ('backward', 'forward'):
                 for source, seed in seeds:
@@ -534,18 +597,18 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
                     self.ledger.event('query_finished', **row)
                     await self.publish()
         finally:
-            self.stage_deadline = None
+            self.stage_deadline = previous_deadline
         new = [c for c in self.ordered() if c.id not in before and c.id not in self.attempted_documents]
         if verify and new and self.remaining() > 20 and not self.cancelled():
             await self.verify_candidates(2, selected=seed_shortlist(new, self.features, 2))
-        route.update(outcome=('candidates_merged' if not verify else 'verified_x' if self.sufficient() else 'no_verified_x'),
+        route.update(outcome=('candidates_merged' if not verify else 'verified_xy' if self.sufficient() else 'no_verified_xy'),
                      new_candidates=len(new), edges=len(self.citation_edges), seconds=round(time.monotonic() - started, 3))
         self.ledger.event('citation_stage_finished', **route)
         await self.publish()
 
     async def search_relation_seeds(self):
         """One bounded attempt; retain candidates and leave room for the old path."""
-        reserve = 20 if self.depth == 'fast' else 45
+        reserve = 10 if self.stage_deadline is not None else 20 if self.depth == 'fast' else 45
         budget = min(60, self.remaining(0) - reserve)
         # Reserve at least half the query budget, plus a later verification call.
         query_slots = min(2, max(0, (self.limits.queries - len(self.queries)) // 2))
@@ -557,7 +620,8 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
         row = {'lane': 'relation_seed', 'budget_seconds': round(budget, 1)}
         self.route.append(row)
         self.phase = 'relation_seed'
-        self.stage_deadline = started + budget
+        previous_deadline = self.stage_deadline
+        self.stage_deadline = min(previous_deadline or self.deadline, started + budget)
         self.ledger.event('seed_stage_started', **row)
         try:
             queries = [('seed', q) for q in self.seed_queries[:query_slots]]
@@ -578,13 +642,13 @@ Return ONLY {"candidate_ids":["id1","id2","id3"]}. This is a provisional shortli
             selected = seed_shortlist(self.ordered(), self.features)
             if selected and self.remaining() >= 25:
                 await self.verify_candidates(2, selected=selected)
-            row.update(outcome='verified_x' if self.sufficient() else 'no_verified_x',
+            row.update(outcome='verified_xy' if self.sufficient() else 'no_verified_xy',
                        candidates=len(self.ledger.candidates))
         except Exception as exc:
-            row.update(outcome='no_verified_x', error=type(exc).__name__ + ': ' + str(exc)[:180])
+            row.update(outcome='no_verified_xy', error=type(exc).__name__ + ': ' + str(exc)[:180])
             self.warnings.append('relation_seed: ' + row['error'])
         finally:
-            self.stage_deadline = None
+            self.stage_deadline = previous_deadline
             row['seconds'] = round(time.monotonic() - started, 3)
             self.ledger.event('seed_stage_finished', **row)
             await self.publish()

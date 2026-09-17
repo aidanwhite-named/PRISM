@@ -76,12 +76,14 @@ export default function ProgressiveSearchResults({ data }: { data: ProgressiveSe
       <p>관련성은 아래 구성별 원문 근거로 확인하세요. 미확인 항목은 문헌에 없다는 뜻이 아니며, 검색 누락이 없음을 보장하지 않습니다.</p>
       <p>원문 인용을 대조한 후보: {eligible.filter(c => c.evidence.some(e => e.quote_verified)).length}건</p>
       {data.route?.map((step, index) => <p key={index}>
-        {step.lane === "relation_seed" ? "관계 중심 검색" : step.lane === "citations" ? "인용·피인용 검색" : "기존 특허·논문 검색"}
+        {step.lane === "continuation" ? "이전 후보·근거를 이어받아 정밀 검색" : step.lane === "relation_seed" ? "관계 중심 검색" : step.lane === "citations" ? "인용·피인용 검색" : "기존 특허·논문 검색"}
         {step.outcome === "verified_x" ? " · 구성별 원문 근거가 있는 X 후보 확인" :
           step.outcome === "candidates_merged" ? " · 발견한 후보를 합쳐 원문 검증 대상으로 전달" :
           step.outcome === "skipped" ? (step.reason === "no_supported_seed" ? " · 조회할 관련 후보 미확보" : " · 남은 예산 또는 검색어 부족으로 생략") :
           step.outcome === "no_verified_x" ? " · X 미확인" : ""}
         {step.reason === "no_verified_x" && " · X 미확인으로 후속 검색 진행"}
+        {step.outcome === "verified_xy" && " · 원문 근거가 있는 X·Y 후보 확인"}
+        {(step.outcome === "no_verified_xy" || step.reason === "no_verified_xy") && " · X·Y 미확인으로 후속 검색 진행"}
         {step.seconds != null && ` · ${step.seconds.toFixed(1)}초`}
       </p>)}
       <dl className="search-category-legend" aria-label="문헌 분류 안내">

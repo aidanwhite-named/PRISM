@@ -203,6 +203,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getJob: (id: string) => request<Job>(`/api/jobs/${id}`),
+  continueSearch: (id: string) => request<Job>(`/api/jobs/${id}/continue-search`, { method: "POST" }),
   cancelJob: (id: string) =>
     request<{ cancelled: boolean; reason?: string }>(`/api/jobs/${id}/cancel`, {
       method: "POST",

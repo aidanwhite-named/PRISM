@@ -99,7 +99,7 @@ async def test_citation_stage_only_without_verified_x_and_does_not_promote_edges
         assert selected == ['US456A1']  # future document preserved but never verified as eligible
         assert len(engine.ledger.candidates) == 3 and len(engine.citation_edges) == 4
         assert all(c.document_classification is None for c in engine.ledger.candidates.values())
-        assert engine.stage_deadline is None and engine.route[-1]['outcome'] == 'no_verified_x'
+        assert engine.stage_deadline is None and engine.route[-1]['outcome'] == 'no_verified_xy'
 
 
 @pytest.mark.asyncio

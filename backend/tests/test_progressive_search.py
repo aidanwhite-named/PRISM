@@ -375,7 +375,7 @@ async def test_relation_seed_requires_dated_fulltext_x_before_skipping_existing_
     assert (any(step['lane'] == 'existing_search' for step in result['route'])) == expected_fallback
     assert calls[:2] == ['gaussian neighbor covariance', 'gaussian neighbor cloning']
     assert len(result['candidates']) == 1  # union survives transition, not a reset
-    assert result['route'][0]['outcome'] == ('no_verified_x' if expected_fallback else 'verified_x')
+    assert result['route'][0]['outcome'] == ('no_verified_xy' if expected_fallback else 'verified_xy')
 
 
 @pytest.mark.asyncio
@@ -390,7 +390,7 @@ async def test_seed_stage_reserves_fallback_time_and_restores_deadline(monkeypat
     await engine.search_relation_seeds()
     assert 0 < observed[0] <= 60
     assert engine.stage_deadline is None and engine.remaining() > 100
-    assert engine.route[0]['outcome'] == 'no_verified_x'
+    assert engine.route[0]['outcome'] == 'no_verified_xy'
 
 
 def test_seed_shortlist_spans_features_without_promoting_classification():
@@ -421,5 +421,5 @@ async def test_seed_failure_keeps_global_deadline_available_for_fallback(monkeyp
     engine.web_seeds = fail
     await engine.search_relation_seeds()
     assert engine.stage_deadline is None and engine.remaining() > 100
-    assert engine.route[0]['outcome'] == 'no_verified_x'
+    assert engine.route[0]['outcome'] == 'no_verified_xy'
     assert 'source unavailable' in engine.warnings[-1]

@@ -985,8 +985,6 @@ class JobRunner:
                         )
                 else:
                     outcome.result_text = search_report.render(manifest)
-            self._providers.pop(job_id, None)
-
             # 두 블록의 출력 규칙은 PRISM 이 분석 프롬프트 뒤에 직접 붙인다
             # (analysis_protocol). 그러니 읽는 쪽도 프롬프트의 capabilities 선언에
             # 매달리지 않는다 — 사용자가 프롬프트를 자기 것으로 바꿔도 선언을 잊었다는
@@ -1023,6 +1021,30 @@ class JobRunner:
                 # 원문은 stdout.log 에 그대로 있다.
                 outcome.result_text = citation_mapping.strip_block(outcome.result_text)
 
+            evidence_review = None
+            if expects_blocks and verdict.status == JobStatus.SUCCEEDED:
+                from .. import analysis_evidence
+                original_text = outcome.result_text
+                try:
+                    outcome.result_text, component_result, mapping, evidence_review = await analysis_evidence.run(
+                        provider, request, outcome, attachments=attachments, aliases=assembled.aliases,
+                        components=component_result, mapping=mapping, prior_mapping=prior_mapping,
+                        claim_text=claim_text, deadline=search_deadline, emit=emit,
+                        cancelled=lambda: job_id in self._cancel_requested)
+                    if mapping:
+                        mapping_error = None
+                    if evidence_review.get('calls'):
+                        outcome.usage = analysis_evidence.merge_usage(outcome.usage, evidence_review)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    outcome.result_text = ('> **근거 재검토 미완료:** 아래 내용은 미검증 초안입니다. '
+                        '발췌·대응·문헌 순위를 재확인해야 합니다.\n\n' + analysis_evidence.strip(original_text))
+                    component_error = '근거 재검토 오류: ' + type(exc).__name__
+                if job_id in self._cancel_requested:
+                    verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, ['근거 재검토 중 사용자 중단'])
+
+            self._providers.pop(job_id, None)
             if expects_blocks:
                 # 등급 심볼. 프롬프트가 정의한 등급표에서만 읽으며 수치·등급명은
                 # 건드리지 않는다. 본문 하나를 고치므로 화면·복사·다운로드가
@@ -1044,6 +1066,10 @@ class JobRunner:
             # --- 저장 -----------------------------------------------------
             completed = _utcnow()
             artifacts: list[tuple[str, Path]] = list(retrieval_artifacts)
+            review_directory = work_dir / 'analysis_evidence'
+            for name, kind in [('review.json', 'analysis_evidence_review'), ('draft.md', 'analysis_draft')]:
+                if (review_directory / name).exists():
+                    artifacts.append((kind, review_directory / name))
             if retrieval_usage:
                 # 로컬 검색 라운드도 사용량을 쓴다. 최종 호출분만 남기면 이
                 # 실행이 실제로 얼마를 썼는지가 기록에서 빠진다.

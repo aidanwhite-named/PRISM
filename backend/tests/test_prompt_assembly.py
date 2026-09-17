@@ -146,7 +146,7 @@ def test_budget_counts_system_prompt() -> None:
     # 순간 "런타임 컨텍스트를 껐는데도 넘는다"로 깨지고, 이 시험이 재려던 것과
     # 다른 이유로 빨개진다. 재려는 것은 규칙의 길이가 아니라 시스템 프롬프트가
     # 예산에 세어지는가다.
-    budget = len(analysis_protocol.INSTRUCTIONS) + 500
+    budget = len(analysis_protocol.apply("body")) + 500
     long_rules = "r" * (budget + 200)
     with pytest.raises(InputTooLarge):
         assemble("body", [], long_rules, True, budget)

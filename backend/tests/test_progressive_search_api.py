@@ -109,6 +109,28 @@ def test_invalid_depth_is_rejected(client):
     assert response.status_code == 422
 
 
+def test_continue_search_reuses_candidates_and_is_idempotent(client, progressive_runtime):
+    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
+        'claim_text': 'Gaussian cloning uses neighbor distance.', 'search_depth': 'deep'})
+    source = wait_for_job(client, created.json()['id'])
+    assert source['search_manifest']['engine']['can_continue']
+    assert not source['search_manifest']['engine']['verified_match']  # abstract-only Y
+    plan_calls = sum(phase == 'plan' for phase, _ in progressive_runtime)
+    response = client.post(f"/api/jobs/{source['id']}/continue-search")
+    assert response.status_code == 201, response.text
+    target = wait_for_job(client, response.json()['id'])
+    assert target['status'] == 'SUCCEEDED', target['errors']
+    snapshot = target['search_manifest']['engine']
+    assert snapshot['depth'] == 'exhaustive'
+    assert not snapshot['can_continue']
+    assert snapshot['candidates'][0]['id'] == source['search_manifest']['engine']['candidates'][0]['id']
+    assert sum(phase == 'plan' for phase, _ in progressive_runtime) == plan_calls
+    assert any(row['lane'] == 'continuation' for row in snapshot['route'])
+    repeated = client.post(f"/api/jobs/{source['id']}/continue-search")
+    assert repeated.json()['id'] == target['id']
+    assert client.post(f"/api/jobs/{target['id']}/continue-search").status_code == 409
+
+
 def test_progressive_limits_can_be_configured_through_settings(client):
     from app.db import session_scope
     from app.models import AppSetting
