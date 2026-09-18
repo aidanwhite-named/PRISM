@@ -42,6 +42,93 @@ function Invoke-Checked {
 
 
 class SetupTests(unittest.TestCase):
+    def test_winget_bootstrap_and_package_continuation(self):
+        for scenario in ('existing', 'missing', 'download-failed', 'blocked', 'no-dependencies', 'not-starting'):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory(prefix='prism-winget-test-') as temporary:
+                root = Path(temporary) / "한글 공백 '"
+                root.mkdir()
+                log = root / 'calls.txt'
+                env = dict(os.environ, TEMP=str(root), TMP=str(root),
+                           PRISM_TEST_SCENARIO=scenario, PRISM_TEST_LOG=str(log))
+                common = str(ROOT / 'scripts/windows-common.ps1').replace("'", "''")
+                script = ". '%s'\n" % common + r'''
+$script:installed = $false
+function Find-PrismWinget {
+    if ($env:PRISM_TEST_SCENARIO -eq 'existing' -or
+        ($script:installed -and $env:PRISM_TEST_SCENARIO -ne 'not-starting')) { return 'winget.exe' }
+    return $null
+}
+function Invoke-RestMethod {
+    param($Uri, [switch]$UseBasicParsing)
+    if ($Uri -ne 'https://api.github.com/repos/microsoft/winget-cli/releases/latest') { throw 'Wrong release source' }
+    Add-Content -LiteralPath $env:PRISM_TEST_LOG -Value 'RELEASE'
+    return @{assets = @(
+        @{name='Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'; browser_download_url='https://github.com/microsoft/winget-cli/releases/download/test/bundle'},
+        @{name='DesktopAppInstaller_Dependencies.zip'; browser_download_url='https://github.com/microsoft/winget-cli/releases/download/test/dependencies'}
+    )}
+}
+function Invoke-WebRequest {
+    param($Uri, [switch]$UseBasicParsing, $OutFile)
+    if (-not $UseBasicParsing) { throw 'Interactive parsing is forbidden' }
+    if ($env:PRISM_TEST_SCENARIO -eq 'download-failed') { throw 'DOWNLOAD-FAILED' }
+    Set-Content -LiteralPath $OutFile -Value 'fixture'
+}
+function Expand-Archive {
+    param($LiteralPath, $DestinationPath)
+    foreach ($architecture in @('x64', 'x86', 'arm64')) {
+        $directory = Join-Path $DestinationPath $architecture
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        if ($env:PRISM_TEST_SCENARIO -ne 'no-dependencies') {
+            Set-Content -LiteralPath (Join-Path $directory 'framework.appx') -Value 'fixture'
+        }
+    }
+}
+function Add-AppxPackage {
+    param($Path, $DependencyPath, $ErrorAction)
+    if (-not (Test-Path -LiteralPath $Path)) { throw 'Bundle missing' }
+    if (@($DependencyPath).Count -ne 1 -or $DependencyPath[0] -notlike '*\x64\framework.appx') { throw 'Wrong architecture' }
+    Add-Content -LiteralPath $env:PRISM_TEST_LOG -Value 'APPX'
+    if ($env:PRISM_TEST_SCENARIO -eq 'blocked') { throw 'POLICY-BLOCKED' }
+    $script:installed = $true
+}
+function Invoke-Checked {
+    param($File, $Arguments)
+    Add-Content -LiteralPath $env:PRISM_TEST_LOG -Value "$File $Arguments"
+}
+$oldProgress = $ProgressPreference
+$oldTls = [Net.ServicePointManager]::SecurityProtocol
+$code = 0
+try {
+    Install-PrismPackage 'Python.Python.3.11' 'https://www.python.org/' -UserScope
+    Install-PrismPackage 'OpenJS.NodeJS.LTS' 'https://nodejs.org/'
+} catch {
+    Write-Output $_.Exception.Message
+    $code = 1
+}
+if ($ProgressPreference -ne $oldProgress -or [Net.ServicePointManager]::SecurityProtocol -ne $oldTls) { throw 'Settings not restored' }
+exit $code
+'''
+                result = subprocess.run([POWERSHELL, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+                                        env=env, capture_output=True, timeout=30)
+                output = result.stdout.decode(errors='replace') + result.stderr.decode(errors='replace')
+                calls = log.read_text() if log.exists() else ''
+                self.assertEqual(list(root.glob('prism-winget-*')), [], output)
+                if scenario in ('existing', 'missing'):
+                    self.assertEqual(result.returncode, 0, output)
+                    self.assertIn('winget.exe install --id Python.Python.3.11', calls)
+                    self.assertIn('--scope user', calls)
+                    self.assertIn('winget.exe install --id OpenJS.NodeJS.LTS', calls)
+                    self.assertEqual(calls.count('APPX'), int(scenario == 'missing'))
+                    self.assertEqual(calls.count('RELEASE'), int(scenario == 'missing'))
+                else:
+                    self.assertEqual(result.returncode, 1, output)
+                    self.assertIn('WinGet automatic installation failed', output)
+                    self.assertNotIn('winget.exe install', calls)
+                    expected = {'download-failed': 'DOWNLOAD-FAILED', 'blocked': 'POLICY-BLOCKED',
+                                'no-dependencies': 'dependency packages are missing',
+                                'not-starting': 'could not be started'}[scenario]
+                    self.assertIn(expected, output)
+
     def run_setup(self, cli, *, existing=False, fail=False, agy_fail=False):
         with tempfile.TemporaryDirectory(prefix='prism-setup-test-') as temporary:
             root = Path(temporary) / '한글 공백'

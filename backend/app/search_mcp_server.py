@@ -56,6 +56,13 @@ def error_response(exc, name, arguments, secrets=()):
     value = {"error_code": getattr(exc, "fault_code", "") or type(exc).__name__,
              "detail": scrub(str(exc), *secrets)[:500]}
     args = arguments if isinstance(arguments, dict) else {}
+    if name == 'save_candidates' and isinstance(exc, search_manifest.SearchLogError):
+        value['recoverable'] = True
+        value['recovery'] = {
+            'next_step': 'Correct the arguments and call save_candidates again. '
+                         'Use JSON null, not the string "null", for an unclassified group. '
+                         'The previous checkpoint is unchanged.',
+        }
     if name == "epo_fetch":
         value["requested_identifier"] = args.get("publication_number", "")
         value["requested_constituent"] = args.get("constituent", "claims")
@@ -177,7 +184,12 @@ class SearchTools:
             definition = next((tool for tool in self.tool_definitions() if tool["name"] == name), None)
             if definition is None:
                 raise ValueError("tool_unavailable")
-            _validate(arguments, definition["inputSchema"])
+            try:
+                _validate(arguments, definition["inputSchema"])
+            except ValueError as exc:
+                if name == 'save_candidates':
+                    raise search_manifest.SearchLogError('후보 입력 형식 오류: ' + str(exc)) from exc
+                raise
             budget = self.budget()
             if name not in ("search_capabilities", "save_candidates", "collect_results") and (
                     budget['used'] > budget['finalize_at'] or budget.get('seconds_remaining', 999999) <= 10
@@ -341,7 +353,7 @@ def _validate(value, schema, depth=0):
         for item in value:
             _validate(item, schema.get('items', {}), depth + 1)
     if "enum" in schema and value not in schema["enum"]:
-        raise ValueError("invalid_enum")
+        raise ValueError(f"invalid_enum: expected {json.dumps(schema['enum'], ensure_ascii=False)}, received {json.dumps(value, ensure_ascii=False)}")
 
 def _query_node(raw: Any, depth=0):
     if depth > epo_cql.MAX_DEPTH or not isinstance(raw, dict):
@@ -511,7 +523,12 @@ _CAPABILITIES = _tool("search_capabilities", "Report which PRISM search tools ar
 
 _SAVE_CANDIDATES = _tool('save_candidates',
     'Persist model-selected shortlist, maximum 15. Merge by identifier/DOI/URL by default; replace=true replaces with your newly ranked shortlist and audits removals. When X covers all essential claim features, supply x_review after source reading: all declared core_features must exactly match mapping.feature rows backed by preserved claims/description/full_text. Accepted X review terminates exploration automatically. Abstract-only X cannot terminate.',
-    {'report': {'type': 'object', 'required': ['candidates'], 'additionalProperties': True},
+    {'report': {'type': 'object', 'required': ['candidates'], 'additionalProperties': True,
+                'properties': {'candidates': {'type': 'array', 'maxItems': 100,
+                    'items': {'type': 'object', 'additionalProperties': True,
+                        'properties': {'group': {'type': ['string', 'null'],
+                            'enum': ['A', 'B', 'C', None],
+                            'description': 'Assessment group. Unclassified is JSON null (without quotes), never the string "null".'}}}}}},
      'replace': {'type': 'boolean'},
      'x_review': {'type': 'object', 'required': ['candidate_id', 'core_features', 'rationale'], 'additionalProperties': False,
                   'properties': {'candidate_id': {'type': 'string', 'description': 'patent:JP7475618B1 or doi:10... or url:https://...'},

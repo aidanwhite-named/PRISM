@@ -1,77 +1,78 @@
 # PRISM
 
-특허 구성대비 분석과 유사문헌 검색을 위한 로컬 웹 프로그램입니다.
-첨부 문서를 선택한 AI CLI에 전달하고, 결과와 실행 이력을 PC에 저장합니다.
-화면은 브라우저에서 열리며, AI 실행과 외부 문헌 검색에는 인터넷 연결이 필요합니다.
+특허 구성대비 분석 및 유사문헌(특허·논문) 검색을 지원하는 로컬 웹 애플리케이션입니다.  
+로컬 환경에서 AI CLI(Claude Code, Codex, agy)와 연동하여 분석을 수행하고, 결과와 실행 이력을 PC에 보관합니다.
+
+---
 
 ## 주요 기능
 
-- 특허 구성대비 분석, 특허·논문 유사문헌 검색
-- 프롬프트 편집과 첨부 문서 관리
-- Claude Code, Codex CLI, agy 연동
-- 결과 열람·내보내기와 실행 이력 보관
+- **특허 분석 & 검색**: 청구항 구성대비표 작성, 특허·논문 유사문헌 탐색
+- **AI CLI 연동**: Claude Code, Codex CLI, agy 연동 지원
+- **문서 & 프롬프트 관리**: PDF 첨부 문서 분석, 커스텀 프롬프트 템플릿 관리
+- **로컬 데이터 보관**: 결과 열람/내보내기 및 실행 이력 PC 로컬 보관
+
+---
 
 ## 시작하기
 
-배포 ZIP을 받은 경우 압축을 풀고 **설치.cmd → 실행.cmd** 순서로 실행합니다.
-설치를 누르면 선택 입력 없이 Python·라이브러리·Node.js·Claude Code·Codex를 준비합니다.
-진행 상황은 설치 창에서 보여줍니다. 구현 파일은 ZIP의 `app` 폴더에 모았습니다.
-자세한 내용은 [사용안내.txt](사용안내.txt)를 참고하세요.
+### 1. 배포본 (ZIP)
+1. ZIP 압축을 풉니다.
+2. **`설치.cmd`** 실행 (Python, 의존성, Node.js, CLI 자동 설치)
+3. **`실행.cmd`** 실행 → 브라우저(`http://127.0.0.1:8765`) 자동 연결  
+*(자세한 내용은 [사용안내.txt](사용안내.txt) 참고)*
 
-소스 실행 방법은 아래와 같습니다.
+자동 설치에 필요한 WinGet이 없으면 Microsoft 공식 GitHub 배포본과 필수 패키지를 설치하고 이어서 진행합니다. Microsoft Store는 필요하지 않습니다. 회사 정책이나 네트워크에서 설치를 차단하는 경우에는 IT 관리자 지원이 필요합니다.
 
-Windows 10/11 x64, Python 3.11/3.12 x64, Node.js LTS와 사용할 AI CLI 하나를 준비합니다.
-각 CLI의 실행 조건은 해당 도구의 설치 안내를 따릅니다.
-
-프로젝트 폴더의 PowerShell에서 최초 한 번 실행합니다.
+### 2. 소스코드 직접 실행
+> **필수 요구사항**: Windows 10/11 x64, Python 3.11/3.12 x64, Node.js LTS
 
 ```powershell
+# 최초 환경 설정 (가상환경 구성, 패키지 설치, UI 빌드)
 .\start-prism.ps1 -Setup
-```
 
-이후에는 다음 명령으로 실행합니다.
-
-```powershell
+# 서버 실행 (종료: Ctrl + C)
 .\start-prism.ps1
 ```
+* 옵션: `-Port <포트번호>`, `-Rebuild` (프론트엔드 재빌드)
 
-브라우저에서 `http://127.0.0.1:8765`가 열립니다. 포트가 사용 중이면 다른 포트를 선택합니다.
-종료하려면 실행한 PowerShell에서 `Ctrl+C`를 누릅니다.
-프론트엔드 변경 후에는 `-Rebuild`, 포트 지정은 `-Port 9000`을 사용합니다.
+---
 
-## 사용 순서
+## 기본 사용법
 
-1. 사용할 AI CLI를 설치합니다. 모든 CLI를 설치할 필요는 없습니다.
-2. **Settings → AI 실행 도구 상태**에서 경로를 확인하고 로그인한 뒤 다시 검사합니다.
-3. 분석 또는 검색 화면에서 프롬프트, 모델과 입력 자료를 선택해 실행합니다.
-4. 결과를 확인하고 **History**에서 이전 실행을 열람합니다.
+1. **AI CLI 로그인**: 사용할 AI CLI의 계정 로그인을 완료합니다.
+2. **상태 확인**: 웹 화면의 **Settings → AI 실행 도구 상태**에서 연동 상태를 확인합니다.
+   - EPO, KIPRIS, OpenAlex 등 외부 검색 API 키도 Settings에서 등록 가능합니다.
+3. **분석/검색 실행**: 프롬프트 및 분석 대상 문서를 선택해 작업을 실행합니다.
+4. **결과 확인**: 결과 열람 및 내보내기, **History** 탭에서 이전 기록 확인.
 
-AI 실행은 각 CLI의 로그인 세션과 계정 사용량을 사용합니다.
-EPO·KIPRIS·OpenAlex 등의 검색 서비스 자격증명은 Settings에서 별도로 설정합니다.
+---
 
-## 데이터와 제한사항
+## 주요 안내 및 주의사항
 
-- 실행 이력과 설정: `%LOCALAPPDATA%\PRISM` (`PRISM_DATA_DIR`로 변경 가능)
-- 편집 가능한 프롬프트: 프로젝트의 `prompt` 폴더 (`PRISM_PROMPT_DIR`로 변경 가능)
-- 로컬 프로그램이지만, 선택한 AI 서비스로 입력 자료가 전송됩니다.
-- 스캔 PDF의 OCR과 DOCX·XLSX·이미지 첨부는 지원하지 않습니다.
-- 의미 검색은 선택 기능이며 기본 설치에 포함되지 않습니다.
-- CLI마다 도구 제어 범위가 다릅니다. Codex·agy의 파일·명령 도구는 PRISM이 완전히 차단하지 못합니다.
-- AI의 분석과 검색 결과는 원문 근거와 함께 확인해야 합니다.
+- **데이터 저장 경로**:
+  - 실행 이력 및 설정: `%LOCALAPPDATA%\PRISM` (`PRISM_DATA_DIR`로 변경 가능)
+  - 편집 프롬프트: `prompt/` 폴더 (`PRISM_PROMPT_DIR`로 변경 가능)
+- **문서 지원**: 텍스트 기반 PDF를 지원하며 스캔 이미지 PDF(OCR), DOCX, XLSX 등은 지원하지 않습니다.
+- **네트워크 & 계정**: AI 실행 및 문헌 검색 시 인터넷 연결과 해당 AI 서비스 계정 할당량이 사용됩니다.
 
-## 개발 안내
+---
 
-- 배포 ZIP 생성: `powershell -NoProfile -ExecutionPolicy Bypass -File .\build-release.ps1`
-- 결과: `release/PRISM-<버전>-windows-x64.zip` 및 SHA-256 파일
-- 프론트엔드를 `npm ci`와 `npm run build`로 빌드하고, 실행에 필요한 소스만 포함합니다.
-- `.venv`, `node_modules`, DB·로그인 정보·개인 설정은 포함하지 않습니다.
-- 프롬프트는 로컬 편집본 대신 Git HEAD의 기본 템플릿을 포함합니다.
-- ZIP 설치는 `setup.ps1`, 개발 환경 설치·화면 빌드는 `start-prism.ps1 -Setup`을 사용합니다.
-- 설치 실패·기존 CLI 재사용 검증: `python scripts/test_windows_setup.py`
-- ZIP 설치·실행 검증: `python scripts/smoke_release.py release/PRISM-2.0.1-windows-x64.zip`
-  임시 가상환경에 의존성을 실제 설치합니다. 시스템 Python·CLI 설치와 계정 로그인은 수행하지 않습니다.
+## 개발 및 빌드
 
-- [상세 사용법·설계·테스트 안내](docs/technical-guide.md)
+```powershell
+# 릴리즈 ZIP 패키지 생성
+powershell -ExecutionPolicy Bypass -File .\build-release.ps1
+
+# 설치 및 릴리즈 검증
+python scripts/test_windows_setup.py
+python scripts/smoke_release.py release/PRISM-2.0.0-windows-x64.zip
+```
+
+---
+
+## 참고 문서
+
+- [기술 및 아키텍처 가이드](docs/technical-guide.md)
 - [KIPRIS 연동 안내](docs/kipris-integration.md)
 
-현재 저장소에는 별도 라이선스 파일이 없습니다. 배포 전에 프로젝트 라이선스를 정해야 합니다.

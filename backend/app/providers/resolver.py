@@ -12,6 +12,7 @@ shell 이 끼어들고 인수 이스케이프 규칙이 달라진다. 가능하�
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -147,6 +148,40 @@ def resolve_claude(override: str | None = None) -> ResolvedExecutable | None:
     return _cmd_wrapper_from_path("claude")
 
 
+def _codex_npm_native() -> ResolvedExecutable | None:
+    """npm의 공식 Windows 바이너리를 Node/PATH 의존 없이 실행한다."""
+    if sys.platform != "win32":
+        return None
+    target = {
+        "amd64": ("x64", "x86_64-pc-windows-msvc"),
+        "x86_64": ("x64", "x86_64-pc-windows-msvc"),
+        "arm64": ("arm64", "aarch64-pc-windows-msvc"),
+        "aarch64": ("arm64", "aarch64-pc-windows-msvc"),
+    }.get(platform.machine().lower())
+    if target is None:
+        return None
+    arch, triple = target
+    roots = _npm_roots()
+    # 사용자 지정 npm prefix도 PATH의 공식 래퍼 옆에서 찾는다.
+    wrapper = _cmd_wrapper_from_path("codex")
+    if wrapper:
+        roots.insert(0, Path(wrapper.path).parent / "node_modules")
+    for root in roots:
+        package = root / "@openai" / "codex"
+        for vendor in (
+            package / "node_modules" / "@openai" / f"codex-win32-{arch}" / "vendor",
+            root / "@openai" / f"codex-win32-{arch}" / "vendor",
+            package / "vendor",
+        ):
+            for directory in ("bin", "codex"):
+                native = vendor / triple / directory / "codex.exe"
+                if _is_executable_file(native):
+                    return ResolvedExecutable(
+                        str(native), ExecutableKind.NATIVE_EXE, source="npm 패키지 내부"
+                    )
+    return None
+
+
 def resolve_simple(command: str, override: str | None = None) -> ResolvedExecutable | None:
     """아직 설치가 확인되지 않은 CLI(codex, gemini)용 일반 해석기."""
     if override:
@@ -159,4 +194,8 @@ def resolve_simple(command: str, override: str | None = None) -> ResolvedExecuta
             )
             return ResolvedExecutable(str(path), kind, source="사용자 지정")
         return None
-    return _from_path_env(command) or _cmd_wrapper_from_path(command)
+    return (
+        _from_path_env(command)
+        or (_codex_npm_native() if command == "codex" else None)
+        or _cmd_wrapper_from_path(command)
+    )

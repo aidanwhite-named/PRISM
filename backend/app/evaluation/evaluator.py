@@ -444,6 +444,10 @@ def evaluate(
             )
 
     # --- 프로세스 자체가 실패한 경우 ---------------------------------------
+    if outcome.is_error and outcome.model_capacity:
+        errors.append("선택 모델이 혼잡합니다. 잠시 후 다시 실행하거나 분석 모델을 변경하십시오.")
+        return Verdict(JobStatus.FAILED, ErrorCode.MODEL_CAPACITY, errors)
+
     if outcome.error_message and not outcome.result_text.strip():
         errors.append(outcome.error_message)
         return Verdict(JobStatus.FAILED, ErrorCode.PROCESS_ERROR, errors)

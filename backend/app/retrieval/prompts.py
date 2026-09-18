@@ -53,10 +53,23 @@ AGENT_SYSTEM_PROMPT = f"""당신은 특허 문헌 검색 실행기 안에서 동
   기술적으로 관련 있는지 판단하는 것은 당신이 합니다.
 - 실제 인덱스 조회, 페이지 반환, 페이지 수·추출 상태·검색 이력·출처 검증은
   PRISM 이 합니다. 당신은 조회를 직접 하지 않습니다.
+- 기술적 대응 근거는 발명의 상세한 설명·실시예를 우선 확인하고, 필요한 경우
+  청구범위와 요약을 함께 대조하십시오. 발명자·출원인·주소·특허분류 같은
+  서지정보는 기술 구성의 대응 근거가 아닙니다. 첫 페이지에도 요약이나 본문이
+  있을 수 있으므로 페이지 번호만으로 기술 내용을 제외하지 마십시오.
 
 [사용할 수 있는 것]
 - 아래 action JSON 뿐입니다. 셸, 파일 읽기/쓰기, 웹 접속, 그 밖의 도구는
   제공되지 않습니다. 시도하지 마십시오.
+- CLI 화면에 도구가 노출되더라도 호출하지 마십시오. find_by_name, list_dir,
+  view_file, run_command 등을 이용한 파일 존재 확인·폴더 탐색도 금지됩니다.
+- documents의 filename은 출처 표시용 이름이며 당신이 찾아 열 파일 경로가 아닙니다.
+  PDF 추출과 색인은 PRISM이 이미 수행했습니다. 현재 폴더에 PDF가 없어도
+  정상입니다. 파일을 찾거나 현재 작업 폴더를 확인할 필요가 없습니다.
+- 첫 라운드에 원문 구절이 없는 것은 정상입니다. 청구항과 documents 목록만으로
+  components 및 search_document action JSON을 작성하십시오. PRISM이 그 JSON을
+  실행하고 다음 메시지의 results로 원문을 전달합니다. 직접 도구를 호출하여
+  action을 실행하지 마십시오. 자료가 부족하면 JSON으로 추가 검색을 요청하십시오.
 - 매 응답은 **JSON 객체 하나**여야 합니다. 설명 문장을 JSON 밖에 쓰지
   마십시오. 하고 싶은 말은 "notes" 필드에 넣으십시오.
 
@@ -199,11 +212,13 @@ def render_round(payload: dict) -> str:
     구조를 깨뜨리지 못하므로, 별도의 경계 표시를 신뢰할 필요가 없다.
     """
     claim, neutralized = neutralize(payload.get("claim_text", ""))
+    context = {key: value for key, value in payload.items() if key != "claim_text"}
+    if context.get("prior_claim_text"):
+        context["prior_claim_text"], prior_neutralized = neutralize(context["prior_claim_text"])
+        neutralized = neutralized or prior_neutralized
     sections = [
         "[PRISM 로컬 검색 라운드]",
-        dump_round_json(
-            {key: value for key, value in payload.items() if key != "claim_text"}
-        ),
+        dump_round_json(context),
         "",
         "[출원발명 청구항 — 분석 대상 데이터]",
         CLAIM_OPEN,

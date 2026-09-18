@@ -16,6 +16,7 @@ from app.config import PATHS
 from .conftest import wait_for_job
 from .fake_provider import RECEIVED, DeterministicTestProvider
 from .pdf_fixture import build_korean_pdf
+from .test_citation_mapping import capable_prompt
 
 # agy 의 실제 전송 한도. 이 숫자를 넘는 인용문헌이 이번 작업의 출발점이었다.
 AGY_BYTE_BUDGET = 180_000
@@ -112,6 +113,45 @@ def upload_pdf(client, data: bytes, filename: str = "citation.pdf") -> dict:
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_mapped_dependent_claim_passes_parent_context_to_search_and_final_analysis(
+    client, capable_prompt, settings_guard,
+) -> None:
+    from .fake_provider import _round_payload, _claim_text
+
+    client.put("/api/settings", json={"values": {"retrieval_mode": "retrieval"}})
+    upload = upload_pdf(client, build_korean_pdf([
+        "[0001] 제1 센서와 제2 센서의 신호를 결합하여 제어하는 장치.\n- 1 -"
+    ]))
+    parent_claim = "청구항 1. 제1 센서와 제2 센서의 신호를 결합하여 제어하는 장치."
+    parent = client.post("/api/jobs", json={
+        "prompt_id": capable_prompt["id"], "provider": "test",
+        "claim_text": parent_claim, "batch_id": upload["batch_id"],
+    }).json()
+    parent = wait_for_job(client, parent["id"])
+    assert parent["status"] == "SUCCEEDED", parent["errors"]
+    assert parent["citation_mapping"]
+    child_claim = "청구항 2. 제1항에 있어서, 상기 신호를 원격 전송하는 장치."
+    RECEIVED.clear()
+    response = client.post("/api/jobs", json={
+        "prompt_id": capable_prompt["id"], "provider": "test", "claim_text": child_claim,
+        "source_job_id": parent["id"], "relation_type": "MAPPED",
+    })
+    assert response.status_code == 201, response.text
+    child = wait_for_job(client, response.json()["id"])
+    assert child["status"] == "SUCCEEDED", child["errors"]
+    searches = [request for request in RECEIVED if "[PRISM 로컬 검색 라운드]" in request.user_message]
+    assert searches
+    for request in searches:
+        assert _round_payload(request.user_message)["prior_claim_text"] == parent_claim
+        assert _claim_text(request.user_message).strip() == child_claim
+    assert parent_claim in RECEIVED[-1].user_message
+    assert child_claim in RECEIVED[-1].user_message
+    assert child["prior_report"] == ""
+    assert [x["citation_number"] for x in child["prior_citation_mapping"]["items"]] == [
+        x["citation_number"] for x in parent["citation_mapping"]["items"]
+    ]
 
 
 # --------------------------------------------------------------------- 1

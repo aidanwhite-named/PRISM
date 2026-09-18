@@ -32,10 +32,10 @@ def save_candidates(tools, arguments):
     merged = {} if arguments.get('replace') else {key(item): item for item in previous['candidates']}
     for item in incoming['candidates']:
         if not key(item):
-            raise ValueError('candidate_identity_required')
+            raise search_manifest.SearchLogError('candidate_identity_required')
         merged[key(item)] = item
     if len(merged) > MAX_CANDIDATES:
-        raise ValueError('candidate_limit_15: select and rank at most 15, then save with replace=true')
+        raise search_manifest.SearchLogError('candidate_limit_15: select and rank at most 15, then save with replace=true')
     removed = [item for item in previous['candidates'] if key(item) not in merged]
     dispositions = [*previous.get('candidate_dispositions', []), *incoming.get('candidate_dispositions', []),
                     *({**item, 'reason': '모델이 유력 후보 목록을 교체하며 제외. 이전 평가는 호출 이력에 보존.'} for item in removed)]

@@ -17,6 +17,9 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+import asyncio
+from types import SimpleNamespace
+
 from app.providers.base import CODEX_WEB_SEARCH, NO_TOOLS, ExecutionRequest
 from app.providers.codex_cli import (
     MODEL_DEFAULT_REASONING_EFFORTS,
@@ -141,6 +144,65 @@ def test_final_text_comes_from_output_file_not_the_stream(tmp_path: Path) -> Non
     (tmp_path / "codex_last_message.txt").write_text("최종 보고서", encoding="utf-8")
     assert provider._read_last_message(tmp_path) == "최종 보고서"
     assert provider._read_last_message(tmp_path / "없음") == ""
+
+
+def test_failed_call_cannot_read_a_previous_calls_output(tmp_path, monkeypatch):
+    from app.providers import codex_cli
+    from app.providers.resolver import ResolvedExecutable
+
+    provider = CodexCliProvider()
+    provider._resolved = ResolvedExecutable("mock-codex", "native_exe")
+    paths = []
+    (tmp_path / "codex_last_message.txt").write_text("legacy output", encoding="utf-8")
+
+    async def capture(*args, **kwargs):
+        return SimpleNamespace(exit_code=0, stdout="codex mock")
+
+    async def streaming(**kwargs):
+        argv = kwargs["argv"]
+        path = Path(argv[argv.index("-o") + 1])
+        paths.append(path)
+        if len(paths) == 1:
+            path.write_text("first call output", encoding="utf-8")
+            event = {"type": "turn.completed", "usage": {}}
+        elif len(paths) == 2:
+            event = {"type": "turn.failed", "error": {
+                "message": "Selected model is at capacity. Please try a different model."}}
+        else:
+            # 새 출력 파일 없이 현재 스트림만 있는 경우에도 이전 파일은 쓰지 않는다.
+            await kwargs["on_stdout_line"](json.dumps({"type": "item.completed", "item": {
+                "id": "new", "type": "agent_message", "text": "current stream output"}}))
+            event = {"type": "turn.completed", "usage": {}}
+        await kwargs["on_stdout_line"](json.dumps(event))
+        return SimpleNamespace(stdout="", stderr="", exit_code=1 if len(paths) == 2 else 0,
+                               timed_out=False, cancelled=False, launch_error=None)
+
+    monkeypatch.setattr(codex_cli.proc, "run_capture", capture)
+    monkeypatch.setattr(codex_cli.proc, "run_streaming", streaming)
+
+    async def emit(*args):
+        pass
+
+    async def run():
+        first = await provider.execute(_request(tmp_path), emit)
+        second = await provider.execute(_request(tmp_path), emit)
+        third = await provider.execute(_request(tmp_path), emit)
+        assert first.result_text == "first call output"
+        assert second.result_text == ""
+        assert second.is_error and second.model_capacity
+        assert not second.rate_limited
+        assert third.result_text == "current stream output"
+
+    asyncio.run(run())
+    assert len(set(paths)) == 3
+
+
+def test_capacity_quoted_in_successful_output_is_not_an_error():
+    parser = CodexStreamParser()
+    _feed(parser, {"type": "item.completed", "item": {"type": "agent_message", "id": "a",
+           "text": "Selected model is at capacity. Please try a different model."}})
+    _feed(parser, {"type": "turn.completed", "usage": {}})
+    assert not parser.state.model_capacity
 
 
 def test_agent_messages_accumulate_as_fallback() -> None:

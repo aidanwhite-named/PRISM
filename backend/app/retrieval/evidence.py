@@ -17,6 +17,8 @@ PRISM 이 자기 관측(페이지 수 일치, 추출 상태, 실행된 검색 �
 
 from __future__ import annotations
 
+import copy
+
 from datetime import datetime, timezone
 
 from . import pages as pages_module
@@ -1018,16 +1020,22 @@ def fit(bundle: dict, budget: RetrievalBudget) -> str:
     """
     max_chars = budget.max_evidence_chars
     max_bytes = budget.evidence_byte_limit
+    fitted = None
 
     def current() -> tuple[str, bool]:
-        partial = pages_module.truncations(bundle.get("evidence_pages") or [])
-        bundle["page_truncations"] = partial
-        if partial or bundle.get("page_reductions") or bundle.get("package_reductions"):
-            bundle["budget_exhausted"] = True
-            bundle["budget_limited"] = True
+        # A trial package may contain partial pages that are removed in the next
+        # iteration. Derive diagnostics on a copy; commit only the final package.
+        nonlocal fitted
+        fitted = copy.deepcopy(bundle)
+        partial = pages_module.truncations(fitted.get("evidence_pages") or [])
+        fitted["page_truncations"] = partial
+        fitted["evidence_budget_limited"] = bool(
+            partial or fitted.get("page_reductions") or fitted.get("package_reductions"))
+        if fitted["evidence_budget_limited"]:
+            fitted["budget_exhausted"] = True
+            fitted["budget_limited"] = True
         if partial:
-            bundle["budget_exhausted"] = True
-            for component in bundle.get("components", []):
+            for component in fitted.get("components", []):
                 component["needs_original_review"] = True
                 if component.get("status") == STATUS_NOT_FOUND_SCOPE:
                     component["status"] = STATUS_COVERAGE
@@ -1035,15 +1043,20 @@ def fit(bundle: dict, budget: RetrievalBudget) -> str:
                     reason = "페이지 일부가 예산으로 누락돼 전문 검토가 완료되지 않았습니다."
                     if reason not in component.setdefault("status_reasons", []):
                         component["status_reasons"].append(reason)
-        _apply_reductions(bundle)
-        text = render(bundle)
+        _apply_reductions(fitted)
+        text = render(fitted)
         return text, (
             len(text) <= max_chars and len(text.encode("utf-8")) <= max_bytes
         )
 
+    def accept(text: str) -> str:
+        bundle.clear()
+        bundle.update(fitted)
+        return text
+
     text, ok = current()
     if ok:
-        return text
+        return accept(text)
 
     # 1단계: 페이지 확장부터 줄인다. 덧붙임이므로 가장 먼저 사라져야 한다.
     #        문맥 페이지(후보에서 먼 것) → 근거 페이지 순이다.
@@ -1064,22 +1077,23 @@ def fit(bundle: dict, budget: RetrievalBudget) -> str:
             dropped.append(removed["label"])
             text, ok = current()
             if ok:
-                return text
+                return accept(text)
 
     for step in (_drop_identity_excerpts, _trim_component_metadata):
         if step(bundle):
             text, ok = current()
             if ok:
-                return text
+                return accept(text)
 
     while _drop_one_finding(bundle):
         text, ok = current()
         if ok:
-            return text
+            return accept(text)
 
     bundle["package_over_budget"] = True
     _add_reduction(bundle, REDUCTION_OVER_BUDGET)
     text, _ok = current()
+    accept(text)
     # 사용자가 올려야 할 값. 렌더링에는 들어가지 않으므로 크기에 영향이 없다.
     bundle["package_required_chars"] = len(text)
     bundle["package_required_bytes"] = len(text.encode("utf-8"))

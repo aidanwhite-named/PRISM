@@ -627,6 +627,7 @@ class JobRunner:
                     work_dir=work_dir,
                     attachments=attachments,
                     claim_text=claim_text,
+                    prior_claim_text=prior_claim_text,
                     budget=retrieval_budget,
                     semantic_enabled=semantic_enabled,
                     embedding_cache_max_bytes=embedding_cache_max_bytes,

@@ -156,6 +156,20 @@ function DocumentRow({ document }: { document: RetrievalDocument }) {
 
 export default function RetrievalManifestView({ job }: { job: Job }) {
   const manifest = job.retrieval_manifest;
+  const errorCode = job.error_code || manifest?.error_code;
+  // 과거 실행은 혼잡 오류를 PROCESS_ERROR로 저장했다. 원본 이력도 올바르게 안내한다.
+  const capacityError = errorCode === "MODEL_CAPACITY" ||
+    (errorCode === "PROCESS_ERROR" && /model is at capacity/i.test(job.retrieval_manifest_error ?? ""));
+  const failureTitle = capacityError ? "선택 모델이 혼잡해 검색이 중단되었습니다" : ({
+    RATE_LIMITED: "AI 서비스 사용량 제한으로 검색이 중단되었습니다",
+    AUTH_REQUIRED: "AI 서비스 로그인이 필요합니다",
+    TIMED_OUT: "검색 제한 시간을 초과했습니다",
+    PROCESS_ERROR: "AI 모델 호출 중 오류가 발생했습니다",
+    INPUT_TOO_LARGE: "AI 모델에 전달할 입력이 너무 큽니다",
+    RETRIEVAL_UNAVAILABLE: "인용문헌 검색을 준비하지 못했습니다",
+    TOOL_POLICY_VIOLATION: "허용되지 않은 도구 호출로 검색이 중단되었습니다",
+    CANCELLED: "검색이 취소되었습니다",
+  } as Record<string, string>)[errorCode ?? ""] ?? "근거 패키지를 만들지 못했습니다";
 
   if (!isNarrowed(job.delivery_plan) && !manifest) return null;
 
@@ -187,8 +201,20 @@ export default function RetrievalManifestView({ job }: { job: Job }) {
 
       {job.retrieval_manifest_error && (
         <div className="notice danger">
-          <strong>근거 패키지를 만들지 못했습니다</strong>
+          <strong>{failureTitle}</strong>
           <div style={{ marginTop: 4 }}>{job.retrieval_manifest_error}</div>
+          {capacityError && (
+            <div style={{ marginTop: 4 }}>
+              잠시 후 다시 실행하거나 분석 모델을 변경하십시오.
+              PDF를 다시 올리거나 근거 패키지 예산을 늘릴 필요는 없습니다.
+            </div>
+          )}
+          {manifest?.provider_error && manifest.provider_error !== job.retrieval_manifest_error && (
+            <details style={{ marginTop: 4 }}>
+              <summary>AI 서비스 원문 오류</summary>
+              {manifest.provider_error}
+            </details>
+          )}
         </div>
       )}
 

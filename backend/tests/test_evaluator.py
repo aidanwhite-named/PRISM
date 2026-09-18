@@ -78,6 +78,14 @@ def test_exit_zero_but_is_error_is_failure() -> None:
     assert verdict.error_code == ErrorCode.PROCESS_ERROR
 
 
+def test_model_capacity_is_distinct_from_process_failure_and_quota():
+    outcome = ExecutionOutcome(is_error=True, model_capacity=True,
+        error_message="Selected model is at capacity. Please try a different model.")
+    assert evaluate(outcome).error_code == ErrorCode.MODEL_CAPACITY
+    outcome.rate_limited = True
+    assert evaluate(outcome).error_code == ErrorCode.RATE_LIMITED
+
+
 def test_auth_required_wins_over_everything() -> None:
     outcome = ExecutionOutcome(
         result_text="Not logged in · Please run /login",

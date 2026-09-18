@@ -33,7 +33,7 @@ def agent(tmp_path):
 
 def test_efficiency_defaults_and_explicit_overrides():
     budget = retrieval.budget_from_settings({})
-    assert (budget.max_rounds, budget.max_round_result_chars, budget.max_evidence_chars) == (5, 56000, 100000)
+    assert (budget.max_rounds, budget.max_round_result_chars, budget.max_evidence_chars) == (5, 64000, 100000)
     assert config.DEFAULTS["retrieval_max_rounds"] == 5
     assert config.DEFAULTS["retrieval_evidence_chars"] == 100000
     assert retrieval.budget_from_settings({"retrieval_max_rounds": 9}).max_rounds == 9
@@ -69,9 +69,9 @@ def test_budget_is_measured_in_the_format_actually_sent():
     assert agent_module.json_size(entry) < len(json.dumps(entry, ensure_ascii=False, indent=2))
 
 
-def test_56k_english_result_fits_serialized_agy_transport(agent):
-    result = [{"text": "sample text\n" * 4300}]
-    assert sum(agent_module.json_size(row) for row in result) <= 56000
+def test_64k_english_result_fits_serialized_agy_transport(agent):
+    result = [{"text": "sample text\n" * 4900}]
+    assert sum(agent_module.json_size(row) for row in result) <= agent.budget.max_round_result_chars
     message = render_round(agent._round_payload(2, result, ""))
     provider = AgyCliProvider()
     assert provider.payload_bytes(AGENT_SYSTEM_PROMPT, message) < provider.max_input_bytes
@@ -92,6 +92,34 @@ def test_round_gate_uses_provider_envelope_and_records_bytes(agent):
     assert run.rounds[0].status == "input_too_large"
     assert run.rounds[0].input_bytes == 20001
     assert agent.provider.calls == 0
+
+
+def test_increased_result_budget_keeps_agy_margin_with_claim_and_state(agent):
+    """Mixed text plus 11 component ledgers and a real CLI envelope, no live call."""
+    agent.claim_text = "청구항의 조건 및 처리 순서 " * 120
+    for i in range(11):
+        key = f"R{i + 1:03d}"
+        state = ComponentState(key, f"구성 {i + 1}", "정점색 및 텍스처 처리 조건 " * 12)
+        agent._components[key] = state
+        agent._order.append(key)
+    entry = {"text": "vertex color atlas " * 1600 + "정점색" * 5000}
+    # Fill the remaining character allocation with Korean, not cheap ASCII.
+    entry["text"] += "가" * (agent.budget.max_round_result_chars - agent_module.json_size(entry))
+    assert agent_module.json_size(entry) == 64000
+    provider = AgyCliProvider()
+    message = render_round(agent._round_payload(2, [entry], ""))
+    assert provider.payload_bytes(AGENT_SYSTEM_PROMPT, message) <= provider.max_input_bytes - 20000
+
+
+def test_increased_budget_does_not_bypass_transport_gate(agent):
+    class NeverExecute(AgyCliProvider):
+        async def execute(self, request, emit):
+            raise AssertionError("Oversized serialized input reached CLI")
+    agent.provider = NeverExecute()
+    agent.claim_text = "가" * 64000
+    run = asyncio.run(agent.run())
+    assert run.rounds[0].status == "input_too_large"
+    assert run.rounds[0].input_bytes > agent.provider.max_input_bytes
 
 
 def test_hit_payload_is_minimal_but_audit_and_candidates_keep_provenance(agent):
@@ -173,7 +201,7 @@ def test_requested_page_is_read_before_many_search_actions(agent):
     assert results[0]["pages"][0]["text"]
     assert run.pages_read == 1
     assert not any(row["action"].startswith("read") for row in run.deferred_pending)
-    assert sum(agent_module.json_size(row) for row in results) <= 56000
+    assert sum(agent_module.json_size(row) for row in results) <= agent.budget.max_round_result_chars
 
 
 def test_overlarge_page_is_explicit_prefix_not_a_full_page():
@@ -301,7 +329,8 @@ def test_already_served_page_reuses_cache_and_resends_text(agent, monkeypatch):
     assert page["chunks"]
     assert run.pages_read == 1
     assert run.repeat_page_reads == 1
-    assert second[0]["pages_read_total"] == 1
+    assert second[0]["previously_reviewed"] is True
+    assert second[1]["pages_read_total"] == 1
     next_input = agent._round_payload(3, second, "")
     assert next_input["results"][0]["pages"][0]["text"] == original_text
 
@@ -502,9 +531,9 @@ def test_large_request_completes_and_keeps_other_requests_pending(agent, monkeyp
     run = RetrievalRun()
     results = asyncio.run(agent._execute_actions(requests[1:], run, 2))
     assert len(results) == 1
-    assert grants == [56000]
+    assert grants == [agent.budget.max_round_result_chars]
     assert len(run.deferred_pending) == 2
-    assert sum(agent_module.json_size(row) for row in results) == 56000
+    assert sum(agent_module.json_size(row) for row in results) == agent.budget.max_round_result_chars
 
 
 @pytest.mark.parametrize("busy_first", [True, False])
@@ -523,7 +552,7 @@ def test_many_actions_do_not_delay_another_components_turn(agent, monkeypatch, b
     results = asyncio.run(agent._execute_actions(requests, RetrievalRun(), 1))
     assert len(results) == 21
     assert set(order[:2]) == {"R001", "R002"}
-    assert sum(agent_module.json_size(row) for row in results) <= 56000
+    assert sum(agent_module.json_size(row) for row in results) <= agent.budget.max_round_result_chars
 
 
 def test_unused_component_share_is_available_to_remaining_work(agent, monkeypatch):
@@ -537,7 +566,7 @@ def test_unused_component_share_is_available_to_remaining_work(agent, monkeypatc
     monkeypatch.setattr(agent, "_execute_one", consume)
     results = asyncio.run(agent._execute_actions(requests, RetrievalRun(), 1))
     assert len(results) == 2
-    assert sum(agent_module.json_size(row) for row in results) == 56000
+    assert sum(agent_module.json_size(row) for row in results) == agent.budget.max_round_result_chars
 
 
 def test_later_calls_retain_document_state_feature_and_candidate_text(agent):

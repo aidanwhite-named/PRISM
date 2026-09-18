@@ -19,15 +19,17 @@ CLI 내부 상태에 숨으면 재현성이 깨진다.
 
 from __future__ import annotations
 
+import asyncio
+import copy
 import hashlib
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..enums import ErrorCode
-from ..providers.base import NO_TOOLS, ExecutionRequest
+from ..providers.base import NO_TOOLS, ExecutionOutcome, ExecutionRequest
 from . import search as search_module
 from .actions import (
     ACTION_FINALIZE,
@@ -56,6 +58,8 @@ from .search import IndexedDocument
 # 예산 기본값. 사용자가 설정에서 바꿀 수 있고, preflight 와 실행이 **같은
 # 계산**을 쓴다(retrieval.budget_from_settings).
 DEFAULT_MAX_ROUNDS = 5
+# 최초 호출과 별개로 최대 두 번 재시도한다. 대기도 라운드 시간 제한에 포함한다.
+CAPACITY_RETRY_DELAYS = (5.0, 15.0)
 DEFAULT_MAX_PAGE_READS = 80
 # 사용자가 요청하는 문자 상한. 전송 가능한 바이트 수는 실행마다 실제
 # 청구항·지시문 크기를 빼서 job_assembly 에서 별도로 정한다.
@@ -67,7 +71,12 @@ DEFAULT_HITS_PER_DOCUMENT = 6
 
 # 한 라운드에서 모델에게 돌려주는 검색 결과 본문의 총 상한. 라운드 예산과 다른
 # 축이다 — 검색을 적게 하고도 페이지를 통째로 받아 가면 컨텍스트가 터진다.
-MAX_ROUND_RESULT_CHARS = 56_000
+# 2026-09-18: 4문헌·11구성 실행의 최대 전송량은 124,939 bytes.
+# 기존 56,000자에서 8,000자를 더하고 추가분을 한글로 계산해도 약 149 KB로,
+# agy의 180 KB 전송 상한까지 약 31 KB를 남긴다. 이는 결과 부분의 상한이며
+# 모든 언어·청구항에서 전송을 보장하지 않는다. 아래의 실제 payload_bytes
+# 검사(기본 지시문·청구항·상태·CLI 래퍼 포함)는 계속 별도로 적용한다.
+MAX_ROUND_RESULT_CHARS = 64_000
 
 # 검색 결과 한 줄에서 모델에게 보여주는 본문 길이. 근거 패키지에는 청크
 # 전체가 들어가므로 여기서 자른 것이 최종 보고서에 영향을 주지 않는다.
@@ -139,7 +148,7 @@ class RetrievalBudget:
 
 @dataclass
 class RoundRecord:
-    """LLM 호출 한 번의 감사 기록."""
+    """검색 라운드와 그 안의 개별 모델 호출 기록."""
 
     round: int
     started_at: str
@@ -153,6 +162,7 @@ class RoundRecord:
     actions: int = 0
     error: str = ""
     usage: dict | None = None
+    attempts: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -168,6 +178,7 @@ class RoundRecord:
             "actions": self.actions,
             "error": self.error,
             "usage": self.usage,
+            "attempts": self.attempts,
         }
 
 
@@ -670,6 +681,7 @@ class RetrievalAgent:
         emit=None,
         is_cancelled=None,
         semantic_encoder=None,
+        prior_claim_text: str = "",
     ) -> None:
         self.job_id = job_id
         self.provider = provider
@@ -678,6 +690,7 @@ class RetrievalAgent:
         self.work_dir = work_dir
         self.corpus = corpus
         self.claim_text = claim_text
+        self.prior_claim_text = prior_claim_text
         self.budget = budget
         self.trace = trace
         # Provider.execute 는 항상 호출 가능한 emit 을 기대한다. None 을 그대로
@@ -705,9 +718,8 @@ class RetrievalAgent:
         # 이번 실행에서 이미 전문을 돌려준 (attachment_id, page).
         self._served_pages: dict[tuple[str, int], int] = {}
         # --- 아래 셋은 **한 라운드 = 한 LLM 호출** 안에서만 유효하다.
-        # 라운드가 바뀌면 비운다. 앞 라운드의 results 는 다음 프롬프트에 다시
-        # 실리지 않으므로, 라운드를 넘어 원문을 생략하면 모델은 그 원문을 영영
-        # 보지 못한다. "위에 이미 있다"고 말할 수 있는 범위는 같은 메시지뿐이다.
+        # 라운드가 바뀌면 비운다. 보존된 열람 원문도 새 입력에 다시 싣고 참조를
+        # 재구성한다. "위에 이미 있다"고 말할 수 있는 범위는 같은 메시지뿐이다.
         self._round_scope: int | None = None
         # 이번 호출에서 본문을 이미 실은 chunk_id -> {"ref": …, "snippet": …}
         # 열쇠는 (attachment_id, chunk_id) 다. chunk_id(P0001-001)는 문헌 안에서만
@@ -718,6 +730,9 @@ class RetrievalAgent:
         # 실제 반환이 확정된 원문만 등록한다. 같은 문헌·페이지의 정확히
         # 포함된 문자열을 참조할 수 있으며, 다음 호출에서는 다시 비운다.
         self._round_sources: dict[tuple[str, int], list[tuple[str, dict]]] = {}
+        # Explicitly delivered reads survive independent model calls. Store original
+        # text, never references into a previous call's transient search results.
+        self._retained_reads: dict[tuple, dict] = {}
 
     # ------------------------------------------------------------- 유틸리티
 
@@ -1058,7 +1073,7 @@ class RetrievalAgent:
                 timeout_seconds=self.timeout_seconds,
                 tool_policy=NO_TOOLS,
             )
-            outcome = await self.provider.execute(request, self.emit)
+            outcome = await self._execute_round(request, record)
             record.completed_at = _utcnow()
             record.usage = outcome.usage
             record.output_chars = len(outcome.result_text or "")
@@ -1075,9 +1090,15 @@ class RetrievalAgent:
             aborted = self._abort_reason(outcome)
             if aborted is not None:
                 record.status, record.error = aborted[0], aborted[1]
+                if aborted[2] == ErrorCode.MODEL_CAPACITY:
+                    record.error = (
+                        f"로컬 검색 {round_no}라운드에서 선택 모델이 혼잡해 중단되었습니다. "
+                        f"총 {len(record.attempts)}회 시도했습니다. 잠시 후 다시 실행하거나 "
+                        "분석 모델을 변경하십시오."
+                    )
                 run.rounds.append(record)
                 run.error_code = aborted[2]
-                run.error = aborted[1]
+                run.error = record.error
                 run.cancelled = outcome.cancelled
                 run.timed_out = outcome.timed_out
                 self._sync_deferred_pending(run)
@@ -1094,7 +1115,7 @@ class RetrievalAgent:
                     f"이전 응답을 action 으로 읽지 못했습니다: {exc} "
                     "JSON 객체 하나만, 설명 없이 돌려주십시오."
                 )
-                results_payload = []
+                results_payload = self._retained_results()
                 self.trace.write(
                     "parse_error", {"reason": str(exc)}, round_no=round_no
                 )
@@ -1214,6 +1235,72 @@ class RetrievalAgent:
             )
         return run
 
+    async def _execute_round(self, request: ExecutionRequest, record: RoundRecord) -> ExecutionOutcome:
+        """일시 혼잡만 같은 입력으로 재시도한다. 검색 상태는 여기서 변경하지 않는다."""
+        deadline = time.monotonic() + self.timeout_seconds
+        for attempt in range(1, len(CAPACITY_RETRY_DELAYS) + 2):
+            if self.is_cancelled():
+                return ExecutionOutcome(cancelled=True)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return ExecutionOutcome(timed_out=True)
+            attempt_dir = request.work_dir / f"round-{record.round:02d}" / f"attempt-{attempt:02d}"
+            attempt_dir.mkdir(parents=True, exist_ok=True)
+            started = _utcnow()
+            task = asyncio.create_task(self.provider.execute(
+                replace(request, work_dir=attempt_dir, timeout_seconds=max(1, int(remaining))),
+                self.emit,
+            ))
+            try:
+                outcome = await asyncio.wait_for(asyncio.shield(task), timeout=remaining)
+            except TimeoutError:
+                outcome = ExecutionOutcome(timed_out=True)
+            finally:
+                if not task.done():
+                    # 실행 핸들이 제거되기 전에 프로세스부터 정리한다.
+                    await self.provider.cancel(self.job_id)
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+            # 취소 요청과 프로세스 종료가 겹쳐도 새 호출을 시작하지 않는다.
+            if self.is_cancelled():
+                outcome.cancelled = True
+            aborted = self._abort_reason(outcome)
+            entry = {
+                "attempt": attempt, "started_at": started, "completed_at": _utcnow(),
+                "status": aborted[0] if aborted else "ok",
+                "error_code": aborted[2] if aborted else "",
+                "error": outcome.error_message or (aborted[1] if aborted else ""),
+                "input_sha256": record.input_sha256,
+                "output_sha256": _sha256(outcome.result_text or ""),
+                "output_chars": len(outcome.result_text or ""),
+                "usage": outcome.usage,
+            }
+            record.attempts.append(entry)
+            for name, content in (("output.txt", outcome.result_text),
+                                  ("stdout.txt", outcome.raw_stdout), ("stderr.txt", outcome.raw_stderr)):
+                (attempt_dir / name).write_text(content or "", encoding="utf-8")
+            self.trace.write("llm_attempt", entry, round_no=record.round)
+            # 정책 위반·취소·인증·사용량 제한은 혼잡 플래그보다 우선한다.
+            if not aborted or aborted[2] != ErrorCode.MODEL_CAPACITY or attempt > len(CAPACITY_RETRY_DELAYS):
+                return outcome
+            delay = CAPACITY_RETRY_DELAYS[attempt - 1]
+            if deadline - time.monotonic() <= delay:
+                # 대기 뒤 호출할 시간이 없으면 시간 제한으로 종료한다.
+                return ExecutionOutcome(timed_out=True)
+            await self._emit("retrieval_progress", {
+                "phase": "retry", "round": record.round,
+                "attempt": attempt, "next_attempt": attempt + 1,
+                "retry_delay_seconds": delay,
+                "message": f"선택 모델이 혼잡합니다. {delay:g}초 후 검색 {record.round}라운드를 "
+                           f"다시 시도합니다 ({attempt}/{len(CAPACITY_RETRY_DELAYS)}).",
+            })
+            wait_until = time.monotonic() + delay
+            while time.monotonic() < wait_until:
+                if self.is_cancelled():
+                    return ExecutionOutcome(cancelled=True)
+                await asyncio.sleep(min(0.2, max(0, wait_until - time.monotonic())))
+        raise AssertionError("unreachable")
+
     def _finalize_problem(self, finalize: FinalizeEvidence) -> str:
         """마무리 요청이 선언된 구성 전부를 정확히 한 번씩 덮는가.
 
@@ -1279,14 +1366,22 @@ class RetrievalAgent:
                 "Provider 사용량 제한에 도달했습니다.",
                 ErrorCode.RATE_LIMITED,
             )
-        # 도구를 끈 실행이다. 한 번이라도 도구를 불렀으면 계약이 깨진 것이고,
+        # 도구 사용이 금지된 실행이다(agy는 사전 차단 대신 사후 탐지).
+        # 한 번이라도 도구를 불렀으면 계약이 깨진 것이고,
         # 결과가 멀쩡해 보여도 실패로 본다.
         if outcome.tool_uses or NO_TOOLS.unexpected_calls(outcome.tool_calls):
             names = ", ".join(dict.fromkeys(outcome.tool_uses)) or "알 수 없음"
             return (
                 "tool_policy_violation",
-                f"도구를 끈 로컬 검색 실행에서 도구 호출이 관측되었습니다: {names}",
+                f"외부 도구 사용이 금지된 로컬 검색 실행에서 도구 호출이 관측되었습니다: {names}. "
+                "PDF 검색은 PRISM이 수행해야 하므로 이 AI 응답은 보고서 근거로 사용하지 않았습니다.",
                 ErrorCode.TOOL_POLICY_VIOLATION,
+            )
+        if outcome.is_error and outcome.model_capacity:
+            return (
+                "model_capacity",
+                "선택 모델이 혼잡합니다. 잠시 후 다시 실행하거나 분석 모델을 변경하십시오.",
+                ErrorCode.MODEL_CAPACITY,
             )
         if outcome.is_error:
             return (
@@ -1388,6 +1483,7 @@ class RetrievalAgent:
             "round": round_no,
             "finalize_only": round_no == self.budget.max_rounds,
             "claim_text": self.claim_text,
+            **({"prior_claim_text": self.prior_claim_text} if self.prior_claim_text else {}),
             "budget": {
                 **self.budget.to_dict(),
                 "rounds_remaining": self.budget.max_rounds - round_no + 1,
@@ -1493,8 +1589,9 @@ class RetrievalAgent:
             self._round_text_chunks.clear()
             self._round_pages.clear()
             self._round_sources.clear()
-        results: list[dict] = []
-        budget_left = self.budget.max_round_result_chars
+        results = self._retained_results()
+        budget_left = self.budget.max_round_result_chars - sum(json_size(row) for row in results)
+        self._register_retained_results(results)
         scheduled = self._scheduled_actions(items)
 
         # Keep the priority order and rotate across components. A second read/search
@@ -1594,6 +1691,74 @@ class RetrievalAgent:
                 run.deferred_executed += 1
         self._sync_deferred_pending(run)
         return results
+
+    def _retained_results(self, extra: tuple[tuple, dict] | None = None) -> list[dict]:
+        """Rebuild same-call source references, preserving component ownership.
+
+        These are reviewed candidates, not an automatic relevance verdict. Their
+        full text takes priority over fresh search snippets in the existing budget.
+        """
+        retained = dict(self._retained_reads)
+        if extra is not None:
+            retained[extra[0]] = extra[1]
+        results = []
+        sources: dict[tuple, list] = {}
+        for original in retained.values():
+            entry = copy.deepcopy(original)
+            document = self._by_alias[entry['attachment']]
+            rows = entry.get('pages') or entry['documents'][0]['hits']
+            for row in rows:
+                ref = {'action': entry['action'], 'component_id': entry['component_id'],
+                       'attachment': document.alias, 'pdf_page': row['pdf_page']}
+                if row.get('chunk_id'):
+                    ref['chunk_id'] = row['chunk_id']
+                available = sources.setdefault((document.attachment_id, row['pdf_page']), [])
+                for name in ('text', 'context_before', 'context_after'):
+                    value = row.get(name)
+                    if not value:
+                        continue
+                    for text, source in available:
+                        start = text.find(value)
+                        if start < 0:
+                            continue
+                        pointer = {**source, 'start': start, 'end': start + len(value)}
+                        if json_size({name + '_ref': pointer}) < json_size({name: value}):
+                            row.pop(name)
+                            row[name + '_ref'] = pointer
+                            break
+                    if name in row:
+                        available.append((value, {**ref, 'field': name}))
+            results.append(entry)
+        return results
+
+    def _retain_read(self, key: tuple, entry: dict) -> bool:
+        """Admit only reads whose full text can also be delivered in later calls."""
+        candidate = self._retained_results((key, entry))
+        if sum(json_size(row) for row in candidate) > self.budget.max_round_result_chars:
+            return False
+        self._retained_reads[key] = entry
+        return True
+
+    def _register_retained_results(self, results: list[dict]) -> None:
+        for entry in results:
+            document = self._by_alias[entry['attachment']]
+            for row in entry.get('pages') or entry['documents'][0]['hits']:
+                ref = {'action': entry['action'], 'component_id': entry['component_id'],
+                       'attachment': document.alias, 'pdf_page': row['pdf_page']}
+                if row.get('chunk_id'):
+                    ref['chunk_id'] = row['chunk_id']
+                self._register_source_fields(row, document, ref)
+                if not row.get('text'):
+                    continue
+                if 'pages' in entry:
+                    self._round_pages.setdefault((document.attachment_id, row['pdf_page']), ref)
+                    chunks = [(chunk.chunk_id, chunk.text) for chunk in
+                              self._page_cache[(document.attachment_id, row['pdf_page'])][0]]
+                else:
+                    chunks = [(row['chunk_id'], row['text'])]
+                for chunk_id, text in chunks:
+                    self._round_text_chunks.setdefault((document.attachment_id, chunk_id),
+                        {'ref': ref, 'snippet': text[:SNIPPET_CHARS]})
 
     async def _execute_one(
         self, item, run: RetrievalRun, round_no: int, budget_left: int
@@ -1894,10 +2059,20 @@ class RetrievalAgent:
             "extraction_status": row.extraction_status,
             "text": row.text, "context_before": before, "context_after": after,
         }
+        retained = {**entry, 'attachment': document.alias, 'previously_reviewed': True,
+                    'documents': [{'attachment': document.alias, 'hits': [copy.deepcopy(hit)]}]}
         hit = self._share_source_fields(hit, document)
         entry["documents"] = [{"attachment": document.alias, "hits": [hit]}]
         size = json_size(entry)
         if size <= budget_left:
+            key = (item.component_id, document.attachment_id, 'chunk', row.chunk_id)
+            if not self._retain_read(key, retained):
+                run.budget_limited = True
+                self._enqueue_deferred(item, run=run, round_no=round_no,
+                    reason='열람 원문을 후속 라운드에도 보존할 반환 예산이 부족합니다.')
+                deferred = {**entry, 'documents': [], 'deferred': True,
+                            'reason': '열람 원문 보존 예산 부족'}
+                return deferred, json_size(deferred)
             self._component(item.component_id).reviewed_chunks.add((document.attachment_id, row.chunk_id))
             self._register_source_fields(hit, document, {
                 "action": item.action, "component_id": item.component_id,
@@ -2486,6 +2661,17 @@ class RetrievalAgent:
             candidate_skipped = [value for value in skipped_chars if value != page]
             trial = make_payload([*served, page_entry], candidate_skipped)
             if json_size(trial) > budget_left:
+                run.budget_limited = True
+                continue
+            retained_page = {**page_entry, 'already_read': True,
+                             'first_served_round': self._served_pages.get(page_key, round_no),
+                             'text': '\n\n'.join(row.text for row in rows)}
+            retained_page.pop('text_shown_in_this_round', None)
+            retained = {'action': ACTION_READ_PAGES, 'component_id': getattr(item, 'component_id', ''),
+                        'attachment': document.alias, 'previously_reviewed': True,
+                        'pages': [retained_page]}
+            key = (getattr(item, 'component_id', ''), document.attachment_id, 'page', page)
+            if not self._retain_read(key, retained):
                 run.budget_limited = True
                 continue
             served.append(page_entry)

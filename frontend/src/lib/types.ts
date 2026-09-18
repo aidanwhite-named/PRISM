@@ -138,6 +138,10 @@ export interface RetrievalManifest {
   generated_at: string;
   claim_sha256: string;
   agent_prompt_sha256: string;
+  prior_claim_sha256?: string;
+  failure_stage?: "retrieval_round" | "evidence_package" | null;
+  retryable?: boolean;
+  provider_error?: string;
   ocr_performed: false;
   budget: {
     max_rounds: number;
@@ -178,6 +182,14 @@ export interface RetrievalManifest {
     output_chars: number;
     actions: number;
     error: string;
+    attempts?: {
+      attempt: number;
+      status: string;
+      error_code: string;
+      error: string;
+      started_at: string;
+      completed_at: string;
+    }[];
   }[];
   pages_read: number;
   /** 이미 읽은 페이지를 다시 요청한 횟수. 막지는 않고 기록만 남긴다. */

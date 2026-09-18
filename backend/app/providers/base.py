@@ -314,6 +314,8 @@ class ExecutionOutcome:
     completed_without_exit: bool = False
     auth_required: bool = False
     rate_limited: bool = False
+    # 모델의 일시적인 처리 용량 부족. 계정 사용량 소진과 구분한다.
+    model_capacity: bool = False
 
     # 도구 정책. v0.1 에서 '도구 없음'은 편의 설정이 아니라 보안 불변조건이다.
     # tools_must_be_disabled 인 Provider 가 도구를 광고하거나 실제로 호출하면

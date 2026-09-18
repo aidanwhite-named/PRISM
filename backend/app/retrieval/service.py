@@ -231,6 +231,7 @@ async def run_retrieval(
     emit=None,
     is_cancelled=None,
     layout_check_max_pages: int = 400,
+    prior_claim_text: str = "",
 ) -> RetrievalResult:
     """색인부터 근거 패키지까지 한 번에 수행한다."""
     base = work_dir / RETRIEVAL_DIRNAME
@@ -317,6 +318,7 @@ async def run_retrieval(
         work_dir=base,
         corpus=documents,
         claim_text=claim_text,
+        prior_claim_text=prior_claim_text,
         budget=budget,
         trace=trace,
         emit=emit,
@@ -336,7 +338,12 @@ async def run_retrieval(
     result.timed_out = run.timed_out
     result.usage = {
         "retrieval_rounds": [record.usage for record in run.rounds],
+        "retrieval_attempts": [
+            {"round": record.round, "attempt": attempt["attempt"], "usage": attempt["usage"]}
+            for record in run.rounds for attempt in record.attempts
+        ],
         "retrieval_round_count": len(run.rounds),
+        "retrieval_attempt_count": sum(len(record.attempts) for record in run.rounds),
         "retrieval_pages_read": run.pages_read,
         "retrieval_deferred_executed": run.deferred_executed,
         "retrieval_deferred_pending": len(run.deferred_pending),
@@ -367,6 +374,7 @@ async def run_retrieval(
         "delivery_mode": DeliveryPlan.LOCAL_RETRIEVAL,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "claim_sha256": _sha256(claim_text),
+        "prior_claim_sha256": _sha256(prior_claim_text),
         "agent_prompt_sha256": _sha256(AGENT_SYSTEM_PROMPT),
         "budget": budget.to_dict(),
         "sqlite": capabilities.to_dict(),
@@ -426,9 +434,16 @@ async def run_retrieval(
         "deferred_executed": run.deferred_executed,
         "notes": list(run.notes),
         "budget_exhausted": run.budget_exhausted or bool((bundle or {}).get("budget_exhausted")),
+        "search_budget_exhausted": run.budget_exhausted,
+        "evidence_budget_limited": bool((bundle or {}).get("evidence_budget_limited")),
         "budget_limited": run.budget_limited or bool((bundle or {}).get("budget_limited")),
         "error": run.error or "",
         "error_code": run.error_code or "",
+        "failure_stage": "retrieval_round" if run.error_code else None,
+        "retryable": run.error_code == ErrorCode.MODEL_CAPACITY,
+        "provider_error": next((attempt["error"] for record in reversed(run.rounds)
+                                for attempt in reversed(record.attempts)
+                                if attempt["error"]), "") if run.error_code else "",
         "status": (
             "failed"
             if run.error_code
@@ -467,6 +482,7 @@ async def run_retrieval(
         manifest["error"] = result.error
         manifest["error_code"] = result.error_code
         manifest["status"] = "failed"
+        manifest["failure_stage"] = "evidence_package"
         manifest_path.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",

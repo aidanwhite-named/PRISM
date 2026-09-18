@@ -282,6 +282,11 @@ class CodexStreamState:
     def rate_limited(self) -> bool:
         return any(marker in self._haystack() for marker in _RATE_MARKERS)
 
+    @property
+    def model_capacity(self) -> bool:
+        # 정상 응답 본문에서 이 문구를 인용한 경우는 오류가 아니다.
+        return self.is_error and "model is at capacity" in (self.error_message or "").lower()
+
 
 class CodexStreamParser:
     def __init__(self) -> None:
@@ -428,10 +433,29 @@ class CodexStreamParser:
             status = str(item.get("status") or "").lower()
             failed = status in _FAILURE_STATUSES or bool(item.get("error"))
             if failed:
-                detail = str(item.get("error") or status or "실패")[:300]
+                result = item.get('result') or {}
+                if not isinstance(result, dict):
+                    result = {}
+                structured = result.get('structured_content') or result.get('structuredContent') or {}
+                if not structured and isinstance(result, dict):
+                    for block in result.get('content') or []:
+                        if not isinstance(block, dict) or block.get('type') != 'text':
+                            continue
+                        try:
+                            value = json.loads(block.get('text', ''))
+                        except (ValueError, TypeError):
+                            continue
+                        if isinstance(value, dict) and value.get('error_code'):
+                            structured = value
+                            break
+                if not isinstance(structured, dict):
+                    structured = {}
+                detail = str(item.get("error") or structured.get('detail') or status or "실패")[:300]
                 call["ok"] = False
                 call["error"] = detail
-                events.append(("tool_error", {"detail": detail, "name": audit_name, "id": call_id}))
+                events.append(("tool_error", {"detail": detail, "name": audit_name, "id": call_id,
+                    **({key: structured[key] for key in ('error_code', 'recoverable') if key in structured}
+                       if not item.get('error') else {})}))
             elif status in _SUCCESS_STATUSES:
                 # 알려진 성공값을 실제로 보고한 항목만 성공으로 확정한다.
                 call["ok"] = True

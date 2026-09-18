@@ -80,6 +80,28 @@ function job(documents: RetrievalDocument[]): Job {
 }
 
 describe("추출 경고", () => {
+  it.each(["MODEL_CAPACITY", "PROCESS_ERROR"])("모델 혼잡은 패키지 조립 실패와 구분한다: %s", (code) => {
+    const value = job([]);
+    value.error_code = code;
+    value.retrieval_manifest_error = "Selected model is at capacity. Please try a different model.";
+    render(<RetrievalManifestView job={value} />);
+    expect(screen.getByText("선택 모델이 혼잡해 검색이 중단되었습니다")).toBeTruthy();
+    expect(screen.getByText(/분석 모델을 변경하십시오/)).toBeTruthy();
+    expect(screen.queryByText("근거 패키지를 만들지 못했습니다")).toBeNull();
+  });
+
+  it("사용량 제한과 실제 패키지 예산 오류는 서로 다르게 표시한다", () => {
+    const value = job([]);
+    value.error_code = "RATE_LIMITED";
+    value.retrieval_manifest_error = "Provider 사용량 제한에 도달했습니다.";
+    const view = render(<RetrievalManifestView job={value} />);
+    expect(screen.getByText("AI 서비스 사용량 제한으로 검색이 중단되었습니다")).toBeTruthy();
+    value.error_code = "RETRIEVAL_FAILED";
+    value.retrieval_manifest_error = "근거 패키지 예산 초과";
+    view.rerender(<RetrievalManifestView job={value} />);
+    expect(screen.getByText("근거 패키지를 만들지 못했습니다")).toBeTruthy();
+  });
+
   it("부분 수록 페이지는 전문 확인과 구분하고 누락 글자 수를 표시한다", () => {
     const value = job([citation()]);
     value.retrieval_manifest!.page_truncations = [{

@@ -113,6 +113,9 @@ def check(
             if isinstance(retrieval_manifest.get("budget"), dict)
             else 0,
             "budget_exhausted": bool(retrieval_manifest.get("budget_exhausted")),
+            "search_budget_exhausted": bool(retrieval_manifest.get(
+                "search_budget_exhausted", retrieval_manifest.get("budget_exhausted"))),
+            "evidence_budget_limited": bool(retrieval_manifest.get("evidence_budget_limited")),
             "pending_actions": pending_count,
             "pages_read": retrieval_manifest.get("pages_read"),
         }
@@ -175,8 +178,10 @@ def render(result: dict[str, Any]) -> str:
             detail.append(f"{rounds}라운드" + (f"/상한 {max_rounds}" if max_rounds else ""))
         if scope.get("pending_actions"):
             detail.append(f"미처리 검색 요청 {scope['pending_actions']}건")
-        if scope.get("budget_exhausted"):
+        if scope.get("search_budget_exhausted", scope.get("budget_exhausted")):
             detail.append("검색 예산 소진")
+        if scope.get("evidence_budget_limited"):
+            detail.append("보고서 전달 근거·주변 페이지 분량 제한")
         limited_names = scope.get("limited_components") or []
         if limited_names:
             # 전부 제한이면 이름을 나열해도 알려 주는 것이 없다.
@@ -186,7 +191,10 @@ def render(result: dict[str, Any]) -> str:
                 else "검색 범위가 제한된 구성: " + ", ".join(limited_names)
             )
         lines.append(
-            "- 로컬 검색이 선언 범위를 다 훑지 못한 상태로 끝났습니다"
+            ("- 검색 후 보고서에 전달할 근거·주변 페이지를 분량에 맞춰 줄였습니다"
+             if scope.get("evidence_budget_limited") and not (
+                 scope.get("search_budget_exhausted") or scope.get("pending_actions") or limited_names)
+             else "- 로컬 검색이 선언 범위를 다 훑지 못한 상태로 끝났습니다")
             + (f" ({', '.join(detail)})" if detail else "")
             + ". 유사도와 대응 판단은 **실제로 확인한 범위** 기준이며, "
             "확인하지 못한 범위에 대한 판단이 아닙니다."

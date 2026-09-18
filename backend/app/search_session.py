@@ -123,6 +123,27 @@ def review_x(tools, report, review):
     return {'accepted': True, 'reason': 'X 원문 근거 대조 완료. 추가 검색을 중단합니다.'}
 
 
+def _checkpoint_error(work_dir, *, final=False):
+    """Input correction is bounded; storage/permission failures still stop at once."""
+    invalid_count = 0
+    pending = None
+    for row in sm.read_tool_journal(work_dir):
+        if row.get('tool') != 'save_candidates':
+            continue
+        if row.get('ok') is True:
+            invalid_count = 0
+            pending = None
+        elif row.get('ok') is False:
+            detail = str(row.get('detail') or row.get('error_code') or '후보 저장 실패')[:300]
+            if row.get('error_code') != 'SearchLogError':
+                return detail
+            invalid_count += 1
+            pending = '후보 입력 형식을 수정하여 저장하지 못했습니다: ' + detail
+            if invalid_count >= 3:
+                return '후보 입력 형식 오류가 3회 연속 발생했습니다: ' + detail
+    return pending if final else None
+
+
 async def execute(provider, request, emit, *, cancelled):
     """Watch independently of model progress so a stalled CLI can still finish."""
     from types import SimpleNamespace
@@ -131,7 +152,8 @@ async def execute(provider, request, emit, *, cancelled):
     async def observe(event_type, payload):
         nonlocal save_error
         if (event_type == 'tool_error' and payload.get('name') == 'mcp__prism-search__save_candidates'):
-            save_error = str(payload.get('detail') or '후보 저장 도구 호출 실패')[:300]
+            if payload.get('error_code') != 'SearchLogError':
+                save_error = str(payload.get('detail') or '후보 저장 도구 호출 실패')[:300]
         await emit(event_type, payload)
 
     task = asyncio.create_task(provider.execute(request, observe))
@@ -141,10 +163,7 @@ async def execute(provider, request, emit, *, cancelled):
             await asyncio.wait({task}, timeout=0.25)
             # Server-side validation/filesystem errors are recorded even when a
             # provider reports a successful MCP transport instead of tool_error.
-            if not save_error:
-                save_error = next((str(row.get('detail') or row.get('error_code') or '후보 저장 실패')[:300]
-                    for row in sm.read_tool_journal(request.work_dir)
-                    if row.get('tool') == 'save_candidates' and row.get('ok') is False), None)
+            save_error = _checkpoint_error(request.work_dir) or save_error
             if save_error and not cancelled():
                 if not task.done():
                     await provider.cancel(request.job_id)
@@ -171,6 +190,7 @@ async def execute(provider, request, emit, *, cancelled):
         if not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+    save_error = _checkpoint_error(request.work_dir, final=True) or save_error
     if save_error and not cancelled():
         outcome.cancelled = False  # Internal stop, not user cancellation.
         outcome.is_error = True

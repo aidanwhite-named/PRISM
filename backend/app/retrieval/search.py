@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from .content_filter import bibliography_only
+
 from .index import (
     TRIGRAM_MIN_CHARS,
     ChannelResult,
@@ -200,6 +202,11 @@ def search_document(
         literals = extract_literals(queries)
 
     index = document.index
+    # Fill the candidate quota with technical passages even when many front-matter
+    # chunks would otherwise occupy the top positions of a channel.
+    excluded = {row.chunk_id for row in index.all_chunks() if bibliography_only(row)}
+    requested_channel_limit = per_channel_limit
+    per_channel_limit += len(excluded)
     results: list[tuple[ChannelResult, bool]] = []
 
     exact = index.search_phrase(phrases, limit=per_channel_limit)
@@ -230,6 +237,8 @@ def search_document(
     if semantic_encoder is not None and queries:
         results.append((_semantic_channel(index, queries, semantic_encoder, per_channel_limit), True))
 
+    for result, _ in results:
+        result.rows = [row for row in result.rows if row.chunk_id not in excluded][:requested_channel_limit]
     rows, channel_map, rank_map = fuse([result for result, _ in results], limit)
     hits = [
         Hit(

@@ -234,6 +234,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const [searchPrompts, setSearchPrompts] = useState<Prompt[]>([]);
   const [searchPromptId, setSearchPromptId] = useState("");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [probingProvider, setProbingProvider] = useState(false);
   const [promptId, setPromptId] = useState("");
   // 빈 문자열 = 지정 안 함. 제한된 안전성 Provider 가 자동으로 선택되면
   // 사용자가 위험을 확인하지 않은 채 실행하게 된다.
@@ -439,6 +440,17 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
   const jobKindLabel = JOB_KIND_LABEL[kind];
   const searchAvailable = supportsSearch(searchProvider);
+  const retryProviderCheck = async () => {
+    setProbingProvider(true);
+    setError("");
+    try {
+      setProviders(await api.probeProviders());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setProbingProvider(false);
+    }
+  };
   const eligibleGapComponents = useMemo(
     () =>
       job?.job_kind === "patent_analysis"
@@ -1492,6 +1504,20 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               하나씩 끝냅니다.{" "}
               <a href={`#${otherWorkspace.path}`}>진행 상황 보기</a>
             </div>
+          </div>
+        )}
+
+        {selectedProvider && !selectedProvider.usable && (
+          <div className="notice danger" role="alert">
+            <strong>{selectedProvider.display_name} 실행 점검에 실패해 시작할 수 없습니다</strong>
+            <div style={{ marginTop: 4 }}>
+              {selectedProvider.notes.join(" ") || "설치 상태와 로그인을 확인하십시오."}
+            </div>
+            <a href="#/settings">환경 설정</a>{" "}
+            <button type="button" className="btn" disabled={probingProvider}
+              onClick={retryProviderCheck}>
+              {probingProvider ? "확인 중…" : "실행 도구 다시 확인"}
+            </button>
           </div>
         )}
 

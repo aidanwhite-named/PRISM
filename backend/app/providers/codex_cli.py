@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 
 from ..enums import AuthState
@@ -245,7 +246,7 @@ class CodexCliProvider(Provider):
 
     # ---------------------------------------------------------------- execute
 
-    def build_args(self, request: ExecutionRequest) -> list[str]:
+    def build_args(self, request: ExecutionRequest, *, output_path: Path | None = None) -> list[str]:
         """검증된 플래그만 쓴다. CLI 옵션이 바뀌면 여기만 고치면 된다."""
         policy = request.tool_policy
         if request.mcp_servers and (policy is None or not policy.mcp_tools):
@@ -272,7 +273,7 @@ class CodexCliProvider(Provider):
             "-C",
             str(request.work_dir),
             "-o",
-            str(request.work_dir / _LAST_MESSAGE_FILE),
+            str(output_path or request.work_dir / _LAST_MESSAGE_FILE),
             # 끌 수 있는 유일한 도구다. 분석 작업에서는 반드시 끈다.
             "-c",
             f"tools.web_search={'true' if wants_search else 'false'}",
@@ -331,9 +332,9 @@ class CodexCliProvider(Provider):
             f"{request.user_message}"
         )
 
-    def _read_last_message(self, work_dir: Path) -> str:
+    def _read_last_message(self, work_dir: Path, *, output_path: Path | None = None) -> str:
         try:
-            return (work_dir / _LAST_MESSAGE_FILE).read_text(encoding="utf-8").strip()
+            return (output_path or work_dir / _LAST_MESSAGE_FILE).read_text(encoding="utf-8").strip()
         except (OSError, UnicodeDecodeError):
             return ""
 
@@ -347,7 +348,9 @@ class CodexCliProvider(Provider):
             outcome.errors.append(outcome.error_message)
             return outcome
 
-        args = self.build_args(request)
+        # 같은 작업 폴더를 쓰는 후속 호출도 이전 응답 파일을 읽지 않는다.
+        output_path = request.work_dir / f"codex_last_message-{uuid.uuid4().hex}.txt"
+        args = self.build_args(request, output_path=output_path)
         outcome.cli_path = resolved.path
         outcome.cli_args = list(args)
 
@@ -440,11 +443,12 @@ class CodexCliProvider(Provider):
         outcome.exit_code = run.exit_code
         outcome.timed_out = run.timed_out
         outcome.cancelled = run.cancelled
-        outcome.result_text = self._read_last_message(request.work_dir) or state.fallback_text
+        outcome.result_text = self._read_last_message(request.work_dir, output_path=output_path) or state.fallback_text
         outcome.usage = state.usage
         outcome.is_error = state.is_error
         outcome.auth_required = state.auth_required
         outcome.rate_limited = state.rate_limited
+        outcome.model_capacity = state.model_capacity
         outcome.terminal_reason = state.status or (
             "cancelled" if run.cancelled else "timeout" if run.timed_out else None
         )

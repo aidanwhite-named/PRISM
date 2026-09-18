@@ -11,6 +11,7 @@ const STATUS_LABEL: Record<JobStatus, string> = {
 export const ERROR_LABEL: Record<string, string> = {
   AUTH_REQUIRED: "로그인 필요",
   RATE_LIMITED: "사용량 제한",
+  MODEL_CAPACITY: "선택 모델 혼잡",
   PROVIDER_UNAVAILABLE: "AI 실행 도구 사용 불가",
   INPUT_TOO_LARGE: "입력 크기 초과",
   TIMED_OUT: "시간 초과",

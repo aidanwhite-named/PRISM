@@ -92,6 +92,7 @@ vi.mock("../lib/api", () => ({
   api: {
     listPrompts: vi.fn(async () => []),
     listProviders: vi.fn(async () => [provider]),
+    probeProviders: vi.fn(async () => [provider]),
     settings: vi.fn(async () => ({
       values: { default_provider: "agy", max_inline_chars: 0 },
     })),
@@ -121,6 +122,30 @@ it('shows the fixed search allowance without a precision option', async () => {
   expect(screen.queryByRole('combobox', { name: '검색 전략 프롬프트' })).toBeNull();
   expect(screen.queryByRole('combobox', { name: '검색 깊이' })).toBeNull();
   expect(screen.queryByText('검색 깊이')).toBeNull();
+});
+
+it('explains a failed CLI check and enables search after rechecking without losing the claim', async () => {
+  const { api } = await import('../lib/api');
+  const unavailable = { ...provider, provider: 'codex', display_name: 'Codex', usable: false,
+    notes: ['node를 찾지 못해 실행하지 못했습니다.'] };
+  vi.mocked(api.listProviders).mockResolvedValueOnce([unavailable]);
+  vi.mocked(api.probeProviders).mockResolvedValueOnce([{ ...unavailable, usable: true, notes: [] }]);
+  vi.mocked(api.settings).mockResolvedValueOnce({ values: { default_provider: 'codex' } } as never);
+  vi.mocked(api.listPrompts).mockResolvedValueOnce([]).mockResolvedValueOnce([
+    { id: 'search', name: '검색 전략', enabled: true, body: '검색' } as Prompt,
+  ]);
+  window.location.hash = '#/search';
+  render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
+  const input = await screen.findByRole('textbox', { name: '검색할 청구항' });
+  await userEvent.type(input, '청구항 1. 센서를 포함하는 장치.');
+  const start = screen.getByRole('button', { name: '검색 시작' }) as HTMLButtonElement;
+  expect(start.disabled).toBe(true);
+  expect(screen.getByRole('alert').textContent).toContain('node를 찾지 못해');
+  await userEvent.click(screen.getByRole('button', { name: '실행 도구 다시 확인' }));
+  await waitFor(() => expect(start.disabled).toBe(false));
+  expect((input as HTMLTextAreaElement).value).toBe('청구항 1. 센서를 포함하는 장치.');
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(api.createJob).not.toHaveBeenCalled();
 });
 
 it.each([

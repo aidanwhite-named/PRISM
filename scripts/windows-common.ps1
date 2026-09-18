@@ -14,6 +14,7 @@ function Update-PrismPath {
         $env:Path,
         (Join-Path $env:APPDATA 'npm'),
         (Join-Path $env:USERPROFILE '.local\bin'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'),
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
         (Join-Path $env:LOCALAPPDATA 'agy\bin')
     )
@@ -53,13 +54,85 @@ function Find-PrismPython {
     return $null
 }
 
+function Find-PrismWinget {
+    Update-PrismPath
+    $candidates = @()
+    $command = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if ($command) { $candidates += $command.Source }
+    # The execution alias may not be available in this session yet.
+    if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
+        $packages = @(Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue)
+        foreach ($package in $packages) {
+            if ($package.InstallLocation) { $candidates += Join-Path $package.InstallLocation 'winget.exe' }
+        }
+    }
+    foreach ($candidate in $candidates) {
+        try {
+            & $candidate --version 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { return $candidate }
+        } catch { }
+    }
+    return $null
+}
+
+function Ensure-PrismWinget {
+    $winget = Find-PrismWinget
+    if ($winget) { return $winget }
+    Write-Host 'WinGet is missing. Downloading and installing it from Microsoft (no Store required)...' -ForegroundColor Cyan
+    $temporaryRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+    $downloadDirectory = Join-Path $temporaryRoot ('prism-winget-' + [Guid]::NewGuid().ToString('N'))
+    $previousProgress = $ProgressPreference
+    $previousTls = [Net.ServicePointManager]::SecurityProtocol
+    try {
+        if (-not (Get-Command Add-AppxPackage -ErrorAction SilentlyContinue)) {
+            throw 'Windows AppX installation support is unavailable.'
+        }
+        New-Item -ItemType Directory -Path $downloadDirectory | Out-Null
+        $ProgressPreference = 'SilentlyContinue'
+        [Net.ServicePointManager]::SecurityProtocol = $previousTls -bor [Net.SecurityProtocolType]::Tls12
+        # Resolve once so the bundle and dependencies always come from the same stable release.
+        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/winget-cli/releases/latest' -UseBasicParsing
+        foreach ($name in @('Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle', 'DesktopAppInstaller_Dependencies.zip')) {
+            $assets = @($release.assets | Where-Object { $_.name -eq $name })
+            if ($assets.Count -ne 1) { throw "Official WinGet release is missing $name." }
+            $url = [string]$assets[0].browser_download_url
+            if (-not $url.StartsWith('https://github.com/microsoft/winget-cli/releases/download/', [StringComparison]::Ordinal)) {
+                throw 'Unexpected WinGet download source.'
+            }
+            Invoke-WebRequest -Uri $url -UseBasicParsing -OutFile (Join-Path $downloadDirectory $name)
+        }
+        $dependenciesDirectory = Join-Path $downloadDirectory 'dependencies'
+        Expand-Archive -LiteralPath (Join-Path $downloadDirectory 'DesktopAppInstaller_Dependencies.zip') -DestinationPath $dependenciesDirectory
+        $dependencies = @(Get-ChildItem -LiteralPath (Join-Path $dependenciesDirectory 'x64') -Recurse -File |
+            Where-Object { $_.Extension -in @('.appx', '.msix') } | ForEach-Object { $_.FullName })
+        if ($dependencies.Count -eq 0) { throw 'WinGet x64 dependency packages are missing.' }
+        # Windows validates package signatures; use normal per-user installation.
+        Add-AppxPackage -Path (Join-Path $downloadDirectory 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle') -DependencyPath $dependencies -ErrorAction Stop
+        $winget = Find-PrismWinget
+        if (-not $winget) { throw 'WinGet was installed but could not be started.' }
+        Write-Host 'WinGet is ready. Continuing PRISM setup.' -ForegroundColor Green
+        return $winget
+    } catch {
+        throw "WinGet automatic installation failed: $($_.Exception.Message) If company policy or network access blocks installation, contact IT. Official installer: https://aka.ms/getwinget . Run PRISM setup again after resolving the error."
+    } finally {
+        $ProgressPreference = $previousProgress
+        [Net.ServicePointManager]::SecurityProtocol = $previousTls
+        # Only remove the unique directory created by this invocation, under TEMP.
+        $resolvedDownload = [IO.Path]::GetFullPath($downloadDirectory)
+        $tempPrefix = $temporaryRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        if ($resolvedDownload.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase) -and
+            (Test-Path -LiteralPath $resolvedDownload)) {
+            Remove-Item -LiteralPath $resolvedDownload -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Install-PrismPackage {
     param([string]$Id, [string]$HelpUrl, [switch]$UserScope)
-    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-    if (-not $winget) { throw "winget is unavailable. Install from $HelpUrl and run setup again." }
+    $winget = Ensure-PrismWinget
     $arguments = @('install', '--id', $Id, '--exact', '--source', 'winget', '--accept-source-agreements', '--accept-package-agreements', '--disable-interactivity', '--silent')
     if ($UserScope) { $arguments += @('--scope', 'user') }
-    Invoke-Checked $winget.Source $arguments
+    Invoke-Checked $winget $arguments
     Update-PrismPath
 }
 
