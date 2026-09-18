@@ -16,12 +16,20 @@ function Find-PrismPython { return 'python.exe' }
 function Find-PrismCli {
     param($Name)
     if ($env:PRISM_TEST_EXISTING -eq '1') { return "$Name.exe" }
+    if ($Name -eq 'codex' -and $script:codexInstalled) { return 'codex.exe' }
     return $null
 }
 function Install-PrismPackage { param($Id, $HelpUrl); throw "INSTALL-BLOCKED:$Id" }
 function Invoke-Checked {
     param($File, $Arguments)
     Add-Content -LiteralPath $env:PRISM_TEST_LOG -Value "$File $Arguments"
+    if ($Arguments -contains '@openai/codex') {
+        Add-Content -LiteralPath $env:PRISM_TEST_LOG -Value "NPM_NODE_OPTIONS=$env:NODE_OPTIONS"
+        $script:codexInstalled = $true
+    }
+    if ($Arguments -contains '--version') {
+        Add-Content -LiteralPath $env:PRISM_TEST_LOG -Value "CLI_NODE_OPTIONS=$env:NODE_OPTIONS"
+    }
     if ($env:PRISM_TEST_FAIL -eq '1' -and $Arguments -contains 'install') { throw 'PIP-FAILED' }
 }
 '''
@@ -38,7 +46,8 @@ class SetupTests(unittest.TestCase):
             (root / 'scripts/windows-common.ps1').write_text(STUB, encoding='utf-8-sig')
             log = root / 'calls.txt'
             env = dict(os.environ, PRISM_TEST_EXISTING=str(int(existing)),
-                       PRISM_TEST_FAIL=str(int(fail)), PRISM_TEST_LOG=str(log))
+                       PRISM_TEST_FAIL=str(int(fail)), PRISM_TEST_LOG=str(log),
+                       NODE_OPTIONS='--max-old-space-size=1024')
             result = subprocess.run([POWERSHELL, '-NoProfile', '-ExecutionPolicy', 'Bypass',
                                      '-File', str(root / 'setup.ps1'), '-Cli', cli],
                                     env=env, capture_output=True, timeout=30)
@@ -95,6 +104,13 @@ with patch('locale.getpreferredencoding', return_value='cp949'):
         self.assertEqual(code, 0, output)
         self.assertIn('claude.exe --version', calls)
         self.assertIn('codex.exe --version', calls)
+
+    def test_npm_uses_system_ca_and_restores_node_options(self):
+        code, output, calls = self.run_setup('codex')
+        self.assertEqual(code, 0, output)
+        self.assertIn('NPM_NODE_OPTIONS=--max-old-space-size=1024 --use-system-ca', calls)
+        self.assertIn('CLI_NODE_OPTIONS=--max-old-space-size=1024\n', calls)
+        self.assertNotIn('strict-ssl', calls)
 
     def test_installer_failure_is_propagated(self):
         code, output, _ = self.run_setup('claude')

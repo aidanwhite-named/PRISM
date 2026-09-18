@@ -45,10 +45,15 @@ try {
         $node = Get-Command node.exe -ErrorAction SilentlyContinue
         $nodeOk = $false
         if ($node) {
-            & $node.Source -e 'process.exit(Number(process.versions.node.split(String.fromCharCode(46))[0]) >= 22 ? 0 : 1)'
+            & $node.Source --use-system-ca -e 'process.exit(Number(process.versions.node.split(String.fromCharCode(46))[0]) >= 22 ? 0 : 1)'
             $nodeOk = $LASTEXITCODE -eq 0
         }
-        if (-not $nodeOk) { Install-PrismPackage 'OpenJS.NodeJS.LTS' 'https://nodejs.org/en/download' }
+        if (-not $nodeOk) {
+            Install-PrismPackage 'OpenJS.NodeJS.LTS' 'https://nodejs.org/en/download'
+            $node = Get-Command node.exe -ErrorAction SilentlyContinue
+            if (-not $node) { throw 'Node.js was not found. Reopen setup after installing Node.js LTS.' }
+            Invoke-Checked $node.Source @('--use-system-ca', '-e', 'process.exit(0)')
+        }
         $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
         if (-not $npm) { throw 'npm was not found. Reopen setup after installing Node.js LTS.' }
     }
@@ -67,7 +72,15 @@ try {
         Write-Host '[5/5] Codex를 준비합니다.'
         $codex = Find-PrismCli 'codex'
         if (-not $codex) {
-            Invoke-Checked $npm.Source @('install', '-g', '@openai/codex')
+            # npm runs in a separate Node process; inherit the Windows trust
+            # store without disabling TLS verification or changing user config.
+            $previousNodeOptions = $env:NODE_OPTIONS
+            try {
+                $env:NODE_OPTIONS = "$previousNodeOptions --use-system-ca".Trim()
+                Invoke-Checked $npm.Source @('install', '-g', '@openai/codex')
+            } finally {
+                $env:NODE_OPTIONS = $previousNodeOptions
+            }
             Update-PrismPath
             $codex = Find-PrismCli 'codex'
         }
