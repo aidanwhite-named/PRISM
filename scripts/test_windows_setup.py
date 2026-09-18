@@ -17,9 +17,15 @@ function Find-PrismCli {
     param($Name)
     if ($env:PRISM_TEST_EXISTING -eq '1') { return "$Name.exe" }
     if ($Name -eq 'codex' -and $script:codexInstalled) { return 'codex.exe' }
+    if ($Name -eq 'agy' -and $script:agyInstalled) { return 'agy.exe' }
     return $null
 }
 function Install-PrismPackage { param($Id, $HelpUrl); throw "INSTALL-BLOCKED:$Id" }
+function Install-PrismAgy {
+    Add-Content -LiteralPath $env:PRISM_TEST_LOG -Value 'INSTALL-AGY'
+    if ($env:PRISM_TEST_AGY_FAIL -eq '1') { throw 'AGY-INSTALL-FAILED' }
+    $script:agyInstalled = $true
+}
 function Invoke-Checked {
     param($File, $Arguments)
     Add-Content -LiteralPath $env:PRISM_TEST_LOG -Value "$File $Arguments"
@@ -36,7 +42,7 @@ function Invoke-Checked {
 
 
 class SetupTests(unittest.TestCase):
-    def run_setup(self, cli, *, existing=False, fail=False):
+    def run_setup(self, cli, *, existing=False, fail=False, agy_fail=False):
         with tempfile.TemporaryDirectory(prefix='prism-setup-test-') as temporary:
             root = Path(temporary) / '한글 공백'
             (root / 'scripts').mkdir(parents=True)
@@ -47,6 +53,7 @@ class SetupTests(unittest.TestCase):
             log = root / 'calls.txt'
             env = dict(os.environ, PRISM_TEST_EXISTING=str(int(existing)),
                        PRISM_TEST_FAIL=str(int(fail)), PRISM_TEST_LOG=str(log),
+                       PRISM_TEST_AGY_FAIL=str(int(agy_fail)),
                        NODE_OPTIONS='--max-old-space-size=1024')
             result = subprocess.run([POWERSHELL, '-NoProfile', '-ExecutionPolicy', 'Bypass',
                                      '-File', str(root / 'setup.ps1'), '-Cli', cli],
@@ -118,10 +125,25 @@ with patch('locale.getpreferredencoding', return_value='cp949'):
         self.assertIn('INSTALL-BLOCKED:Anthropic.ClaudeCode', output)
         self.assertNotIn('setup complete', output)
 
-    def test_missing_agy_is_not_replaced(self):
-        code, output, _ = self.run_setup('agy')
-        self.assertEqual(code, 1)
-        self.assertIn('not a substitute', output)
+    def test_missing_agy_is_installed(self):
+        code, output, calls = self.run_setup('agy')
+        self.assertEqual(code, 0, output)
+        self.assertIn('INSTALL-AGY', calls)
+        self.assertIn('agy.exe --version', calls)
+
+    def test_agy_install_failure_is_propagated(self):
+        code, output, calls = self.run_setup('agy', agy_fail=True)
+        self.assertEqual(code, 1, output)
+        self.assertIn('AGY-INSTALL-FAILED', output)
+        self.assertNotIn('setup complete', output)
+        self.assertNotIn('agy.exe --version', calls)
+
+    def test_all_reuses_three_existing_clis(self):
+        code, output, calls = self.run_setup('all', existing=True)
+        self.assertEqual(code, 0, output)
+        for name in ('claude', 'codex', 'agy'):
+            self.assertIn(f'{name}.exe --version', calls)
+        self.assertNotIn('INSTALL-AGY', calls)
 
     def test_external_exit_code_is_checked(self):
         script = ". '%s'; Invoke-Checked '%s' @('-c', 'exit(7)')" % (
@@ -130,10 +152,31 @@ with patch('locale.getpreferredencoding', return_value='cp949'):
         result = subprocess.run([POWERSHELL, '-NoProfile', '-Command', script], capture_output=True)
         self.assertNotEqual(result.returncode, 0)
 
-    def test_default_setup_never_prompts_and_prepares_both_clis(self):
+    def test_default_setup_never_prompts_and_prepares_all_clis(self):
         source = (ROOT / 'setup.ps1').read_text(encoding='utf-8-sig')
         self.assertNotIn('Read-Host', source)
-        self.assertIn("[string]$Cli = 'both'", source)
+        self.assertIn("[string]$Cli = 'all'", source)
+
+    def test_agy_official_installer_exit_status_and_cleanup(self):
+        for code in (0, 7):
+            with self.subTest(code=code), tempfile.TemporaryDirectory(prefix='prism-agy-test-') as temporary:
+                root = Path(temporary) / "한글 공백 '"
+                root.mkdir()
+                env = dict(os.environ, TEMP=str(root), TMP=str(root), PRISM_TEST_EXIT=str(code))
+                common = str(ROOT / 'scripts/windows-common.ps1').replace("'", "''")
+                script = ". '%s'; " % common + r'''
+function Invoke-WebRequest {
+    param($Uri, [switch]$UseBasicParsing, $OutFile)
+    if ($Uri -ne 'https://antigravity.google/cli/install.ps1' -or -not $UseBasicParsing) { throw 'Wrong installer source' }
+    Set-Content -LiteralPath $OutFile -Encoding UTF8 -Value ('exit ' + $env:PRISM_TEST_EXIT)
+}
+function Update-PrismPath {}
+Install-PrismAgy
+'''
+                result = subprocess.run([POWERSHELL, '-NoProfile', '-Command', script],
+                                        env=env, capture_output=True, timeout=30)
+                self.assertEqual(result.returncode == 0, code == 0, result.stderr)
+                self.assertEqual(list(root.glob('prism-agy-*.ps1')), [])
 
     def test_install_window_waits_for_worker_and_preserves_result(self):
         for code in (0, 7):

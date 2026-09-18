@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('claude', 'codex', 'both', 'agy', 'skip')]
-    [string]$Cli = 'both'
+    [ValidateSet('claude', 'codex', 'both', 'agy', 'all', 'skip')]
+    [string]$Cli = 'all'
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -13,7 +13,7 @@ try {
     }
     Update-PrismPath
     Write-Host 'PRISM 최초 설치' -ForegroundColor Cyan
-    Write-Host '[1/5] Python을 준비합니다.'
+    Write-Host '[1/6] Python을 준비합니다.'
     if (-not (Test-Path (Join-Path $PSScriptRoot 'frontend\dist\index.html'))) {
         throw 'Built UI is missing. Use the release ZIP, or build frontend first (see README).'
     }
@@ -31,7 +31,7 @@ try {
         if (-not $python) { throw 'Python 3.11/3.12 x64 was not found. Reopen setup after installation.' }
         Invoke-Checked $python @('-m', 'venv', (Join-Path $PSScriptRoot 'backend\.venv'))
     }
-    Write-Host '[2/5] PRISM 라이브러리를 설치합니다...' -ForegroundColor Cyan
+    Write-Host '[2/6] PRISM 라이브러리를 설치합니다...' -ForegroundColor Cyan
     # Bootstrap with Windows trust roots even when ensurepip supplied pip 24.0.
     # Require a version with system trust enabled by default; a failed upgrade
     # must not silently leave an already-installed older pip in use.
@@ -40,8 +40,8 @@ try {
     Invoke-Checked $venv @('-m', 'pip', 'check')
     Invoke-Checked $venv @('-c', 'import fastapi,uvicorn,sqlalchemy,pypdf,arxiv,pyalex,truststore,winpty')
 
-    if ($Cli -in @('codex', 'both')) {
-        Write-Host '[3/5] Node.js를 준비합니다.'
+    if ($Cli -in @('codex', 'both', 'all')) {
+        Write-Host '[3/6] Node.js를 준비합니다.'
         $node = Get-Command node.exe -ErrorAction SilentlyContinue
         $nodeOk = $false
         if ($node) {
@@ -58,8 +58,8 @@ try {
         if (-not $npm) { throw 'npm was not found. Reopen setup after installing Node.js LTS.' }
     }
 
-    if ($Cli -in @('claude', 'both')) {
-        Write-Host '[4/5] Claude Code를 준비합니다.'
+    if ($Cli -in @('claude', 'both', 'all')) {
+        Write-Host '[4/6] Claude Code를 준비합니다.'
         $claude = Find-PrismCli 'claude'
         if (-not $claude) {
             Install-PrismPackage 'Anthropic.ClaudeCode' 'https://code.claude.com/docs/en/setup'
@@ -68,8 +68,8 @@ try {
         if (-not $claude) { throw 'Claude CLI was not found. Reopen setup or check the official installation guide.' }
         Invoke-Checked $claude @('--version')
     }
-    if ($Cli -in @('codex', 'both')) {
-        Write-Host '[5/5] Codex를 준비합니다.'
+    if ($Cli -in @('codex', 'both', 'all')) {
+        Write-Host '[5/6] Codex를 준비합니다.'
         $codex = Find-PrismCli 'codex'
         if (-not $codex) {
             # npm runs in a separate Node process; inherit the Windows trust
@@ -87,9 +87,14 @@ try {
         if (-not $codex) { throw 'Codex CLI was not found. Check npm global PATH and reopen setup.' }
         Invoke-Checked $codex @('--version')
     }
-    if ($Cli -eq 'agy') {
+    if ($Cli -in @('agy', 'all')) {
+        Write-Host '[6/6] agy (Antigravity CLI)를 준비합니다.'
         $agy = Find-PrismCli 'agy'
-        if (-not $agy) { throw 'Install your compatible agy CLI and add it to PATH, then retry. Google Gemini CLI is not a substitute.' }
+        if (-not $agy) {
+            Install-PrismAgy
+            $agy = Find-PrismCli 'agy'
+        }
+        if (-not $agy) { throw 'agy was not found after installation. Check the installation log and retry.' }
         $env:AGY_CLI_DISABLE_AUTO_UPDATE = 'true'
         Invoke-Checked $agy @('--version')
     }

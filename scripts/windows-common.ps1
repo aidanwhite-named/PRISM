@@ -15,6 +15,7 @@ function Update-PrismPath {
         (Join-Path $env:APPDATA 'npm'),
         (Join-Path $env:USERPROFILE '.local\bin'),
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links')
+        (Join-Path $env:LOCALAPPDATA 'agy\bin')
     )
     $env:Path = ($parts | Where-Object { $_ }) -join ';'
 }
@@ -68,5 +69,28 @@ function Find-PrismCli {
         $command = Get-Command "$Name$extension" -ErrorAction SilentlyContinue
         if ($command) { return $command.Source }
     }
+    if ($Name -eq 'agy') {
+        foreach ($directory in @((Join-Path $env:LOCALAPPDATA 'agy\bin'), (Join-Path $env:USERPROFILE '.agy\bin'))) {
+            $candidate = Join-Path $directory 'agy.exe'
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+        }
+    }
     return $null
+}
+
+function Install-PrismAgy {
+    # Official installer validates the downloaded executable against SHA-512.
+    # PowerShell HTTPS uses Windows trust roots; do not bypass TLS validation.
+    $installerPath = Join-Path ([IO.Path]::GetTempPath()) ('prism-agy-' + [Guid]::NewGuid().ToString('N') + '.ps1')
+    try {
+        Invoke-WebRequest -Uri 'https://antigravity.google/cli/install.ps1' -UseBasicParsing -OutFile $installerPath
+        $quotedPath = $installerPath.Replace("'", "''")
+        # Avoid IE parsing/security prompts in Windows PowerShell 5.1, including
+        # the official installer's own executable download.
+        $command = "`$PSDefaultParameterValues = @{'Invoke-WebRequest:UseBasicParsing' = `$true}; & '$quotedPath' --skip-aliases"
+        Invoke-Checked (Join-Path $env:SYSTEMROOT 'System32\WindowsPowerShell\v1.0\powershell.exe') @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', $command)
+    } finally {
+        if (Test-Path -LiteralPath $installerPath) { Remove-Item -LiteralPath $installerPath -Force }
+    }
+    Update-PrismPath
 }

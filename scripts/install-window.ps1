@@ -33,7 +33,7 @@ $title.Font = New-Object Drawing.Font('Malgun Gothic', 17, [Drawing.FontStyle]::
 $title.SetBounds(28, 24, 590, 42)
 $form.Controls.Add($title)
 $description = New-Object Windows.Forms.Label
-$description.Text = "Python · 라이브러리 · Node.js · Claude Code · Codex를 자동으로 준비합니다.`n이미 설치된 항목은 재사용합니다. Windows 승인 창이 나오면 허용해 주세요."
+$description.Text = "Python · 라이브러리 · Node.js · Claude Code · Codex · agy를 자동으로 준비합니다.`n이미 설치된 항목은 재사용합니다. Windows 승인 창이 나오면 허용해 주세요."
 $description.SetBounds(30, 78, 580, 55)
 $form.Controls.Add($description)
 $status = New-Object Windows.Forms.Label
