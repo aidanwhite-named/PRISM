@@ -239,10 +239,7 @@ function ToolFields({
             ))}
           </select>
           <span className="hint">
-            비워 두면 PRISM 이 아무 것도 넘기지 않고 모델 기본값
-            {modelDefaultEffort ? `(${modelDefaultEffort})` : ""}을 씁니다.
-            선택값은 Codex CLI의 model_reasoning_effort로 전달됩니다. 모델을
-            바꾸면 지원하지 않는 기존 단계는 자동으로 해제됩니다.
+            미선택 시 모델 기본값{modelDefaultEffort ? `(${modelDefaultEffort})` : ""}을 사용합니다.
           </span>
         </div>
       )}
@@ -729,367 +726,177 @@ export default function SettingsPage() {
         </div>
       ))}
 
-      <div className="card settings-defaults">
-        <h2>AI 실행 도구</h2>
-        <p className="faint" style={{ marginTop: -6 }}>
-          작업 종류마다 실행 도구·모델·추론강도를 따로 정합니다. 실행 화면은 이
-          값을 그대로 사용합니다.
-        </p>
-        <h3 style={{ margin: "18px 0 4px", fontSize: 13 }}>구성대비 분석</h3>
-        <div className="card-row settings-tool-analysis">
-          <ToolFields
-            idPrefix="analysis"
-            title="구성대비 분석"
-            providers={providers}
-            provider={defaultProvider}
-            onProviderChange={setDefaultProvider}
-            models={defaultModels}
-            setModels={setDefaultModels}
-            efforts={reasoningEffort}
-            setEfforts={setReasoningEffort}
-          />
-        </div>
-        <h3 style={{ margin: "18px 0 4px", fontSize: 13 }}>유사문헌 검색</h3>
-        <div className="card-row settings-tool-search">
-          <ToolFields
-            idPrefix="search"
-            title="유사문헌 검색"
-            providers={providers}
-            provider={searchProvider}
-            onProviderChange={setSearchProvider}
-            models={searchModels}
-            setModels={setSearchModels}
-            efforts={searchEfforts}
-            setEfforts={setSearchEfforts}
-            inheritLabel="구성대비 분석과 같은 도구"
-            searchProvider={searchProvider || defaultProvider}
-          />
-        </div>
-        <button className="btn primary" onClick={saveExecutionDefaults}>
-          실행 도구 저장
-        </button>
-      </div>
-
-      <KiprisSettings settings={settings} onChange={setSettings} />
-
-      <div className="card settings-epo">
-        <h2>EPO OPS 특허 검색 연동</h2>
-        <p className="muted settings-integration-copy">
-          EPO OPS API로 특허를 검색하고 받은 XML과 결과를 대조합니다. EPO 번역이
-          포함될 수 있어 증거 등급은 <b>exact</b>까지만 부여합니다.
-        </p>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={v.epo_integration_enabled}
-            onChange={(e) =>
-              saveValue("epo_integration_enabled", e.target.checked)
-            }
-          />
-          EPO OPS 연동 사용
-        </label>
-
-        {v.epo_integration_enabled && (
-          <div style={{ marginTop: 14 }}>
-            <div className="field">
-              <label>Consumer Key</label>
-              <div className="btn-row">
-                <input
-                  value={epoKey}
-                  onChange={(e) => setEpoKey(e.target.value)}
-                  placeholder="EPO 개발자 포털에서 발급한 Consumer Key"
-                  autoComplete="off"
-                  spellCheck={false}
-                  style={{ flex: "1 1 320px", minWidth: 0 }}
+      <div className="settings-columns settings-top-columns">
+        <div className="settings-stack">
+          <div className="card settings-defaults">
+            <h2>AI 실행 도구</h2>
+            <p className="faint" style={{ marginTop: -6 }}>
+              작업별 실행 도구·모델·추론강도를 설정합니다.
+            </p>
+            <div className="settings-tools-grid">
+              <section className="settings-tool-panel settings-tool-analysis" aria-labelledby="analysis-tool-title">
+                <h3 id="analysis-tool-title">구성대비 분석</h3>
+                <ToolFields
+                  idPrefix="analysis"
+                  title="구성대비 분석"
+                  providers={providers}
+                  provider={defaultProvider}
+                  onProviderChange={setDefaultProvider}
+                  models={defaultModels}
+                  setModels={setDefaultModels}
+                  efforts={reasoningEffort}
+                  setEfforts={setReasoningEffort}
                 />
-                <button
-                  className="btn small"
-                  disabled={epoKey.trim() === (v.epo_consumer_key ?? "")}
-                  onClick={() =>
-                    saveEpoCredential(
-                      "epo_consumer_key",
-                      epoKey.trim(),
-                      "Consumer Key 를 저장했습니다.",
-                    )
-                  }
-                >
-                  저장
-                </button>
-              </div>
-            </div>
-
-            <div className="field">
-              <label>
-                Consumer Secret{" "}
-                <span
-                  className={`pill ${epoSecretSaved ? "ok" : "neutral"}`}
-                  style={{ marginLeft: 6 }}
-                >
-                  {epoSecretSaved ? "저장됨" : "미설정"}
-                </span>
-              </label>
-              <div className="btn-row">
-                <input
-                  type="password"
-                  value={epoSecret}
-                  onChange={(e) => setEpoSecret(e.target.value)}
-                  placeholder={
-                    epoSecretSaved
-                      ? "저장되어 있습니다. 바꾸려면 새 값을 입력하십시오."
-                      : "EPO 개발자 포털에서 발급한 Consumer Secret Key"
-                  }
-                  autoComplete="new-password"
-                  spellCheck={false}
-                  style={{ flex: "1 1 320px", minWidth: 0 }}
+              </section>
+              <section className="settings-tool-panel settings-tool-search" aria-labelledby="search-tool-title">
+                <h3 id="search-tool-title">유사문헌 검색</h3>
+                <ToolFields
+                  idPrefix="search"
+                  title="유사문헌 검색"
+                  providers={providers}
+                  provider={searchProvider}
+                  onProviderChange={setSearchProvider}
+                  models={searchModels}
+                  setModels={setSearchModels}
+                  efforts={searchEfforts}
+                  setEfforts={setSearchEfforts}
+                  inheritLabel="구성대비 분석과 같은 도구"
+                  searchProvider={searchProvider || defaultProvider}
                 />
-                <button
-                  className="btn small"
-                  disabled={!epoSecret.trim()}
-                  onClick={() =>
-                    saveEpoCredential(
-                      "epo_consumer_secret",
-                      epoSecret.trim(),
-                      "Consumer Secret 를 저장했습니다.",
-                    )
-                  }
-                >
-                  저장
-                </button>
-                <button
-                  className="btn small"
-                  disabled={!epoSecretSaved}
-                  onClick={() =>
-                    saveEpoCredential(
-                      "epo_consumer_secret",
-                      "",
-                      "Consumer Secret 를 지웠습니다.",
-                    )
-                  }
-                >
-                  지우기
-                </button>
-              </div>
-              <div className="hint">
-                Secret은 화면에 다시 표시되지 않습니다. 저장 후 「연결 테스트」로
-                확인하세요.
-              </div>
+              </section>
             </div>
-
-            <div className="btn-row">
-              <button
-                className="btn small"
-                disabled={epoChecking || !v.epo_consumer_key || !epoSecretSaved}
-                onClick={checkEpo}
-              >
-                {epoChecking ? "확인 중…" : "연결 테스트"}
+            <button className="btn primary" onClick={saveExecutionDefaults}>
+              실행 도구 저장
+            </button>
+          </div>
+        </div>
+        <div className="settings-stack">
+          <div className="card settings-prompt-defaults">
+            <div className="split" style={{ marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>기본 프롬프트</h2>
+              <button className="btn primary small" onClick={savePromptDefaults}>
+                기본 프롬프트 저장
               </button>
+            </div>
+            <p className="faint" style={{ marginTop: -6 }}>
+              실행 화면이 처음 고르는 프롬프트입니다.
+            </p>
+            <div className="field">
+              <label htmlFor="default-prompt">기본 분석 프롬프트</label>
+              <select
+                id="default-prompt"
+                value={defaultPromptId}
+                onChange={(e) => setDefaultPromptId(e.target.value)}
+              >
+                <option value="">최근 활성 분석 프롬프트 자동 선택</option>
+                {prompts.map((prompt) => (
+                  <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
+                    {prompt.name}{prompt.enabled ? "" : " · 비활성"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="default-search-prompt">기본 검색 전략 프롬프트</label>
+              <select
+                id="default-search-prompt"
+                value={defaultSearchPromptId}
+                onChange={(e) => setDefaultSearchPromptId(e.target.value)}
+              >
+                <option value="">기본 제공 검색 전략 사용</option>
+                {searchPrompts.map((prompt) => (
+                  <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
+                    {prompt.name}
+                    {prompt.enabled ? "" : " · 비활성"}
+                  </option>
+                ))}
+              </select>
               <span className="hint">
-                토큰 발급만 확인하며 특허 데이터와 토큰은 저장하지 않습니다.
+                실행 화면에서 변경할 수 있습니다.
               </span>
             </div>
-
-            {epoCheck && (
-              <div
-                className={`notice ${epoCheck.ok ? "ok" : "danger"}`}
-                style={{ marginTop: 10 }}
-              >
-                {epoCheck.detail}
-                {epoCheck.ok && epoCheck.expires_in
-                  ? ` (토큰 수명 ${epoCheck.expires_in}초)`
-                  : ""}
-              </div>
-            )}
-
-            <h3 style={{ margin: "18px 0 4px", fontSize: 13 }}>
-              이번 주 사용량
-            </h3>
-            <div className="hint" style={{ marginBottom: 8 }}>
-              OPS는 데이터량 기준이며 주간 4GB 한도가 적용됩니다. OPS와 PRISM
-              측정값 중 큰 값을 사용합니다.
-            </div>
-            <div className="table-scroll">
-            <table>
-              <tbody>
-                <tr>
-                  <th>OPS 가 보고한 주간 사용량</th>
-                  <td>
-                    {formatBytes(epoQuota.ops_weekly_bytes)}
-                    {" / "}
-                    {formatBytes(epoQuota.weekly_limit_bytes)}
-                  </td>
-                </tr>
-                <tr>
-                  <th>PRISM 이 센 주간 사용량</th>
-                  <td>
-                    {formatBytes(epoQuota.local_bytes)}
-                    {epoQuota.requests ? ` (${epoQuota.requests}회 호출)` : ""}
-                  </td>
-                </tr>
-                <tr>
-                  <th>남은 양</th>
-                  <td>{formatBytes(epoQuota.remaining_weekly_bytes)}</td>
-                </tr>
-                <tr>
-                  <th>시간당 사용량</th>
-                  <td>
-                    {formatBytes(epoQuota.ops_hourly_bytes)}
-                    {epoQuota.hourly_limit_bytes
-                      ? ` / ${formatBytes(epoQuota.hourly_limit_bytes)}`
-                      : " (관측만, 차단 안 함)"}
-                  </td>
-                </tr>
-                <tr>
-                  <th>아직 저장 안 된 사용량</th>
-                  <td>
-                    {formatBytes(epoQuota.pending_bytes)}
-                    {epoQuota.persist_error ? (
-                      <div className="hint">
-                        저장 실패: {epoQuota.persist_error} — 한도는 계속
-                        지켜지지만 프로그램을 다시 시작하면 그만큼이 사라집니다.
-                      </div>
-                    ) : null}
-                  </td>
-                </tr>
-                <tr>
-                  <th>마지막 OPS 부하 상태</th>
-                  <td>
-                    <span
-                      className={`pill ${
-                        epoQuota.throttle?.dangerous ? "danger" : "neutral"
-                      }`}
-                    >
-                      {epoQuota.throttle?.system_state || "관측 전"}
-                    </span>
-                    {epoQuota.throttle?.raw ? (
-                      <div className="hint">{epoQuota.throttle.raw}</div>
-                    ) : null}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            </div>
-
-            <h3 style={{ margin: "18px 0 4px", fontSize: 13 }}>EPO 사용량 안전 한도</h3>
-            <div className="hint" style={{ marginBottom: 8 }}>
-              검색 전략과 별개로 OPS 응답 데이터 사용량을 제한합니다.
-            </div>
-            <div className="settings-limit-options">
-              <NumberField
-                label="시간당 사용량 상한 (bytes, 0 = 관측만)"
-                value={v.epo_hourly_quota_bytes}
-                hint={
-                  "주간 4GB 한도는 항상 적용됩니다. 값을 입력하면 시간당 한도도 추가로 적용합니다."
+          </div>
+          <div className="card settings-literature">
+            <h2>비특허문헌 검색 연동 (Crossref · Europe PMC · OpenAlex)</h2>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={v.literature_integration_enabled}
+                onChange={(e) =>
+                  saveValue("literature_integration_enabled", e.target.checked)
                 }
-                onSave={(n) => saveValue("epo_hourly_quota_bytes", n)}
               />
-            </div>
-          </div>
-        )}
-      </div>
+              비특허문헌 검색 사용
+            </label>
 
-      <div className="card settings-run-limits">
-        <h2>전체 실행 상한</h2>
-        <p className="hint">유사문헌 검색은 80회·5분 심층 실행으로 고정됩니다. 아래 시간 상한은 구성대비 분석 작업에 적용됩니다.</p>
-        <NumberField label="실행 제한시간 (초)" value={v.default_timeout_seconds}
-          hint="전체 실행의 제한시간입니다."
-          onSave={(n) => saveValue("default_timeout_seconds", n)} />
-      </div>
+            {v.literature_integration_enabled && (
+              <div style={{ marginTop: 14 }}>
+                <div className="field">
+                  <label htmlFor="openalex-api-key">
+                    OpenAlex API Key{" "}
+                    <span
+                      className={`pill ${openalexKeySaved ? "ok" : "neutral"}`}
+                      style={{ marginLeft: 6 }}
+                    >
+                      {openalexKeySaved ? "저장됨" : "미설정"}
+                    </span>
+                  </label>
+                  <div className="btn-row">
+                    <input
+                      id="openalex-api-key"
+                      type="password"
+                      value={openalexKey}
+                      onChange={(e) => setOpenalexKey(e.target.value)}
+                      placeholder={
+                        openalexKeySaved
+                          ? "저장되어 있습니다. 바꾸려면 새 값을 입력하십시오."
+                          : "openalex.org/settings/api 에서 발급한 API Key"
+                      }
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      style={{ flex: "1 1 160px", minWidth: 0 }}
+                    />
+                    <button
+                      className="btn small"
+                      disabled={!openalexKey.trim()}
+                      onClick={() =>
+                        saveOpenalexKey(openalexKey.trim(), "OpenAlex API Key 를 저장했습니다.")
+                      }
+                    >
+                      저장
+                    </button>
+                    <button
+                      className="btn small"
+                      disabled={!openalexKeySaved}
+                      onClick={() => saveOpenalexKey("", "OpenAlex API Key 를 지웠습니다.")}
+                    >
+                      지우기
+                    </button>
+                  </div>
+                </div>
 
-      <div className="card settings-literature">
-        <h2>비특허문헌 검색 연동 (Crossref · Europe PMC · OpenAlex)</h2>
-        <p className="muted settings-integration-copy">
-          선택한 LLM이 필요할 때 Crossref·Europe PMC·OpenAlex 도구를 호출합니다.
-          PRISM이 논문 후보를 독립 검색하거나 최종 목록에 추가하지 않습니다. 웹 검색은
-          결과를 요약문과 익명 링크로만 돌려주어 논문을 식별하지 못하는 경우가
-          있습니다. 등록 서지에 초록이 있으면 발행사 사이트를 열지 않고 받을 수
-          있습니다. 초록 제공 여부는 문헌마다 다릅니다. Crossref·Europe PMC는
-          자격증명이 필요 없고, OpenAlex는 API 키가 있으면 일일 한도가 커집니다.
-        </p>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={v.literature_integration_enabled}
-            onChange={(e) =>
-              saveValue("literature_integration_enabled", e.target.checked)
-            }
-          />
-          비특허문헌 검색 사용
-        </label>
+                <div className="btn-row">
+                  <button
+                    className="btn small"
+                    disabled={openalexChecking}
+                    onClick={checkOpenalex}
+                  >
+                    {openalexChecking ? "확인 중…" : "OpenAlex 연결 테스트"}
+                  </button>
+                </div>
 
-        {v.literature_integration_enabled && (
-          <div style={{ marginTop: 14 }}>
-            <div className="field">
-              <label htmlFor="openalex-api-key">
-                OpenAlex API Key{" "}
-                <span
-                  className={`pill ${openalexKeySaved ? "ok" : "neutral"}`}
-                  style={{ marginLeft: 6 }}
-                >
-                  {openalexKeySaved ? "저장됨" : "미설정"}
-                </span>
-              </label>
-              <div className="btn-row">
-                <input
-                  id="openalex-api-key"
-                  type="password"
-                  value={openalexKey}
-                  onChange={(e) => setOpenalexKey(e.target.value)}
-                  placeholder={
-                    openalexKeySaved
-                      ? "저장되어 있습니다. 바꾸려면 새 값을 입력하십시오."
-                      : "openalex.org/settings/api 에서 발급한 API Key"
-                  }
-                  autoComplete="new-password"
-                  spellCheck={false}
-                  style={{ flex: "1 1 320px", minWidth: 0 }}
-                />
-                <button
-                  className="btn small"
-                  disabled={!openalexKey.trim()}
-                  onClick={() =>
-                    saveOpenalexKey(openalexKey.trim(), "OpenAlex API Key 를 저장했습니다.")
-                  }
-                >
-                  저장
-                </button>
-                <button
-                  className="btn small"
-                  disabled={!openalexKeySaved}
-                  onClick={() => saveOpenalexKey("", "OpenAlex API Key 를 지웠습니다.")}
-                >
-                  지우기
-                </button>
-              </div>
-              <div className="hint">
-                키 없이도 조회되지만 무료 한도가 하루 $0.10 로 작습니다. 키가 있으면
-                하루 $1 까지 무료입니다(DOI 조회 무료, 검색 1,000회에 $1). 키는
-                화면에 다시 표시되지 않습니다.
-              </div>
-            </div>
-
-            <div className="btn-row">
-              <button
-                className="btn small"
-                disabled={openalexChecking}
-                onClick={checkOpenalex}
-              >
-                {openalexChecking ? "확인 중…" : "OpenAlex 연결 테스트"}
-              </button>
-              <span className="hint">
-                DOI 1건을 무료로 조회해 확인하며, 받은 문헌은 저장하지 않습니다.
-              </span>
-            </div>
-
-            {openalexCheck && (
-              <div
-                className={`notice ${openalexCheck.ok ? "ok" : "danger"}`}
-                style={{ marginTop: 10 }}
-              >
-                {openalexCheck.detail}
+                {openalexCheck && (
+                  <div
+                    className={`notice ${openalexCheck.ok ? "ok" : "danger"}`}
+                    style={{ marginTop: 10 }}
+                  >
+                    {openalexCheck.detail}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       <div className="card settings-provider">
@@ -1308,116 +1115,301 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="card settings-context">
-        <h2>안전 지시문 (런타임 컨텍스트)</h2>
-        <p className="faint" style={{ marginTop: 0 }}>
-          시스템 프롬프트로 전달되는 실행 안전 규칙입니다. 특허 분석 같은 업무 지시가
-          아니라, 첨부 자료의 신뢰 경계를 정하는 내용만 들어갑니다.
-        </p>
-        <label className="checkbox" style={{ marginBottom: 10 }}>
-          <input
-            type="checkbox"
-            checked={v.runtime_context_enabled}
-            onChange={(e) => saveValue("runtime_context_enabled", e.target.checked)}
-          />
-          런타임 컨텍스트 사용
-        </label>
-        {!v.runtime_context_enabled && (
-          <div className="notice warn">
-            비활성화하면 첨부 문서 안의 지시문이 실행 지시로 해석될 위험이 커집니다.
-          </div>
-        )}
-        <TextAreaField
-          value={v.runtime_context}
-          onSave={(text) => saveValue("runtime_context", text)}
-          onReset={() =>
-            api.resetRuntimeContext().then((s) => {
-              setSettings(s);
-              notify("기본값으로 되돌렸습니다.");
-            })
-          }
-        />
-      </div>
-
-      {/* 안전 지시문 카드 오른쪽 한 칸에 두 카드를 세로로 쌓는다. 그리드 행을
-          나눠 쓰면 왼쪽 카드 높이에 따라 두 카드 사이가 벌어진다. */}
-      <div className="settings-side">
-        <div className="card settings-storage">
-          <h2>저장 위치와 실행 환경</h2>
-          <div className="table-scroll">
-            <table>
-              <tbody>
-                <tr>
-                  <th>데이터 폴더</th>
-                  <td className="break mono-text">{settings.data_dir}</td>
-                </tr>
-                <tr>
-                  <th>실행 폴더</th>
-                  <td className="break mono-text">{settings.runs_dir}</td>
-                </tr>
-                <tr>
-                  <th>자식 프로세스 환경변수</th>
-                  <td>
-                    allowlist {settings.env_filtering.allowlist.length}개만 전달, 그 외{" "}
-                    {settings.env_filtering.removed_count}개 제거
-                    <div className="faint">
-                      차단 접두사: {settings.env_filtering.blocked_prefixes.join(", ")}
-                    </div>
-                    <div className="faint">
-                      PRISM 을 Claude Code 세션 안에서 실행할 때 부모의 ANTHROPIC_* /
-                      CLAUDE_* 변수가 자식 CLI 로 새어 들어가 인증이 깨지는 것을 막습니다.
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+      <div className="settings-columns">
+        <div className="settings-stack">
+          <KiprisSettings settings={settings} onChange={setSettings} />
+          <div className="card settings-storage">
+            <h2>저장 위치와 실행 환경</h2>
+            <div className="table-scroll">
+              <table>
+                <tbody>
+                  <tr>
+                    <th>데이터 폴더</th>
+                    <td className="break mono-text">{settings.data_dir}</td>
+                  </tr>
+                  <tr>
+                    <th>실행 폴더</th>
+                    <td className="break mono-text">{settings.runs_dir}</td>
+                  </tr>
+                  <tr>
+                    <th>자식 프로세스 환경변수</th>
+                    <td>
+                      allowlist {settings.env_filtering.allowlist.length}개만 전달, 그 외{" "}
+                      {settings.env_filtering.removed_count}개 제거
+                      <div className="faint">
+                        차단 접두사: {settings.env_filtering.blocked_prefixes.join(", ")}
+                      </div>
+                      <div className="faint">
+                        PRISM 을 Claude Code 세션 안에서 실행할 때 부모의 ANTHROPIC_* /
+                        CLAUDE_* 변수가 자식 CLI 로 새어 들어가 인증이 깨지는 것을 막습니다.
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
+        <div className="settings-stack">
+          <div className="card settings-epo">
+            <h2>EPO OPS 특허 검색 연동</h2>
+            <p className="muted settings-integration-copy">
+              EPO OPS API로 특허를 검색하고 받은 XML과 결과를 대조합니다. EPO 번역이
+              포함될 수 있어 증거 등급은 <b>exact</b>까지만 부여합니다.
+            </p>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={v.epo_integration_enabled}
+                onChange={(e) =>
+                  saveValue("epo_integration_enabled", e.target.checked)
+                }
+              />
+              EPO OPS 연동 사용
+            </label>
 
-        <div className="card settings-prompt-defaults">
-          <div className="split" style={{ marginBottom: 12 }}>
-            <h2 style={{ margin: 0 }}>기본 프롬프트</h2>
-            <button className="btn primary small" onClick={savePromptDefaults}>
-              기본 프롬프트 저장
-            </button>
+            {v.epo_integration_enabled && (
+              <div className="settings-epo-grid">
+                <div className="settings-epo-credentials">
+                  <div className="field">
+                    <label>Consumer Key</label>
+                    <div className="btn-row">
+                      <input
+                        value={epoKey}
+                        onChange={(e) => setEpoKey(e.target.value)}
+                        placeholder="EPO 개발자 포털에서 발급한 Consumer Key"
+                        autoComplete="off"
+                        spellCheck={false}
+                        style={{ flex: "1 1 160px", minWidth: 0 }}
+                      />
+                      <button
+                        className="btn small"
+                        disabled={epoKey.trim() === (v.epo_consumer_key ?? "")}
+                        onClick={() =>
+                          saveEpoCredential(
+                            "epo_consumer_key",
+                            epoKey.trim(),
+                            "Consumer Key 를 저장했습니다.",
+                          )
+                        }
+                      >
+                        저장
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="field">
+                    <label>
+                      Consumer Secret{" "}
+                      <span
+                        className={`pill ${epoSecretSaved ? "ok" : "neutral"}`}
+                        style={{ marginLeft: 6 }}
+                      >
+                        {epoSecretSaved ? "저장됨" : "미설정"}
+                      </span>
+                    </label>
+                    <div className="btn-row">
+                      <input
+                        type="password"
+                        value={epoSecret}
+                        onChange={(e) => setEpoSecret(e.target.value)}
+                        placeholder={
+                          epoSecretSaved
+                            ? "저장되어 있습니다. 바꾸려면 새 값을 입력하십시오."
+                            : "EPO 개발자 포털에서 발급한 Consumer Secret Key"
+                        }
+                        autoComplete="new-password"
+                        spellCheck={false}
+                        style={{ flex: "1 1 160px", minWidth: 0 }}
+                      />
+                      <button
+                        className="btn small"
+                        disabled={!epoSecret.trim()}
+                        onClick={() =>
+                          saveEpoCredential(
+                            "epo_consumer_secret",
+                            epoSecret.trim(),
+                            "Consumer Secret 를 저장했습니다.",
+                          )
+                        }
+                      >
+                        저장
+                      </button>
+                      <button
+                        className="btn small"
+                        disabled={!epoSecretSaved}
+                        onClick={() =>
+                          saveEpoCredential(
+                            "epo_consumer_secret",
+                            "",
+                            "Consumer Secret 를 지웠습니다.",
+                          )
+                        }
+                      >
+                        지우기
+                      </button>
+                    </div>
+                    <div className="hint">
+                      Secret은 화면에 다시 표시되지 않습니다. 저장 후 「연결 테스트」로
+                      확인하세요.
+                    </div>
+                  </div>
+
+                  <div className="btn-row">
+                    <button
+                      className="btn small"
+                      disabled={epoChecking || !v.epo_consumer_key || !epoSecretSaved}
+                      onClick={checkEpo}
+                    >
+                      {epoChecking ? "확인 중…" : "연결 테스트"}
+                    </button>
+                    <span className="hint">
+                      토큰 발급만 확인하며 특허 데이터와 토큰은 저장하지 않습니다.
+                    </span>
+                  </div>
+
+                  {epoCheck && (
+                    <div
+                      className={`notice ${epoCheck.ok ? "ok" : "danger"}`}
+                      style={{ marginTop: 10 }}
+                    >
+                      {epoCheck.detail}
+                      {epoCheck.ok && epoCheck.expires_in
+                        ? ` (토큰 수명 ${epoCheck.expires_in}초)`
+                        : ""}
+                    </div>
+                  )}
+
+                </div>
+                <section className="settings-epo-usage" aria-labelledby="epo-usage-title">
+                  <h3 id="epo-usage-title">
+                    이번 주 사용량
+                  </h3>
+                  <div className="hint" style={{ marginBottom: 8 }}>
+                    OPS는 데이터량 기준이며 주간 4GB 한도가 적용됩니다. OPS와 PRISM
+                    측정값 중 큰 값을 사용합니다.
+                  </div>
+                  <div className="table-scroll">
+                  <table>
+                    <tbody>
+                      <tr>
+                        <th>OPS 주간 사용량</th>
+                        <td>
+                          {formatBytes(epoQuota.ops_weekly_bytes)}
+                          {" / "}
+                          {formatBytes(epoQuota.weekly_limit_bytes)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>PRISM 주간 사용량</th>
+                        <td>
+                          {formatBytes(epoQuota.local_bytes)}
+                          {epoQuota.requests ? ` (${epoQuota.requests}회 호출)` : ""}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>남은 양</th>
+                        <td>{formatBytes(epoQuota.remaining_weekly_bytes)}</td>
+                      </tr>
+                      <tr>
+                        <th>시간당 사용량</th>
+                        <td>
+                          {formatBytes(epoQuota.ops_hourly_bytes)}
+                          {epoQuota.hourly_limit_bytes
+                            ? ` / ${formatBytes(epoQuota.hourly_limit_bytes)}`
+                            : " (관측만, 차단 안 함)"}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>미저장 사용량</th>
+                        <td>
+                          {formatBytes(epoQuota.pending_bytes)}
+                          {epoQuota.persist_error ? (
+                            <div className="hint">
+                              저장 실패: {epoQuota.persist_error} — 한도는 계속
+                              지켜지지만 프로그램을 다시 시작하면 그만큼이 사라집니다.
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>OPS 부하 상태</th>
+                        <td>
+                          <span
+                            className={`pill ${
+                              epoQuota.throttle?.dangerous ? "danger" : "neutral"
+                            }`}
+                          >
+                            {epoQuota.throttle?.system_state || "관측 전"}
+                          </span>
+                          {epoQuota.throttle?.raw ? (
+                            <details className="hint"><summary>부하 상태 상세</summary>{epoQuota.throttle.raw}</details>
+                          ) : null}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  </div>
+
+                </section>
+              </div>
+            )}
+            <div className="settings-execution-limits">
+              {v.epo_integration_enabled && (
+                <section className="settings-epo-limit">
+                  <h3>EPO 사용량 안전 한도</h3>
+                  <div className="hint" style={{ marginBottom: 8 }}>
+                    검색 전략과 별개로 OPS 응답 데이터 사용량을 제한합니다.
+                  </div>
+                  <div className="settings-limit-options">
+                    <NumberField
+                      label="시간당 사용량 상한 (bytes, 0 = 관측만)"
+                      value={v.epo_hourly_quota_bytes}
+                      hint={
+                        "주간 4GB 한도는 항상 적용됩니다. 값을 입력하면 시간당 한도도 추가로 적용합니다."
+                      }
+                      onSave={(n) => saveValue("epo_hourly_quota_bytes", n)}
+                    />
+                  </div>
+                </section>
+              )}
+              <section className="settings-run-limits">
+                <h3>전체 실행 상한</h3>
+                <p className="hint">구성대비 분석에 적용됩니다. 유사문헌 검색은 80회·5분으로 고정됩니다.</p>
+                <NumberField label="실행 제한시간 (초)" value={v.default_timeout_seconds}
+                  onSave={(n) => saveValue("default_timeout_seconds", n)} />
+              </section>
+            </div>
           </div>
-          <p className="faint" style={{ marginTop: -6 }}>
-            실행 화면이 처음 고르는 프롬프트입니다.
-          </p>
-          <div className="field">
-            <label htmlFor="default-prompt">기본 분석 프롬프트</label>
-            <select
-              id="default-prompt"
-              value={defaultPromptId}
-              onChange={(e) => setDefaultPromptId(e.target.value)}
-            >
-              <option value="">최근 활성 분석 프롬프트 자동 선택</option>
-              {prompts.map((prompt) => (
-                <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
-                  {prompt.name}{prompt.enabled ? "" : " · 비활성"}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="default-search-prompt">기본 검색 전략 프롬프트</label>
-            <select
-              id="default-search-prompt"
-              value={defaultSearchPromptId}
-              onChange={(e) => setDefaultSearchPromptId(e.target.value)}
-            >
-              <option value="">기본 제공 검색 전략 사용</option>
-              {searchPrompts.map((prompt) => (
-                <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
-                  {prompt.name}
-                  {prompt.enabled ? "" : " · 비활성"}
-                </option>
-              ))}
-            </select>
-            <span className="hint">
-              검색 화면이 처음 고르는 전략입니다. 실행마다 화면에서 바꿀 수
-              있으며, 검색 실행·감사·보고서 계약은 어느 전략을 골라도 같습니다.
-            </span>
+          <div className="card settings-context">
+            <h2>안전 지시문 (런타임 컨텍스트)</h2>
+            <p className="faint" style={{ marginTop: 0 }}>
+              시스템 프롬프트로 전달되는 실행 안전 규칙입니다. 특허 분석 같은 업무 지시가
+              아니라, 첨부 자료의 신뢰 경계를 정하는 내용만 들어갑니다.
+            </p>
+            <label className="checkbox" style={{ marginBottom: 10 }}>
+              <input
+                type="checkbox"
+                checked={v.runtime_context_enabled}
+                onChange={(e) => saveValue("runtime_context_enabled", e.target.checked)}
+              />
+              런타임 컨텍스트 사용
+            </label>
+            {!v.runtime_context_enabled && (
+              <div className="notice warn">
+                비활성화하면 첨부 문서 안의 지시문이 실행 지시로 해석될 위험이 커집니다.
+              </div>
+            )}
+            <TextAreaField
+              value={v.runtime_context}
+              onSave={(text) => saveValue("runtime_context", text)}
+              onReset={() =>
+                api.resetRuntimeContext().then((s) => {
+                  setSettings(s);
+                  notify("기본값으로 되돌렸습니다.");
+                })
+              }
+            />
           </div>
         </div>
       </div>
@@ -1924,7 +1916,7 @@ function TextAreaField(props: {
     <div>
       <textarea
         className="mono"
-        rows={12}
+        rows={8}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
       />
