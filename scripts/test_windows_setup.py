@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -50,6 +51,37 @@ class SetupTests(unittest.TestCase):
         self.assertIn('pip check', calls)
         self.assertIn('still required', output)
         self.assertNotIn('--version', calls)
+
+    def test_bootstrap_uses_system_certificates_and_utf8(self):
+        code, output, calls = self.run_setup('skip')
+        self.assertEqual(code, 0, output)
+        installs = [line for line in calls.splitlines() if 'pip install' in line]
+        self.assertEqual(len(installs), 2)
+        self.assertIn('--use-feature=truststore', installs[0])
+        self.assertIn('pip>=24.2', installs[0])
+        for line in installs:
+            self.assertIn('-X utf8 -m pip install', line)
+            self.assertNotIn('--trusted-host', line)
+
+    def test_requirements_decode_with_korean_windows_locale(self):
+        # Exercise the bootstrap pip shipped with Python, not the upgraded pip
+        # in the developer venv. No package download or installation is needed.
+        script = r'''
+import ensurepip
+from pathlib import Path
+import sys
+from unittest.mock import patch
+wheel = next((Path(ensurepip.__file__).parent / '_bundled').glob('pip-*.whl'))
+sys.path.insert(0, str(wheel))
+from pip._internal.req.req_file import get_file_content
+with patch('locale.getpreferredencoding', return_value='cp949'):
+    for path in Path(sys.argv[1]).glob('requirements*.txt'):
+        _, content = get_file_content(str(path), session=None)
+        assert content == path.read_bytes().decode('utf-8-sig'), str(path)
+'''
+        result = subprocess.run([sys.executable, '-X', 'utf8=0', '-c', script,
+                                 str(ROOT / 'backend')], capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_dependency_failure_does_not_report_success(self):
         code, output, calls = self.run_setup('both', fail=True)

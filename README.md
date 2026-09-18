@@ -68,7 +68,7 @@ EPO·KIPRIS·OpenAlex 등의 검색 서비스 자격증명은 Settings에서 별
 - 프롬프트는 로컬 편집본 대신 Git HEAD의 기본 템플릿을 포함합니다.
 - ZIP 설치는 `setup.ps1`, 개발 환경 설치·화면 빌드는 `start-prism.ps1 -Setup`을 사용합니다.
 - 설치 실패·기존 CLI 재사용 검증: `python scripts/test_windows_setup.py`
-- ZIP 설치·실행 검증: `python scripts/smoke_release.py release/PRISM-2.0.0-windows-x64.zip`
+- ZIP 설치·실행 검증: `python scripts/smoke_release.py release/PRISM-2.0.1-windows-x64.zip`
   임시 가상환경에 의존성을 실제 설치합니다. 시스템 Python·CLI 설치와 계정 로그인은 수행하지 않습니다.
 
 - [상세 사용법·설계·테스트 안내](docs/technical-guide.md)

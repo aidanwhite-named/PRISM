@@ -32,8 +32,11 @@ try {
         Invoke-Checked $python @('-m', 'venv', (Join-Path $PSScriptRoot 'backend\.venv'))
     }
     Write-Host '[2/5] PRISM 라이브러리를 설치합니다...' -ForegroundColor Cyan
-    Invoke-Checked $venv @('-m', 'pip', 'install', '--upgrade', 'pip')
-    Invoke-Checked $venv @('-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'backend\requirements.txt'))
+    # Bootstrap with Windows trust roots even when ensurepip supplied pip 24.0.
+    # Require a version with system trust enabled by default; a failed upgrade
+    # must not silently leave an already-installed older pip in use.
+    Invoke-Checked $venv @('-X', 'utf8', '-m', 'pip', 'install', '--use-feature=truststore', '--upgrade', 'pip>=24.2')
+    Invoke-Checked $venv @('-X', 'utf8', '-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'backend\requirements.txt'))
     Invoke-Checked $venv @('-m', 'pip', 'check')
     Invoke-Checked $venv @('-c', 'import fastapi,uvicorn,sqlalchemy,pypdf,arxiv,pyalex,truststore,winpty')
 
