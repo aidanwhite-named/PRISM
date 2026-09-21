@@ -853,15 +853,11 @@ def test_round_budget_is_enforced(tmp_path) -> None:
         budget=RetrievalBudget(max_rounds=3),
     )
 
-    assert result.ok
-    assert len(result.manifest["rounds"]) == 3
+    assert not result.ok
+    assert result.error_code == "RETRIEVAL_FAILED"
+    assert len(result.manifest["rounds"]) == 4  # 검색 3라운드 + 확정 교정 1회
     assert result.manifest["budget_exhausted"] is True
-    assert result.bundle["budget_exhausted"] is True
-    # 예산이 다 됐으면 대응 없음을 확정하지 않는다.
-    assert all(
-        component["status"] != evidence.STATUS_NOT_FOUND_SCOPE
-        for component in result.bundle["components"]
-    )
+    assert result.bundle is None
 
 
 def test_evidence_char_budget_is_a_hard_upper_bound(tmp_path) -> None:
@@ -1024,18 +1020,19 @@ def test_incomplete_finalize_is_rejected(tmp_path) -> None:
         budget=RetrievalBudget(max_rounds=3),
     )
 
-    # 마무리가 계속 거절되므로 라운드 예산까지 돌고 끝난다.
-    assert result.ok
+    # 마지막 응답을 한 번 교정해도 구성이 빠지면 보고서 생성을 막는다.
+    assert not result.ok
+    assert result.error_code == "RETRIEVAL_FAILED"
+    assert result.bundle is None
+    assert len(result.manifest["rounds"]) == 4
     assert result.manifest["budget_exhausted"] is True
     reasons = " ".join(
         entry["reason"] for entry in result.manifest["action_errors"]
     )
     assert "빠진 구성" in reasons
-    # 빠뜨린 구성도 보고서에 남아 있고, 확정되지 않은 상태다.
-    ids = {c["component_id"] for c in result.bundle["components"]}
+    # 실패해도 선언한 구성 목록은 감사 기록에 남는다.
+    ids = {c["id"] for c in result.manifest["components"]}
     assert ids == {"R001", "R002"}
-    for component in result.bundle["components"]:
-        assert component["status"] != evidence.STATUS_NOT_FOUND_SCOPE
 
 
 def test_not_found_requires_expansion_search(tmp_path) -> None:
@@ -1245,7 +1242,7 @@ def test_package_stays_within_budget_under_stress(tmp_path) -> None:
     # 예산을 명시한다. 이 시험이 재는 것은 "예산이 상한인가"와 "줄였으면
     # 기록하는가"이고, 뒤쪽은 예산이 실제로 모자라야 관측된다. 기본값을 쓰면
     # 기본값을 올리는 순간 압박이 사라져 시험이 아무것도 재지 않게 된다.
-    budget = RetrievalBudget(max_evidence_chars=40_000)
+    budget = RetrievalBudget(max_evidence_chars=30_000)
     try:
         bundle, rendered = _stress_bundle(20, 180, 900, budget, corpus=corpus)
     finally:
@@ -1385,7 +1382,7 @@ def test_package_reduction_downgrades_absent_verdict(tmp_path) -> None:
     구성 상태를 다시 내리지 않으면, 뺀 범위를 근거로 없음을 말하는 상태가
     남는다. 가장 위험한 조합이다.
     """
-    budget = RetrievalBudget(max_evidence_chars=27_500)
+    budget = RetrievalBudget(max_evidence_chars=18_000)
     bundle, _rendered = _stress_bundle(20, 180, 900, budget)
 
     assert bundle["package_reductions"]

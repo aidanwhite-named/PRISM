@@ -1511,10 +1511,11 @@ export default function SettingsPage() {
         <h3 style={{ marginTop: 18 }}>모델 컨텍스트 입력 예산</h3>
         <p className="muted">
           전송 하드 한도를 선언하지 않은 Provider(codex, claude)에만 적용됩니다.{" "}
-          <strong>PRISM 은 모델 한도를 추측하지 않습니다.</strong> 아래 표에 값이
-          없으면 보수적 대체값을 쓰고, 그 사실이 실행 기록의 판정 사유에 남습니다.
-          입력 예산 = 컨텍스트 − 출력·추론 예약이며, 토큰 수는 UTF-8 바이트에서
-          보수적으로(실제보다 많게) 추정합니다.
+          <strong>PRISM 은 모델 한도를 추측하지 않습니다.</strong> 설정값을 우선하고,
+          Codex는 CLI 모델 카탈로그의 기본 한도를 확인합니다. 확인할 수 없으면
+          보수적 대체값을 쓰고 실행 기록에 남깁니다. 입력 예산은 컨텍스트에서
+          출력·추론 예약을 뺀 값입니다. 지원 모델은 로컬 토큰 수에 여유를 더해
+          추산하며, 토크나이저를 사용할 수 없으면 UTF-8 바이트 기준으로 추정합니다.
         </p>
         <div className="settings-limit-grid">
           <NumberField
@@ -1538,7 +1539,7 @@ export default function SettingsPage() {
           편집할 수 없습니다. 설정 API 로 <code>{'{"codex:gpt-5-codex": 400000}'}</code>{" "}
           형태의 표를 넣으면 그 값이 대체값보다 우선합니다. 현재 등록된 모델:{" "}
           {Object.entries(v.model_context_tokens || {}).length === 0
-            ? "없음 (전부 대체값 사용)"
+            ? "없음 (CLI 카탈로그 확인 후 대체값 적용)"
             : Object.entries(v.model_context_tokens)
                 .map(([key, tokens]) => `${key} ${Number(tokens).toLocaleString()}`)
                 .join(" · ")}

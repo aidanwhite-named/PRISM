@@ -55,6 +55,7 @@ export default function DeliverySummary({
           모델 입력 예산 {budget.input_tokens.toLocaleString()} 토큰 (컨텍스트{" "}
           {budget.context_tokens.toLocaleString()} − 출력·추론{" "}
           {budget.reserve_tokens.toLocaleString()})
+          {budget.source === "codex_catalog" && " · Codex CLI 모델 카탈로그 기준"}
           {budget.source === "fallback" && (
             <strong> · 모델 한도를 확인하지 못해 보수적 대체값을 썼습니다.</strong>
           )}

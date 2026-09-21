@@ -617,8 +617,9 @@ def test_final_package_shares_only_identical_source_and_context():
     saved = deepcopy(bundle)
     rendered = evidence.render(bundle)
     assert bundle == saved  # 원본 패키지와 구성별 출처는 그대로다.
-    for text in ("UNIQUE_SOURCE", "NEGATIVE_CONTEXT", "LIMITATION_CONTEXT", "FIRST_NOTE", "SECOND_NOTE"):
+    for text in ("UNIQUE_SOURCE", "NEGATIVE_CONTEXT", "LIMITATION_CONTEXT"):
         assert rendered.count(text) == 1
+    assert "FIRST_NOTE" not in rendered and "SECOND_NOTE" not in rendered
     assert rendered.count("chunk_id: P0001-001") == 2
     assert evidence.render(bundle) == rendered  # 별도 호출에서도 원문이 다시 들어간다.
     bundle["components"][0]["findings"] = []
@@ -651,5 +652,5 @@ def test_repeated_finding_keeps_provenance_without_charging_source_twice(agent):
     first_cost = builder._used_chars
     second, error = builder._resolve(ref, None)
     assert not error and second == first
-    assert builder._used_chars - first_cost == evidence.FINDING_OVERHEAD_CHARS + len("note")
+    assert builder._used_chars - first_cost == evidence.FINDING_OVERHEAD_CHARS
     assert first_cost > builder._used_chars - first_cost

@@ -975,8 +975,14 @@ class RetrievalAgent:
         run = RetrievalRun()
         pending_error = ""
         results_payload: list[dict] = []
+        previous_response = ""
 
-        for round_no in range(1, self.budget.max_rounds + 1):
+        # 검색 예산 뒤에는 확정 형식 교정만 한 번 허용한다. 추가 조회는 하지
+        # 않으며, 원래 마지막 호출에 제공한 근거와 잘못된 응답을 함께 보낸다.
+        for round_no in range(1, self.budget.max_rounds + 2):
+            repairing = round_no > self.budget.max_rounds
+            if repairing and not self._order:
+                break
             if self.is_cancelled():
                 run.cancelled = True
                 run.error_code = ErrorCode.CANCELLED
@@ -985,8 +991,11 @@ class RetrievalAgent:
                 return run
 
             self._refresh_priorities(round_no)
-            final_round = round_no == self.budget.max_rounds
+            final_round = round_no >= self.budget.max_rounds
             payload = self._round_payload(round_no, results_payload, pending_error)
+            if repairing:
+                payload["finalization_repair"] = True
+                payload["previous_response"] = previous_response
             user_message = render_round(payload)
             round_dir = self.work_dir / "rounds"
             round_dir.mkdir(parents=True, exist_ok=True)
@@ -1023,11 +1032,12 @@ class RetrievalAgent:
             await self._emit(
                 "retrieval_progress",
                 {
-                    "phase": "round",
+                    "phase": "finalization_repair" if repairing else "round",
                     "round": round_no,
                     "max_rounds": self.budget.max_rounds,
                     "pages_read": run.pages_read,
                     "message": (
+                        "근거 확정 응답 형식 수정 중 (최대 1회)" if repairing else
                         f"로컬 검색 {round_no}/{self.budget.max_rounds} 라운드 — "
                         "AI 검색 요청 대기 중"
                     ),
@@ -1074,6 +1084,7 @@ class RetrievalAgent:
                 tool_policy=NO_TOOLS,
             )
             outcome = await self._execute_round(request, record)
+            previous_response = outcome.result_text or ""
             record.completed_at = _utcnow()
             record.usage = outcome.usage
             record.output_chars = len(outcome.result_text or "")
@@ -1115,7 +1126,8 @@ class RetrievalAgent:
                     f"이전 응답을 action 으로 읽지 못했습니다: {exc} "
                     "JSON 객체 하나만, 설명 없이 돌려주십시오."
                 )
-                results_payload = self._retained_results()
+                if not final_round:
+                    results_payload = self._retained_results()
                 self.trace.write(
                     "parse_error", {"reason": str(exc)}, round_no=round_no
                 )
@@ -1186,7 +1198,9 @@ class RetrievalAgent:
                     )
                     pending_error = problem
                     if final_round:
-                        break
+                        record.status = "finalize_rejected"
+                        record.error = problem
+                        continue
                     results_payload = await self._execute_actions(
                         [
                             item
@@ -1209,7 +1223,15 @@ class RetrievalAgent:
                 return run
 
             if final_round:
-                break
+                record.status = "finalize_missing"
+                pending_error = record.error = (
+                    "근거 확정 action이 없습니다. 최상위 components가 아니라 "
+                    'actions: [{"action": "finalize_evidence", "components": [...]}] '
+                    "형식으로 선언된 구성 전부의 근거와 검토 상태를 반환하십시오. "
+                    "추가 검색·열람은 실행되지 않습니다."
+                )
+                self.trace.write("finalize_missing", {"reason": pending_error}, round_no=round_no)
+                continue
             results_payload = await self._execute_actions(
                 response.actions, run, round_no
             )
@@ -1218,7 +1240,7 @@ class RetrievalAgent:
         run.budget_limited = True
         run.notes.append(
             f"검색 라운드 상한({self.budget.max_rounds})에 도달해 루프를 끝냈습니다. "
-            "모인 근거만으로 패키지를 만듭니다."
+            "유효한 근거 확정 응답이 없어 보고서 생성을 중단합니다."
         )
         if self._deferred_actions:
             run.notes.append(
@@ -1232,6 +1254,14 @@ class RetrievalAgent:
                 "AI 가 청구항 구성 분해를 끝내 돌려주지 않아 근거 패키지를 만들 "
                 "수 없습니다. 구성이 없으면 무엇을 검토했고 무엇을 못 했는지 "
                 "말할 수 없으므로, 빈 패키지로 분석을 진행하지 않습니다."
+            )
+        else:
+            run.error_code = ErrorCode.RETRIEVAL_FAILED
+            run.error = (
+                "근거 확정 응답의 형식 또는 구성 목록이 올바르지 않아 "
+                "1회 수정 요청 후에도 확정을 완료하지 못했습니다. "
+                "확정되지 않은 근거로 보고서를 생성하지 않습니다. "
+                + pending_error
             )
         return run
 
@@ -1481,12 +1511,12 @@ class RetrievalAgent:
     ) -> dict:
         payload = {
             "round": round_no,
-            "finalize_only": round_no == self.budget.max_rounds,
+            "finalize_only": round_no >= self.budget.max_rounds,
             "claim_text": self.claim_text,
             **({"prior_claim_text": self.prior_claim_text} if self.prior_claim_text else {}),
             "budget": {
                 **self.budget.to_dict(),
-                "rounds_remaining": self.budget.max_rounds - round_no + 1,
+                "rounds_remaining": max(0, self.budget.max_rounds - round_no + 1),
             },
             "documents": [
                 {

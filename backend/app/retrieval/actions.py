@@ -311,6 +311,23 @@ class AgentResponse(_Base):
     notes: str = ""
     actions: list[AnyAction] = Field(default_factory=list)
 
+    @field_validator("components", mode="before")
+    @classmethod
+    def _reject_misplaced_evidence(cls, value):
+        # 최상위 components는 최초 구성 선언이다. 확정 결과를 여기 넣으면
+        # extra=ignore가 evidence를 지워 버리므로 파싱 전에 오류로 돌려준다.
+        if isinstance(value, list) and any(
+            isinstance(item, dict)
+            and {"evidence", "status_claim", "searched_terms"}.intersection(item)
+            for item in value
+        ):
+            raise ValueError(
+                "근거 확정 결과를 최상위 components에 넣을 수 없습니다. "
+                'actions: [{"action": "finalize_evidence", "components": [...]}] '
+                "안에 넣으십시오."
+            )
+        return value
+
     @field_validator("notes")
     @classmethod
     def _trim(cls, value: str) -> str:

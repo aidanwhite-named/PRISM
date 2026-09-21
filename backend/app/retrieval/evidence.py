@@ -312,7 +312,7 @@ class EvidenceBuilder:
         # 보고 청크를 통째로 얹으면, 마지막 하나가 상한을 훌쩍 넘겨 preflight 가
         # 안내한 최댓값이 상한이 아니게 된다. 여기서 넘기면 Provider 호출 직전
         # 바이트 검사에 걸려, 검색 비용을 다 쓰고 나서 실행이 실패한다.
-        addition = len(finding["ai_relevance"]) + FINDING_OVERHEAD_CHARS
+        addition = FINDING_OVERHEAD_CHARS
         entries = self._source_entries + [
             (document.alias, row.page_number, text)
             for text in (row.text, before, after) if text
@@ -575,8 +575,44 @@ class EvidenceBuilder:
             skipped=page_reductions,
         )
 
+        # Preserve original search hits not nominated by the search model.
+        # Interleave component/document groups to retain different sources.
+        groups = []
+        for state in self.run.components:
+            for document in self.corpus:
+                entries = [entry for entry in state.top_candidates(limit=len(state.hit_chunks))
+                           if entry.get("alias") == document.alias]
+                groups.append([(document, entry["chunk_id"]) for entry in entries])
+        candidates = []
+        seen = {(f["attachment_id"], f["chunk_id"])
+                for component in components for f in component["findings"]}
+        candidate_chars = 0
+        omitted = 0
+        for position in range(max((len(group) for group in groups), default=0)):
+            for group in groups:
+                if position >= len(group):
+                    continue
+                document, chunk_id = group[position]
+                key = (document.attachment_id, chunk_id)
+                if key in seen or key not in self.run.exposed_chunks:
+                    continue
+                seen.add(key)
+                row = document.index.chunk(chunk_id)
+                if row is None:
+                    continue
+                if candidate_chars + len(row.text) + FINDING_OVERHEAD_CHARS > self.budget.max_evidence_chars // 4:
+                    omitted += 1
+                    continue
+                candidates.append({"attachment": document.alias,
+                                   "attachment_id": document.attachment_id,
+                                   "chunk_id": row.chunk_id, "pdf_page": row.page_number,
+                                   "source_text": row.text})
+                candidate_chars += len(row.text) + FINDING_OVERHEAD_CHARS
+
         return {
             "version": BUNDLE_VERSION,
+            "candidate_sources": candidates,
+            "candidate_sources_omitted": omitted,
             "generated_at": _utcnow(),
             "delivery_mode": "local_retrieval",
             "page_reductions": page_reductions,
@@ -646,8 +682,6 @@ def _finding_lines(
     ]
     if shared:
         lines.append("    원문·앞뒤 문맥: 위의 동일 자료 번호·chunk_id 근거 구간 참조.")
-        if finding.get("ai_relevance"):
-            lines.append(f"    [검색 단계 AI 의 관련성 메모 — 원문 아님] {finding['ai_relevance']}")
         return lines
     for key, label in (
         ("context_before", "앞 문맥"),
@@ -660,8 +694,6 @@ def _finding_lines(
                     finding["attachment"], finding["pdf_page"], finding[key]
                 )
             )
-    if finding.get("ai_relevance"):
-        lines.append(f"    [검색 단계 AI 의 관련성 메모 — 원문 아님] {finding['ai_relevance']}")
     return lines
 
 
@@ -683,6 +715,10 @@ def source_pool(bundle: dict) -> SourcePool:
         for finding in component.get("findings") or []
         for key in ("source_text", "context_before", "context_after")
         if finding.get(key)
+    ]
+    entries += [
+        (source["attachment"], source["pdf_page"], source["source_text"])
+        for source in bundle.get("candidate_sources") or []
     ]
     entries += [
         (document["attachment"], document["identity_excerpt_pdf_page"], document["identity_excerpt"])
@@ -709,8 +745,8 @@ def render(bundle: dict) -> str:
         "규칙:",
         "- 「원문」으로 표시된 구간은 PRISM 이 PDF 에서 그대로 꺼낸 텍스트입니다.",
         "  발췌로 인용할 수 있는 것은 이 구간뿐입니다.",
-        "- 「관련성 메모」는 검색 단계 AI 의 판단이며 원문이 아닙니다. 인용하지",
-        "  마십시오.",
+        "- 구성 분류와 검색 상태는 탐색 기록입니다. 최종 대응은 현재 청구항과",
+        "  아래 원문 전체를 직접 비교하여 판단하십시오. 다른 구성의 후보도 사용할 수 있습니다.",
         "- 아래에 없는 페이지는 이번 검토 범위 밖입니다. 검토하지 않은 것과",
         "  문헌에 없는 것은 다릅니다.",
         f"- OCR 은 수행하지 않았습니다. 추출 상태가 "
@@ -792,13 +828,6 @@ def render(bundle: dict) -> str:
             "",
             f"### {component['component_id']} · {component['claim_component']}",
             f"- 구성 내용: {component.get('feature') or '(미기재)'}",
-            f"- 중요도/현재 우선순위: {component.get('declared_importance', 'medium')} / "
-            f"{component.get('priority', 'medium')} · 불확실성: "
-            f"{component.get('uncertainty', 'high')} · 검색 완전성: "
-            f"{component.get('search_completeness', 'unsearched')} "
-            f"({component.get('coverage_ratio', 0):.0%})",
-            f"- 사용한 검색어: {', '.join(component.get('queries_used') or []) or '(없음)'}",
-            f"- 검색 채널: {', '.join(component.get('search_channels_used') or []) or '(없음)'}",
             f"- PRISM 확정 상태: {component['status']} — {component['status_label']}",
         ]
         # Shared limitations have already been stated in the global scope.
@@ -837,10 +866,6 @@ def render(bundle: dict) -> str:
                 included_sources.add(key)
         else:
             lines.append("- 근거 구간: 없음")
-        if component.get("ai_note"):
-            lines.append(
-                f"- [검색 단계 AI 메모 — 원문 아님] {component['ai_note']}"
-            )
         if component.get("needs_original_review"):
             lines.append("- 사람이 원본 PDF 를 확인해야 하는 구성입니다.")
 
@@ -859,14 +884,22 @@ def render(bundle: dict) -> str:
         bundle.get("evidence_pages") or [], bundle.get("page_reductions") or [],
         source_reference=pool.describe,
     )
+    if bundle.get("candidate_sources"):
+        lines += ["", "[추가 검색 후보 원문]",
+                  "검색 중 발견했으나 구성별 근거에 선정하지 않은 구간입니다. 대응 여부를 원문으로 재검토하십시오."]
+        for source in bundle["candidate_sources"]:
+            lines.append(f"- {source['attachment']} · PDF {source['pdf_page']}쪽 · {source['chunk_id']}: "
+                         + pool.describe(source["attachment"], source["pdf_page"], source["source_text"]))
+    if bundle.get("candidate_sources_omitted"):
+        lines.append(f"- 입력 예산으로 추가 후보 {bundle['candidate_sources_omitted']}개를 생략했습니다. 생략한 구간의 부재를 단정하지 마십시오.")
     lines += pool.render()
 
     lines += [
         "",
         "[판정 제한]",
         "검색 결과가 없다는 것만으로 「인용발명에 해당 구성이 없다」고 쓰지",
-        "마십시오. 위 상태가 matched 가 아닌 구성에 대해서는 다음 표현을",
-        "사용하십시오:",
+        "마십시오. 검색 상태는 의미 대응 판정이 아닙니다. 제공 원문에 부분 대응이",
+        "있으면 그 근거와 차이를 분석하고, 근거가 부족한 범위에만 다음 표현을 사용하십시오:",
         f"  \"{NOT_FOUND_PHRASE}.\"",
     ]
     return "\n".join(lines)
@@ -1030,7 +1063,8 @@ def fit(bundle: dict, budget: RetrievalBudget) -> str:
         partial = pages_module.truncations(fitted.get("evidence_pages") or [])
         fitted["page_truncations"] = partial
         fitted["evidence_budget_limited"] = bool(
-            partial or fitted.get("page_reductions") or fitted.get("package_reductions"))
+            partial or fitted.get("page_reductions") or fitted.get("package_reductions")
+            or fitted.get("candidate_sources_omitted"))
         if fitted["evidence_budget_limited"]:
             fitted["budget_exhausted"] = True
             fitted["budget_limited"] = True
@@ -1078,6 +1112,13 @@ def fit(bundle: dict, budget: RetrievalBudget) -> str:
             text, ok = current()
             if ok:
                 return accept(text)
+
+    while bundle.get("candidate_sources"):
+        bundle["candidate_sources"].pop()
+        bundle["candidate_sources_omitted"] = bundle.get("candidate_sources_omitted", 0) + 1
+        text, ok = current()
+        if ok:
+            return accept(text)
 
     for step in (_drop_identity_excerpts, _trim_component_metadata):
         if step(bundle):

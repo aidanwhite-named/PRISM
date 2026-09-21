@@ -132,7 +132,8 @@ def model_input_gate(
     if budget is None:
         return 0
     actual = model_limits.estimate_tokens(
-        assembled.system_prompt, assembled.user_message
+        assembled.system_prompt, assembled.user_message,
+        provider_id=budget.provider_id, model=budget.model,
     )
     if budget.input_tokens <= 0 or actual > budget.input_tokens:
         raise ModelInputTooLarge(actual_tokens=actual, budget=budget)
@@ -624,7 +625,7 @@ def assemble_job(
             full_bytes = _payload_bytes(probe, provider_measure)
             full_chars = probe.total_chars
             full_tokens = model_limits.estimate_tokens(
-                probe.system_prompt, probe.user_message
+                probe.system_prompt, probe.user_message, provider_id=provider_id, model=model,
             )
         budget_for_model = (
             model_limits.token_budget(
@@ -714,7 +715,8 @@ def assemble_job(
             candidate = ceiling(middle)
             fits_transport = provider_byte_budget is None or _payload_bytes(candidate, provider_measure) <= provider_byte_budget
             fits_model = budget_for_model is None or model_limits.estimate_tokens(
-                candidate.system_prompt, candidate.user_message
+                candidate.system_prompt, candidate.user_message,
+                provider_id=provider_id, model=model,
             ) <= budget_for_model.input_tokens
             if fits_transport and fits_model:
                 low = middle

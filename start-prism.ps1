@@ -63,6 +63,7 @@ if ($Setup) {
     Write-Step '백엔드 의존성을 설치합니다'
     Invoke-Checked $venvPython @('-m', 'pip', 'install', '--upgrade', 'pip')
     Invoke-Checked $venvPython @('-m', 'pip', 'install', '-r', (Join-Path $backend 'requirements.txt'))
+    Invoke-Checked $venvPython @('-X', 'utf8', (Join-Path $backend 'scripts\prepare_tokenizer.py'))
 
     Write-Step '프론트엔드 의존성을 설치합니다'
     Push-Location $frontend

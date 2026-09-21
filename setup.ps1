@@ -37,6 +37,7 @@ try {
     # must not silently leave an already-installed older pip in use.
     Invoke-Checked $venv @('-X', 'utf8', '-m', 'pip', 'install', '--use-feature=truststore', '--upgrade', 'pip>=24.2')
     Invoke-Checked $venv @('-X', 'utf8', '-m', 'pip', 'install', '-r', (Join-Path $PSScriptRoot 'backend\requirements.txt'))
+    Invoke-Checked $venv @('-X', 'utf8', (Join-Path $PSScriptRoot 'backend\scripts\prepare_tokenizer.py'))
     Invoke-Checked $venv @('-m', 'pip', 'check')
     Invoke-Checked $venv @('-c', 'import fastapi,uvicorn,sqlalchemy,pypdf,arxiv,pyalex,truststore,winpty')
 

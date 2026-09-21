@@ -384,9 +384,9 @@ describe("대용량 인용발명 전달 방식", () => {
     ).toBe("32000");
   });
 
-  it("등록된 모델 한도가 없으면 대체값을 쓴다고 알린다", async () => {
+  it("등록된 모델 한도가 없으면 CLI 카탈로그를 먼저 확인한다고 알린다", async () => {
     const { container } = await renderPage();
-    expect(container.textContent).toContain("없음 (전부 대체값 사용)");
+    expect(container.textContent).toContain("없음 (CLI 카탈로그 확인 후 대체값 적용)");
   });
 
   it("내부 실행 한도는 설정 화면에 노출하지 않는다", async () => {

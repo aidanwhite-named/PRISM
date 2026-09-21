@@ -63,7 +63,9 @@ export type ModelTokenBudget = {
   context_tokens: number;
   reserve_tokens: number;
   input_tokens: number;
-  source: "configured" | "fallback";
+  source: "configured" | "codex_catalog" | "fallback";
+  provider_id?: string;
+  token_estimation?: "o200k_base_with_margin" | "utf8_bytes_div_2";
 };
 
 /** 전달 판정 한 벌. 화면·History·감사 기록이 같은 값을 쓴다. */

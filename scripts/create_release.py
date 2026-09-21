@@ -12,6 +12,7 @@ FILES = (
     'setup.ps1', 'start-prism.ps1', 'scripts/install-window.ps1',
     'scripts/windows-common.ps1', '사용안내.txt',
     'backend/requirements.txt',
+    'backend/scripts/prepare_tokenizer.py',
 )
 PROMPTS = ('patent-analysis-master-prompt.md', 'search_prompt.md')
 
