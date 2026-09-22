@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
     [ValidateSet('claude', 'codex', 'both', 'agy', 'all', 'skip')]
-    [string]$Cli = 'all'
+    [string]$Cli = 'all',
+    [string]$OwnershipFile = ''
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
@@ -26,6 +27,7 @@ try {
         if (-not $python) {
             Write-Host 'Installing Python 3.11 x64...'
             Install-PrismPackage 'Python.Python.3.11' 'https://www.python.org/downloads/windows/' -UserScope
+            Save-PrismDependency $OwnershipFile 'python'
             $python = Find-PrismPython
         }
         if (-not $python) { throw 'Python 3.11/3.12 x64 was not found. Reopen setup after installation.' }
@@ -50,7 +52,9 @@ try {
             $nodeOk = $LASTEXITCODE -eq 0
         }
         if (-not $nodeOk) {
+            $nodeWasPresent = $null -ne $node
             Install-PrismPackage 'OpenJS.NodeJS.LTS' 'https://nodejs.org/en/download'
+            if (-not $nodeWasPresent) { Save-PrismDependency $OwnershipFile 'node' }
             $node = Get-Command node.exe -ErrorAction SilentlyContinue
             if (-not $node) { throw 'Node.js was not found. Reopen setup after installing Node.js LTS.' }
             Invoke-Checked $node.Source @('--use-system-ca', '-e', 'process.exit(0)')
@@ -64,6 +68,7 @@ try {
         $claude = Find-PrismCli 'claude'
         if (-not $claude) {
             Install-PrismPackage 'Anthropic.ClaudeCode' 'https://code.claude.com/docs/en/setup'
+            Save-PrismDependency $OwnershipFile 'claude'
             $claude = Find-PrismCli 'claude'
         }
         if (-not $claude) { throw 'Claude CLI was not found. Reopen setup or check the official installation guide.' }
@@ -79,6 +84,7 @@ try {
             try {
                 $env:NODE_OPTIONS = "$previousNodeOptions --use-system-ca".Trim()
                 Invoke-Checked $npm.Source @('install', '-g', '@openai/codex')
+                Save-PrismDependency $OwnershipFile 'codex'
             } finally {
                 $env:NODE_OPTIONS = $previousNodeOptions
             }
@@ -93,6 +99,7 @@ try {
         $agy = Find-PrismCli 'agy'
         if (-not $agy) {
             Install-PrismAgy
+            Save-PrismDependency $OwnershipFile 'agy'
             $agy = Find-PrismCli 'agy'
         }
         if (-not $agy) { throw 'agy was not found after installation. Check the installation log and retry.' }

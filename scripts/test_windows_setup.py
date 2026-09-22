@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 POWERSHELL = str(Path(os.environ['SYSTEMROOT']) / 'System32/WindowsPowerShell/v1.0/powershell.exe')
 STUB = r'''
 function Update-PrismPath {}
+function Save-PrismDependency { param($File, $Name) }
 function Test-PrismPython { param($File); return $true }
 function Find-PrismPython { return 'python.exe' }
 function Find-PrismCli {

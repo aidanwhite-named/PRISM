@@ -23,7 +23,7 @@ def main():
             assert not any(any(part in name.split('/') for part in ('.venv', 'node_modules', '.git', '__pycache__')) for name in names)
             assert not any(name.endswith(('.db', '.pyc', '.exe', '.env')) for name in names)
             zipped.extractall(base)
-        assert {name.split('/')[1] for name in names} == {'설치.cmd', '실행.cmd', 'app'}
+        assert {name.split('/')[1] for name in names} == {'설치.cmd', '실행.cmd', '제거.cmd', 'app'}
         root = base / 'PRISM/app'
         env = dict(os.environ, PRISM_DATA_DIR=str(base / 'user data'),
                    PRISM_PROMPT_DIR=str(root / 'prompt'), PYTHONUTF8='1')

@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([string]$PreviewImage, [switch]$VerifyAutomation)
+param([string]$PreviewImage, [switch]$VerifyAutomation, [switch]$Managed)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -18,7 +18,7 @@ if (-not $script:lockOwned) {
     exit 1
 }
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'PRISM 설치'
+$form.Text = 'PRISM 설치 / 업데이트'
 $form.ClientSize = New-Object Drawing.Size(640, 420)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
@@ -71,7 +71,9 @@ $timer.Add_Tick({
             $script:stdout = Join-Path $logDir 'install-output.log'
             $script:stderr = Join-Path $logDir 'install-error.log'
             $workerPath = Join-Path $root 'setup.ps1'
-            $script:worker = Start-Process -FilePath "$PSHOME\powershell.exe" -ArgumentList @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$workerPath`"") -WindowStyle Hidden -RedirectStandardOutput $script:stdout -RedirectStandardError $script:stderr -PassThru
+            $workerArgs = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$workerPath`"")
+            if ($Managed) { $workerArgs += @('-OwnershipFile', ('"' + (Join-Path $root '.setup\dependencies.json') + '"')) }
+            $script:worker = Start-Process -FilePath "$PSHOME\powershell.exe" -ArgumentList $workerArgs -WindowStyle Hidden -RedirectStandardOutput $script:stdout -RedirectStandardError $script:stderr -PassThru
             # Keep the process handle open so Windows PowerShell retains ExitCode.
             $script:workerHandle = $script:worker.Handle
         }
@@ -81,7 +83,7 @@ $timer.Add_Tick({
         $details.Text = $lines -join "`r`n"
         $details.SelectionStart = $details.TextLength
         $details.ScrollToCaret()
-        $step = @($lines | Where-Object { $_ -match '^\[[1-5]/5\]' })
+        $step = @($lines | Where-Object { $_ -match '^\[[1-6]/6\]' })
         if ($step.Count) { $status.Text = $step[-1] }
         if ($script:worker.HasExited) {
             $script:worker.WaitForExit()

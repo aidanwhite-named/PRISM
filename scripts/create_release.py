@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = (
     'setup.ps1', 'start-prism.ps1', 'scripts/install-window.ps1',
     'scripts/windows-common.ps1', '사용안내.txt',
+    'scripts/uninstall-cleanup.ps1',
     'backend/requirements.txt',
     'backend/scripts/prepare_tokenizer.py',
 )
@@ -52,6 +53,7 @@ def release_entries(root: Path) -> dict[str, bytes]:
     packed = {f'app/{name}': content for name, content in entries.items()}
     packed['설치.cmd'] = (root / '설치.cmd').read_bytes().replace(b'%~dp0scripts', b'%~dp0app\\scripts')
     packed['실행.cmd'] = (root / '실행.cmd').read_bytes().replace(b'%~dp0start-prism.ps1', b'%~dp0app\\start-prism.ps1')
+    packed['제거.cmd'] = (root / '제거.cmd').read_bytes()
     return packed
 
 

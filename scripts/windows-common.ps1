@@ -1,6 +1,17 @@
 ﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Save-PrismDependency {
+    param([string]$File, [string]$Name)
+    if (-not $File) { return }
+    $owned = @()
+    if (Test-Path -LiteralPath $File) { $owned = @(Get-Content -LiteralPath $File -Raw | ConvertFrom-Json | ForEach-Object { $_ }) }
+    $owned = @($owned + $Name | Select-Object -Unique)
+    $temporary = $File + '.tmp'
+    ConvertTo-Json -InputObject $owned | Set-Content -LiteralPath $temporary -Encoding UTF8
+    Move-Item -LiteralPath $temporary -Destination $File -Force
+}
+
 function Invoke-Checked {
     param([string]$File, [string[]]$Arguments)
     & $File @Arguments | Out-Host

@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param()
+param([string]$InnoCompiler = '')
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'scripts\windows-common.ps1')
 try {
@@ -12,6 +12,11 @@ try {
         Invoke-Checked 'npm.cmd' @('run', 'build')
     } finally { Pop-Location }
     Invoke-Checked $python @((Join-Path $PSScriptRoot 'scripts\create_release.py'))
+    if (-not $InnoCompiler) {
+        $InnoCompiler = Join-Path $PSScriptRoot 'release\tools\inno\ISCC.exe'
+    }
+    if (-not (Test-Path -LiteralPath $InnoCompiler)) { throw 'Inno Setup compiler is required. Pass -InnoCompiler with the path to ISCC.exe.' }
+    Invoke-Checked $python @((Join-Path $PSScriptRoot 'scripts\create_installer.py'), '--compiler', $InnoCompiler)
     exit 0
 } catch {
     Write-Host "Release failed: $($_.Exception.Message)" -ForegroundColor Red

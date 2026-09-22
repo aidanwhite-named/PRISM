@@ -79,16 +79,11 @@ FINAL_PROMPT = '''검색 시간 구간이 끝났습니다. 새 검색·원문 �
 그룹 C(화면 Z): 전체 구조는 유사하지만 핵심 대응은 부분적.
 자료 부족이면 group:null, status:insufficient_information. 검토 결과 관련성이 낮으면
 group:null, status:low_relevance. 관련성이 낮다는 판단과 확인하지 못했다는 사실을 구분하십시오.
-그룹을 채우려고 추측하지 말고 읽은 범위와 핵심 대응/차이를 reason에 구체적으로 설명하십시오.
+그룹을 채우려고 추측하지 말고 각 후보의 판단 이유만 reason에 간결하게 설명하십시오.
 초록 수준의 판단도 가능하지만 청구항 원문 검증을 주장하지 마십시오.
-각 후보의 핵심 구성에 대한 mapping은 최대 3행으로 간결하게 작성하십시오.
-support_text는 fields의 연속된 문자열만 쓰며 evidence_ref를 그대로 옮기십시오.
-본문 근거가 없으면 support_text는 빈 문자열로 두십시오. 직접 원문 인용 등급을 주장하지 마십시오.
 JSON 하나만 출력하십시오:
 {"assessments":[{"candidate_id":"입력의 정확한 ID","group":"A 또는 B 또는 C 또는 null",
-"status":"classified 또는 insufficient_information 또는 low_relevance","reason":"한국어 판단 이유",
-"mapping":[{"feature":"구성","counterpart":"대응 내용","similar":"유사점","different":"차이점",
-"support_text":"보존 문장 또는 빈 문자열","evidence_ref":null}]}],
+"status":"classified 또는 insufficient_information 또는 low_relevance","reason":"한국어 판단 이유"}],
 "stop_reason":"시간 내 확보한 자료로 탐색을 종료하고 평가한 범위","remaining_gaps":["미해결 사항"],
 "expansion_summary":"search_trace에서 확인한 질의·출처 확장과 한계",
 "sampling_review":"첫 페이지 편향 보완 여부. 하지 못했으면 그 한계를 명시"}

@@ -31,6 +31,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# The installer and uninstaller refuse to proceed while this launcher is alive.
+$script:prismRunningMutex = New-Object Threading.Mutex($false, 'Local\PRISM-Running')
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backend = Join-Path $root 'backend'
 $frontend = Join-Path $root 'frontend'
