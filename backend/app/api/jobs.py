@@ -19,8 +19,7 @@ from .. import (
     job_assembly,
     retrieval,
     search_channels,
-    search_budget,
-    search_report,
+    search_manifest,
     settings_service,
 )
 from ..config import PATHS
@@ -63,11 +62,8 @@ from ..prompt_store import DEFAULT_SEARCH_PROMPT_ID, KIND_ANALYSIS, KIND_SEARCH
 from ..search_prompt import (
     SEARCH_PROMPT_ID,
     SearchPromptError,
-    has_focus_section,
-    has_spec_section,
-    is_legacy_template,
 )
-from ..search_prompt import validate_strategy_body as validate_search_strategy
+from ..search_engine.autonomous import validate_strategy as validate_search_strategy
 
 
 def _resolve_search_prompt(payload_prompt_id: str | None, values: dict):
@@ -294,15 +290,23 @@ def _job_out(job: ExecutionJob) -> JobOut:
     resolved_mapping, resolved_mapping_error = citation_mapping.resolved_for_job(job)
     manifest = job.search_manifest
     result_text = job.result_text
+    if resolved_mapping and result_text:
+        result_text = citation_mapping.strip_block(result_text)
     if manifest and isinstance(manifest.get('engine'), dict):
         # Render historical A/B/C documents with the current X/Y/Z presentation.
         # Stored retrieval order and original execution artifacts remain audit records.
-        from ..search_engine.report import render
+        if manifest['engine'].get('mode') == 'autonomous':
+            from ..search_engine.report import render
+            from ..search_engine.source_observations import with_observations
+            manifest = {**manifest, 'engine': with_observations(manifest['engine'])}
+        else:
+            from ..search_history.snapshot import render
         result_text = render(manifest['engine'])
     if manifest and manifest.get("version") == 14 and manifest.get("error") and "retained_records" not in manifest:
-        manifest = {**manifest, "retained_records": search_budget.retained_records(manifest.get("tool_journal") or [])}
+        manifest = {**manifest, "retained_records": search_manifest.retained_records(manifest.get("tool_journal") or [])}
         if manifest["retained_records"] and not result_text:
-            result_text = search_report.render(manifest)
+            from ..search_history.report import render
+            result_text = render(manifest)
     return JobOut(
         id=job.id,
         status=job.status,
@@ -561,56 +565,11 @@ def _validated_search_spec(
             f"{row.error or '알 수 없음'}. 명세서를 반영하지 못한 채로 검색하지 "
             "않습니다.",
         )
-    # 새 방식 프롬프트에는 자리를 확인할 것이 없다. 명세서 구간은 PRISM 이
-    # 전략 본문 뒤에 붙이므로 사용자 전략의 내용과 무관하게 항상 자리가 있다.
-    # 옛 방식 본문만 예전처럼 확인한다.
-    if is_legacy_template(prompt_body) and not has_spec_section(prompt_body):
-        raise HTTPException(
-            422,
-            f"{prompt_id or SEARCH_PROMPT_ID} 에 출원발명 문서를 넣을 자리가 "
-            "없습니다. 프롬프트를 되돌리거나 명세서 없이 검색하십시오.",
-        )
     return rows
 
 
-async def _create_search_job(
-    payload: JobCreate, session: Session, values: dict
-) -> JobOut:
-    """유사 문헌 검색 작업 생성.
-
-    분석 경로와 공유하는 것은 Provider 해석과 실행 큐뿐이다. 프롬프트도 입력도
-    도구 정책도 다르므로 같은 함수에 플래그로 섞지 않는다.
-
-    받는 첨부는 출원발명 문서(명세서) 한 건뿐이다. 그것도 인용발명 문헌처럼
-    "검색 대상"으로 들어가는 것이 아니라, 청구항 문언을 읽는 참고 자료로
-    프롬프트의 별도 경계 안에 들어간다. 인용발명 문헌을 여기에 넣으면 그
-    자료가 검색 결과에 섞여 들어가므로 받지 않는다.
-
-    일반 검색은 후속 계보를 받지 않는다. 다만 구성대비 결과의 검증된 구성별
-    기록에서 시작하는 보완 검색은 source_job_id 와 선택 구성 id 를 함께 받는다.
-    원 보고서 전체나 인용 발췌문은 검색 모델에 전달하지 않는다.
-    """
-    if payload.relation_type:
-        raise HTTPException(
-            400, "유사 문헌 검색에는 후속 분석 relation_type 을 사용할 수 없습니다."
-        )
-    prompt = _resolve_search_prompt(payload.prompt_id, values)
-    try:
-        # 스냅샷할 본문이 조립 계약을 만족하는지 지금 확인한다. 큐에서 기다린
-        # 뒤 실행 시점에 처음 알게 되면 사용자는 이유 없이 실패한 실행을 본다.
-        validate_search_strategy(prompt.body, prompt_id=prompt.id)
-    except SearchPromptError as exc:
-        raise HTTPException(422, str(exc)) from exc
-
-    if not prompt.enabled:
-        raise HTTPException(
-            400, f"검색 전략 프롬프트가 비활성화되어 있습니다: {prompt.name}"
-        )
-
+def _search_target(payload: JobCreate, session: Session):
     requested_ids = list(dict.fromkeys(payload.search_component_ids or []))
-    if len(requested_ids) > 100:
-        raise HTTPException(400, "한 번에 검색할 미대응 구성은 100개를 넘을 수 없습니다.")
-
     search_focus: dict | None = None
     claim_text = (payload.claim_text or "").strip()
     if bool(payload.source_job_id) != bool(requested_ids):
@@ -654,16 +613,6 @@ async def _create_search_job(
                 400, "미대응 구성 검색의 청구항은 원본 분석 청구항과 같아야 합니다."
             )
         claim_text = source_claim
-        # 새 방식 프롬프트에는 이 검사가 없다. 미대응 구성 구간은 PRISM 이
-        # 전략 본문 뒤에 붙이므로, 사용자가 자리를 만들어 둘 필요가 없다.
-        # 옛 방식(placeholder 를 직접 든 본문)에서만 자리를 확인한다 — 그쪽은
-        # 자리가 없으면 선택 구성이 조용히 사라진다.
-        if is_legacy_template(prompt.body) and not has_focus_section(prompt.body):
-            raise HTTPException(
-                422,
-                f"{prompt.id} 에 미대응 구성 검색 절이 없습니다. 선택 구성을 "
-                "무시한 채 검색하지 않습니다.",
-            )
         search_focus = {
             "version": 1,
             "mode": "gap",
@@ -678,6 +627,45 @@ async def _create_search_job(
         }
     elif not claim_text:
         raise HTTPException(400, "검색할 청구항을 입력하십시오.")
+
+    return claim_text, search_focus
+
+
+async def _create_search_job(
+    payload: JobCreate, session: Session, values: dict
+) -> JobOut:
+    """유사 문헌 검색 작업 생성.
+
+    분석 경로와 공유하는 것은 Provider 해석과 실행 큐뿐이다. 프롬프트도 입력도
+    도구 정책도 다르므로 같은 함수에 플래그로 섞지 않는다.
+
+    받는 첨부는 출원발명 문서(명세서) 한 건뿐이다. 그것도 인용발명 문헌처럼
+    "검색 대상"으로 들어가는 것이 아니라, 청구항 문언을 읽는 참고 자료로
+    프롬프트의 별도 경계 안에 들어간다. 인용발명 문헌을 여기에 넣으면 그
+    자료가 검색 결과에 섞여 들어가므로 받지 않는다.
+
+    일반 검색은 후속 계보를 받지 않는다. 다만 구성대비 결과의 검증된 구성별
+    기록에서 시작하는 보완 검색은 source_job_id 와 선택 구성 id 를 함께 받는다.
+    원 보고서 전체나 인용 발췌문은 검색 모델에 전달하지 않는다.
+    """
+    if payload.relation_type:
+        raise HTTPException(
+            400, "유사 문헌 검색에는 후속 분석 relation_type 을 사용할 수 없습니다."
+        )
+    prompt = _resolve_search_prompt(payload.prompt_id, values)
+    try:
+        # 스냅샷할 본문이 조립 계약을 만족하는지 지금 확인한다. 큐에서 기다린
+        # 뒤 실행 시점에 처음 알게 되면 사용자는 이유 없이 실패한 실행을 본다.
+        validate_search_strategy(prompt.body, prompt_id=prompt.id)
+    except SearchPromptError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    if not prompt.enabled:
+        raise HTTPException(
+            400, f"검색 전략 프롬프트가 비활성화되어 있습니다: {prompt.name}"
+        )
+
+    claim_text, search_focus = _search_target(payload, session)
 
     spec_rows: list[Attachment] = []
     if payload.batch_id:
@@ -697,8 +685,7 @@ async def _create_search_job(
     search_policy = provider.search_tool_policy if provider is not None else None
     if (
         provider is None
-        or (not values.get("progressive_search_enabled", True) and (
-            search_policy is None or not provider.supports_tool_policy(search_policy)))
+        or search_policy is None or not provider.supports_tool_policy(search_policy)
     ):
         raise HTTPException(
             400,
@@ -1047,7 +1034,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
     prior_claim_text = ""
     prior_report = ""
     prior_mapping = None
-    if source_job is not None:
+    if source_job is not None and job_kind is not JobKind.SIMILARITY_SEARCH:
         resolved_mapping, _ = citation_mapping.resolved_for_job(source_job)
         relation = RelationType(payload.relation_type) if payload.relation_type else None
         # 물려받는 자료도 실제 실행과 같이 센다. 복제 전이라 원본 행을 그대로
@@ -1070,28 +1057,28 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
         else None
     )
     byte_budget = getattr(provider, "max_input_bytes", None)
-    if job_kind is JobKind.SIMILARITY_SEARCH and values.get("progressive_search_enabled", True):
-        from ..search_engine.planner import PLAN_SYSTEM
-        from ..search_engine.models import Limits
+    if job_kind is JobKind.SIMILARITY_SEARCH:
+        from ..search_engine.autonomous import system_text, input_text, time_limit
         specification = ""
         for attachment in attachments:
             if not attachment.read_ok or not attachment.normalized_text_path:
                 return PreflightOut(job_kind=job_kind.value, provider=provider_id, lanes=[], chars=0,
                     bytes=0, blocked=True, error="명세서 본문을 읽지 못했습니다.")
             specification += Path(attachment.normalized_text_path).read_text(encoding="utf-8") + "\n"
-        payload_text = json.dumps({"claim": payload.claim_text or "", "specification": specification[:6000],
-                                   "focus": None, "search_strategy": prompt_body}, ensure_ascii=False)
-        size = (provider.payload_bytes(PLAN_SYSTEM, payload_text) if provider else
-                len((PLAN_SYSTEM + payload_text).encode("utf-8")))
-        limits = Limits.for_depth(payload.search_depth, values)
-        chars = len(PLAN_SYSTEM) + len(payload_text)
+        claim, focus = _search_target(payload, session)
+        payload_text = input_text(claim, prompt_body, specification, focus=focus, cutoff=payload.search_cutoff_date or '')
+        seconds = time_limit(values)
+        system = system_text(seconds)
+        size = (provider.payload_bytes(system, payload_text) if provider else
+                len((system + payload_text).encode("utf-8")))
+        chars = len(system) + len(payload_text)
         over_bytes = bool(byte_budget and size > byte_budget)
         over_chars = bool(max_chars and chars > max_chars)
         return PreflightOut(job_kind=job_kind.value, provider=provider_id,
-            lanes=[PreflightLane(id="claim_plan", chars=chars, bytes=size)], chars=chars, bytes=size,
+            lanes=[PreflightLane(id="autonomous_search", chars=chars, bytes=size)], chars=chars, bytes=size,
             char_budget=max_chars, byte_budget=byte_budget, over_bytes=over_bytes, over_chars=over_chars,
-            blocked=over_bytes or over_chars, delivery_plan="progressive_search",
-            message=f"최대 {limits.seconds}초 · 검색 질의 {limits.queries}개. 후보를 먼저 표시하고 필요한 원문만 검증합니다.")
+            blocked=over_bytes or over_chars, delivery_plan="autonomous_search",
+            message=f"최대 {seconds}초 · 검색 순서와 문헌 확인은 AI가 결정합니다. 분류·후보 수·호출 횟수 제한 없이 출처와 결과를 보존합니다.")
     tool_policy = getattr(provider, "search_tool_policy", None)
     tool_policy_name = getattr(tool_policy, "name", "") or ""
     # 예산은 runner 가 쓰는 것과 **같은 함수**로 만든다. 로컬 검색의 크기는
@@ -1118,17 +1105,11 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
             claim_text=payload.claim_text or "",
             # 화면이 안내한 크기와 실제로 나가는 크기가 어긋나지 않게, 기준일
             # 구간도 preflight 에서 같이 붙인다.
-            search_cutoff=payload.search_cutoff_date or "",
-            search_tool_status=search_channels.availability(values, provider_id),
-            search_call_limit=search_channels.execution_limits(values, payload.search_depth)[0],
-            search_prompt_id=search_prompt_id or SEARCH_PROMPT_ID,
             followup_instruction=payload.followup_instruction or "",
             prior_claim_text=prior_claim_text,
             prior_report=prior_report,
             prior_citation_mapping=prior_mapping,
             report_context=context_manifest["text"],
-            tool_policy_name=tool_policy_name,
-            agy_allowed_hosts=job_assembly.allowed_hosts_for(tool_policy_name),
             retrieval_mode=str(values.get("retrieval_mode") or "auto"),
             provider_byte_budget=byte_budget,
             retrieval_budget=retrieval_budget,
@@ -1139,21 +1120,6 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
                 payload.claim_text or ""
             ),
             **job_assembly.delivery_policy_from_settings(values),
-        )
-    except job_assembly.SpecUnreadable as exc:
-        return PreflightOut(
-            job_kind=job_kind.value,
-            provider=provider_id,
-            lanes=[],
-            chars=0,
-            bytes=0,
-            char_budget=max_chars,
-            byte_budget=byte_budget,
-            blocked=True,
-            error=(
-                f"출원발명 문서의 본문을 읽지 못했습니다: {exc.filename}. "
-                "명세서를 반영하지 못한 채로 검색하지 않습니다."
-            ),
         )
     except (job_assembly.ModelInputTooLarge, job_assembly.TransportInputTooLarge) as exc:
         return PreflightOut(
@@ -1297,7 +1263,7 @@ async def cancel_job(job_id: str, session: Session = Depends(get_db)) -> dict:
 
 @router.post("/jobs/{job_id}/continue-search", response_model=JobOut, status_code=201)
 async def continue_search(job_id: str, session: Session = Depends(get_db)) -> JobOut:
-    """Create an isolated continuation, keeping the original result and cumulative budgets."""
+    """Continue from saved findings with a fresh configured time allowance."""
     source = session.get(ExecutionJob, job_id)
     if source is None:
         raise HTTPException(404, "작업을 찾을 수 없습니다.")
@@ -1306,13 +1272,11 @@ async def continue_search(job_id: str, session: Session = Depends(get_db)) -> Jo
     resumable_status = (source.status == JobStatus.SUCCEEDED or
                         source.status == JobStatus.FAILED and snapshot.get('stop_reason') == 'classification_incomplete')
     if (source.job_kind != JobKind.SIMILARITY_SEARCH or not resumable_status
-            or source.search_depth == 'exhaustive' or not snapshot.get('can_continue')
-            or not values.get('progressive_search_enabled', True)):
-        raise HTTPException(409, "종료된 기본 검색에서 이어가기 자료가 있는 경우에만 정밀 검색을 이어갈 수 있습니다.")
+            or not snapshot.get('can_continue')):
+        raise HTTPException(409, "종료된 검색에 이어가기 자료가 있는 경우 추가 검색을 실행할 수 있습니다.")
     # Repeated clicks/requests return the same continuation instead of spending twice.
     existing = session.query(ExecutionJob).filter_by(
-        source_job_id=source.id, job_kind=JobKind.SIMILARITY_SEARCH,
-        search_depth='exhaustive').first()
+        source_job_id=source.id, job_kind=JobKind.SIMILARITY_SEARCH).first()
     if existing is not None:
         return _job_out(existing)
     try:
@@ -1321,15 +1285,12 @@ async def continue_search(job_id: str, session: Session = Depends(get_db)) -> Jo
             raise ValueError('unsupported checkpoint')
     except (OSError, ValueError, TypeError) as exc:
         raise HTTPException(409, "이 검색의 이어가기 자료를 읽을 수 없습니다.") from exc
-    from ..search_engine.models import Limits, write_json
-    limits = Limits.for_depth('exhaustive', values)
-    if limits.seconds - checkpoint['snapshot']['elapsed_seconds'] < 30:
-        raise HTTPException(409, "정밀 검색의 총 시간 예산이 부족합니다. 환경설정의 검색 예산을 확인하십시오.")
+    from ..search_engine.storage import write_json
     copied = {name: getattr(source, name) for name in (
         'prompt_id', 'prompt_name', 'prompt_snapshot', 'prompt_capabilities', 'output_mode',
         'claim_text', 'search_focus', 'search_cutoff_date', 'provider', 'model')}
     job = ExecutionJob(**copied, job_kind=JobKind.SIMILARITY_SEARCH,
-                       search_depth='exhaustive', status=JobStatus.QUEUED,
+                       status=JobStatus.QUEUED,
                        source_job_id=source.id, source_job_label=source_label(source))
     session.add(job)
     session.flush()

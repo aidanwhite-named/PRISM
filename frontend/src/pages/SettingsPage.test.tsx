@@ -14,7 +14,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const settingsResponse = {
   values: {
-    progressive_search_enabled: false,
     max_file_size_bytes: 26214400,
     max_total_upload_bytes: 104857600,
     max_files_per_job: 20,
@@ -170,12 +169,12 @@ describe("대용량 인용발명 전달 방식", () => {
     for (const warning of removedWarnings) expect(screen.queryByText(warning)).toBeNull();
     expect(screen.getByText("EPO OPS 사용량 한도에 도달했습니다.")).toBeTruthy();
   });
-  it.each([true, false])("검색 방식(%s)과 무관하게 폐기한 설정을 표시하지 않는다", async (progressive) => {
+  it("폐기한 검색 설정을 표시하지 않는다", async () => {
     const { api } = await import("../lib/api");
     const current = await api.settings();
     vi.mocked(api.settings).mockResolvedValueOnce({
       ...current,
-      values: { ...current.values, progressive_search_enabled: progressive, literature_integration_enabled: true },
+      values: { ...current.values, literature_integration_enabled: true },
     });
     const { container } = await renderPage();
     expect(container.querySelector(".settings-agy-permissions")).toBeNull();

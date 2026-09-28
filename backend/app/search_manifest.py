@@ -1,38 +1,13 @@
-"""Single-agent search JSON and audit manifest. No ranking or reclassification."""
-from __future__ import annotations
-
+"""Source identities and observed calls. No output contract or ranking."""
 import copy
 import json
 import re
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
-
-CAPABILITY = "similarity_search_v1"
-MANIFEST_VERSION = 14
-GROUP_SCHEMA_VERSION = 3
-GROUPS = WRITE_GROUPS = ("A", "B", "C")
-GROUP_DEFINITIONS = {
-    "A": "전체 구조와 핵심 특징이 모두 강하게 유사",
-    "B": "전체 구조는 다르지만 핵심 특징 또는 핵심 관계가 강하게 유사",
-    "C": "전체 구조는 유사하지만 핵심 대응은 부분적",
-}
 INPUT_KIND_QUERY, INPUT_KIND_URL = "query", "url"
 SEARCH_TOOL_NAMES = frozenset(("WebSearch", "search_web", "web_search"))
+
 FETCH_TOOL_NAMES = frozenset(("WebFetch", "read_url_content"))
-OPEN, CLOSE = "[PRISM_SEARCH_LOG_V1]", "[/PRISM_SEARCH_LOG_V1]"
-_MAX_OUTPUT_BYTES = 2_000_000
-_BLOCK = re.compile(r"(?m)^[ \t]*\[PRISM_SEARCH_LOG_V1\][ \t]*\r?\n(.*?)^[ \t]*\[/PRISM_SEARCH_LOG_V1\][ \t]*$", re.S | re.M)
-
-class SearchLogError(ValueError):
-    pass
-
-def _unique_object(pairs):
-    value = {}
-    for key, item in pairs:
-        if key in value:
-            raise ValueError("duplicate JSON key")
-        value[key] = item
-    return value
 
 def normalize_url(raw) -> str:
     value = str(raw or "").strip()
@@ -66,103 +41,6 @@ def identity_key(number: str = "", doi: str = "") -> str:
                 text = text[len(prefix):]
         return "doi:" + text
     return "patent:" + re.sub(r"[\s/.-]", "", str(number).upper())
-
-def parse_payload(text: str) -> dict:
-    if len(text.encode("utf-8")) > _MAX_OUTPUT_BYTES:
-        raise SearchLogError("최종 JSON이 출력 크기 한도를 넘었습니다.")
-    blocks = _BLOCK.findall(text.strip())
-    if len(blocks) > 1:
-        raise SearchLogError("검색 JSON 블록은 한 개여야 합니다.")
-    source = blocks[0] if blocks else text.strip()
-    if source.startswith("```"):
-        source = re.sub(r"^\`\`\`(?:json)?\s*|\s*\`\`\`$", "", source)
-    try:
-        value = json.loads(source, object_pairs_hook=_unique_object)
-    except (ValueError, TypeError) as exc:
-        raise SearchLogError("최종 검색 JSON을 읽을 수 없습니다.") from exc
-    if not isinstance(value, dict) or not isinstance(value.get("candidates"), list):
-        raise SearchLogError("candidates 배열이 필요합니다.")
-    return value
-
-def parse(text: str, observed_section=None, **_context) -> tuple[dict, list[str]]:
-    value = parse_payload(text)
-    for key in ("term_expansions", "rounds", "access_failures", "candidate_dispositions"):
-        if key in value and (not isinstance(value[key], list) or len(value[key]) > 200):
-            raise SearchLogError(f"{key}는 최대 200개의 배열이어야 합니다.")
-    if len(value["candidates"]) > 100:
-        raise SearchLogError("최종 후보는 최대 100개입니다. 순위 절단 없이 출력 오류로 처리합니다.")
-    result = {"candidates": [], "term_expansions": value.get("term_expansions", []),
-              "rounds": value.get("rounds", []), "access_failures": value.get("access_failures", [])}
-    review = value.get("search_review", {})
-    if not isinstance(review, dict):
-        raise SearchLogError("search_review는 객체여야 합니다.")
-    result["search_review"] = {}
-    for key in ("stop_reason", "expansion_summary", "sampling_review"):
-        text = review.get(key, "")
-        if not isinstance(text, str) or len(text) > 10000:
-            raise SearchLogError(f"search_review.{key}는 10000자 이하 문자열이어야 합니다.")
-        result["search_review"][key] = text
-    gaps = review.get("remaining_gaps", [])
-    if not isinstance(gaps, list) or len(gaps) > 100 or any(not isinstance(x, str) or len(x) > 2000 for x in gaps):
-        raise SearchLogError("remaining_gaps는 짧은 문자열 배열이어야 합니다.")
-    result["search_review"]["remaining_gaps"] = gaps
-    result["candidate_dispositions"] = []
-    for item in value.get("candidate_dispositions", []):
-        if not isinstance(item, dict):
-            raise SearchLogError("candidate_dispositions 항목은 객체여야 합니다.")
-        clean = {key: item.get(key, "") for key in ("doc_number", "doi", "url", "reason")}
-        if any(not isinstance(x, str) or len(x) > 10000 for x in clean.values()):
-            raise SearchLogError("후보 제외 기록은 문자열 필드여야 합니다.")
-        if not clean["reason"].strip() or not any(clean[k].strip() for k in ("doc_number", "doi", "url")):
-            raise SearchLogError("후보 제외 기록에는 식별정보와 이유가 필요합니다.")
-        result["candidate_dispositions"].append(clean)
-    for index, raw in enumerate(value["candidates"], 1):
-        if not isinstance(raw, dict) or raw.get("group") not in (*GROUPS, None):
-            raise SearchLogError(f"후보 {index}: group은 A/B/C/null이어야 합니다.")
-        mapping = raw.get("mapping", [])
-        if not isinstance(mapping, list) or any(not isinstance(row, dict) for row in mapping):
-            raise SearchLogError(f"후보 {index}: mapping은 객체 배열이어야 합니다.")
-        if len(mapping) > 100:
-            raise SearchLogError(f"후보 {index}: 구성 대응표가 너무 큽니다.")
-        candidate = {"index": index, "rank": index, "group": raw.get("group")}
-        for key in ("doc_type", "doc_number", "doi", "title", "reported_title", "applicant",
-                    "url", "family", "note", "publication_date", "verbatim_excerpt", "source_location"):
-            item = raw.get(key, "")
-            if item is not None and not isinstance(item, str):
-                raise SearchLogError(f"후보 {index}: {key}는 문자열이어야 합니다.")
-            candidate[key] = item or ""
-        candidate["mapping"] = []
-        for row in mapping:
-            clean = {}
-            for key in ("feature", "degree", "counterpart", "similar", "different", "support_text",
-                        "support_source", "support_scope", "support_url", "verbatim_excerpt",
-                        "translation", "source_location"):
-                item = row.get(key, "")
-                if item is not None and not isinstance(item, str):
-                    raise SearchLogError(f"후보 {index}: mapping.{key}는 문자열이어야 합니다.")
-                clean[key] = item or ""
-            ref = row.get("evidence_ref")
-            clean["evidence_ref"] = copy.deepcopy(ref) if isinstance(ref, dict) else None
-            candidate["mapping"].append(clean)
-        result["candidates"].append(candidate)
-    return result, []
-
-def strip_block(text: str) -> str:
-    return _BLOCK.sub("", text).strip()
-
-def has_retrieval_attempt(calls, tool_uses=None, journal=None) -> bool:
-    """Capabilities checks alone do not constitute a literature search."""
-    names = set(tool_uses or []) | {call.get("name") for call in (calls or [])}
-    names.update("mcp__prism-search__" + str(row.get("tool", ""))
-                 for row in (journal or []) if row.get("state") == "started")
-    eligible = SEARCH_TOOL_NAMES | FETCH_TOOL_NAMES | {
-        'mcp__prism-search__source_fetch', 'mcp__prism-search__citation_search',
-    } | {
-        f"mcp__prism-search__{source}_{action}"
-        for source in ("epo", "literature", "kipris") for action in ("search", "fetch")
-    }
-    return bool(names & eligible)
-
 
 def observed(calls, tool_uses=None, **_context) -> dict:
     calls = [copy.deepcopy(call) for call in (calls or []) if isinstance(call, dict)]
@@ -219,42 +97,28 @@ def read_tool_journal(work_dir: Path) -> list[dict]:
             records.append({"state": "incomplete", "error_code": "journal_record_incomplete"})
     return records
 
-def build(*, claim_text, provider="", model="", prompt_id="", prompt_name="",
-          prompt_sha256="", runtime_context_sha256="", spec_document=None,
-          search_focus=None, started_at=None, completed_at=None, tool_calls=None,
-          tool_uses=None, observed_section=None, tool_journal=None,
-          tool_availability=None, reported=None, notes=None, error=None,
-          date_filter=None, max_tool_calls_total=80, timeout_seconds=300, usage=None,
-          raw_output="", search_depth="deep", claim_boundary_neutralized=False, spec_boundary_neutralized=False,
-          focus_boundary_neutralized=False, template_mode="", strategy_boundary_neutralized=False,
-          tool_policy_name="", allowed_tools=(), mcp_tools=(), advertised_tools_enforced=False,
-          quality=None, verification_followup=None) -> dict:
-    from .search_budget import retained_records
-    try:
-        llm_output = parse_payload(raw_output) if raw_output else None
-    except SearchLogError:
-        llm_output = None
-    return {
-        "version": MANIFEST_VERSION, "status": "incomplete" if error else (
-            "verification_incomplete" if quality and quality.get("verification_status") != "complete" else (
-                "search_incomplete" if quality and (quality.get("search_audit") or {}).get("status") == "incomplete" else "complete")),
-        "quality": quality, "verification_followup": verification_followup,
-        "provider": provider, "model": model, "group_definitions": dict(GROUP_DEFINITIONS),
-        "input": {"claim_text": claim_text, "spec_document": spec_document, "search_focus": search_focus,
-                  "claim_boundary_neutralized": claim_boundary_neutralized,
-                  "spec_boundary_neutralized": spec_boundary_neutralized,
-                  "focus_boundary_neutralized": focus_boundary_neutralized},
-        "prompt": {"id": prompt_id, "name": prompt_name, "sha256": prompt_sha256,
-                   "runtime_context_sha256": runtime_context_sha256, "template_mode": template_mode,
-                   "strategy_boundary_neutralized": strategy_boundary_neutralized},
-        "policy": {"name": tool_policy_name, "allowed_tools": list(allowed_tools),
-                   "mcp_tools": list(mcp_tools), "advertised_tools_enforced": advertised_tools_enforced},
-        "started_at": started_at, "completed_at": completed_at,
-        "limits": {"max_tool_calls": max_tool_calls_total, "timeout_seconds": timeout_seconds, "depth": search_depth},
-        "tool_availability": tool_availability or {}, "tool_journal": tool_journal or [],
-        "observed": observed_section or observed(tool_calls, tool_uses),
-        "llm_output": llm_output, "reported": reported,
-        "retained_records": retained_records(tool_journal or []) if error else [],
-        "date_filter": date_filter or {}, "usage": usage,
-        "normalization_notes": list(notes or []), "error": error,
-    }
+def retained_records(journal: list) -> list[dict]:
+    """Preserve fetched metadata, without choosing candidates or inventing groups."""
+    records = {}
+    for row in journal:
+        if row.get("state") != "completed" or row.get("ok") is not True or not row.get("tool", "").endswith(("_fetch", "_search")):
+            continue
+        for record in (row.get("result") or {}).get("records", []):
+            number = str(record.get("document_number") or record.get("doc_number") or "")
+            doi = str(record.get("doi") or "")
+            url = str(record.get("source_url") or record.get("url") or "")
+            if not (number or doi or url):
+                continue
+            if not doi and number.startswith("10."):
+                doi, number = number, ""
+            key = identity_key(number, doi) if number or doi else url
+            item = records.setdefault(key, {"document_number": number, "doi": doi,
+                "title": str(record.get("title") or ""), "url": url, "scopes": [], "call_ids": []})
+            scope = ("bibliographic_search" if row["tool"].endswith("_search") else
+                     (row.get("arguments") or {}).get("constituent", "abstract" if row["tool"] == "literature_fetch" else "claims"))
+            if not item["title"]:
+                item["title"] = str(record.get("title") or "")
+            if scope not in item["scopes"]:
+                item["scopes"].append(scope)
+            item["call_ids"].append(row.get("id", ""))
+    return list(records.values())

@@ -1375,9 +1375,12 @@ export default function SettingsPage() {
               )}
               <section className="settings-run-limits">
                 <h3>전체 실행 상한</h3>
-                <p className="hint">구성대비 분석에 적용됩니다. 유사문헌 검색은 80회·5분으로 고정됩니다.</p>
+                <p className="hint">구성대비 분석과 유사문헌 검색의 제한시간을 각각 정합니다.</p>
                 <NumberField label="실행 제한시간 (초)" value={v.default_timeout_seconds}
                   onSave={(n) => saveValue("default_timeout_seconds", n)} />
+                <NumberField label="유사문헌 검색 제한시간 (초)" value={v.search_timeout_seconds ?? 300}
+                  hint="검색 순서·문헌 확인·후보 선택은 AI가 결정합니다. 분류와 호출 횟수 제한은 없습니다."
+                  onSave={(n) => saveValue("search_timeout_seconds", n)} />
               </section>
             </div>
           </div>

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-pytestmark = pytest.mark.usefixtures("legacy_search")
 
 from app.enums import AuthState, ErrorCode, JobStatus
 from app.evaluation.evaluator import evaluate

@@ -288,9 +288,9 @@ def test_network_time_budget_stops_further_calls():
         )
 
     client = literature_client.LiteratureClient(
-        http_budget_seconds=0.01, transport=slow
+        transport=slow
     )
     client.search_crossref("first")
     assert client.usage()["http_seconds"] >= 0.01
-    with pytest.raises(literature_client.LiteratureBudgetExceeded):
-        client.search_crossref("second")
+    client.search_crossref("second")
+    assert client.usage()["calls_by_kind"]["search"] == 2

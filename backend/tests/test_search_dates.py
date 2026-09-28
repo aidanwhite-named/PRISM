@@ -14,7 +14,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import create_engine, inspect
 
-from app import search_dates, search_manifest, search_report
+from app import search_dates, search_manifest
+from app.search_history import report as search_report
 from app.db import _add_compatible_columns
 
 
@@ -171,22 +172,10 @@ def test_the_publication_date_is_read_from_every_channel() -> None:
 
 
 def _manifest(date_filter: dict) -> dict:
-    return search_manifest.build(
-        claim_text="청구항 1. 센서.",
-        prompt_id="search_prompt.md",
-        prompt_sha256="0" * 64,
-        claim_boundary_neutralized=False,
-        started_at=None,
-        completed_at=None,
-        tool_calls=[],
-        tool_uses=[],
-        tool_policy_name="search",
-        allowed_tools=[],
-        reported={"candidates": [], "rounds": [], "access_failures": []},
-        notes=[],
-        error=None,
-        date_filter=date_filter,
-    )
+    return {'version': 14, 'status': 'complete', 'date_filter': date_filter,
+            'input': {'claim_text': '청구항 1. 센서.'},
+            'reported': {'candidates': [], 'rounds': [], 'access_failures': []},
+            'observed': {}}
 
 
 def test_the_manifest_keeps_the_cutoff_even_when_it_is_empty() -> None:

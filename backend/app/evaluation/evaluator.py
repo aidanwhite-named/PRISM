@@ -261,11 +261,7 @@ def evaluate(
     policy = effective_policy(outcome)
 
     # --- 종료 상태가 먼저다 -------------------------------------------------
-    # 도구 상한을 넘겨 PRISM 이 프로세스를 끊은 경우에도 cancelled 는 참이다.
-    # 그건 사용자가 누른 취소가 아니므로 여기서 삼키지 않고 아래로 넘긴다.
-    if outcome.cancelled and not (
-        outcome.tool_budget_exceeded or outcome.content_read_budget_exceeded
-    ):
+    if outcome.cancelled:
         return Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, errors)
 
     # These stages may stop the CLI internally or follow a soft search timeout.
@@ -362,27 +358,6 @@ def evaluate(
                 + scope_note
             )
             return Verdict(JobStatus.FAILED, ErrorCode.TOOL_POLICY_VIOLATION, errors)
-
-    # --- 도구 호출 상한 초과 ------------------------------------------------
-    # 정책 위반보다 뒤에 둔다. 상한을 넘긴 실행이 허용 목록도 깼다면, 사용자가
-    # 알아야 할 것은 "많이 불렀다"가 아니라 "부르면 안 되는 것을 불렀다"이다.
-    if outcome.tool_budget_exceeded:
-        limit = policy.max_tool_calls if policy else 0
-        errors.append(
-            f"검색 도구 호출이 상한({limit}회)을 넘어 실행을 중단했습니다. "
-            "검색 범위를 좁혀서 다시 시도하십시오."
-        )
-        return Verdict(JobStatus.FAILED, ErrorCode.SEARCH_BUDGET_EXCEEDED, errors)
-
-    # 본문 읽기 상한은 검색 상한과 따로 센다. 사용자가 받아야 할 지시가 다르다 —
-    # "검색을 줄여라"가 아니라 "문헌 수를 줄여라"이다.
-    if outcome.content_read_budget_exceeded:
-        limit = policy.max_content_read_calls if policy else 0
-        errors.append(
-            f"페이지 본문 읽기 호출이 상한({limit}회)을 넘어 실행을 중단했습니다. "
-            "확인할 문헌 수를 줄여서 다시 시도하십시오."
-        )
-        return Verdict(JobStatus.FAILED, ErrorCode.SEARCH_BUDGET_EXCEEDED, errors)
 
     # 정책을 선언하지 않은 Provider. 도구를 끌 수단이 없으므로 PRISM 은 호출을
     # 탐지할 뿐 막지 못한다. 여기서만 전역 설정이 개입한다 — 사용자가 완화할 수

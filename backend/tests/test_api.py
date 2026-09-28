@@ -149,8 +149,8 @@ def test_search_prompt_catalog_edit_validates_execution_contract(client) -> None
             "/api/prompts/reserved/search_prompt.md",
             json={"body": "경계 없이 {{CLAIM_TEXT}} 만 남긴 본문"},
         )
-        assert half_migrated.status_code == 422
-        assert "<CLAIM_TEXT>" in half_migrated.json()["detail"]
+        assert half_migrated.status_code == 200
+        assert half_migrated.json()["body"] == "경계 없이 {{CLAIM_TEXT}} 만 남긴 본문"
     finally:
         # 이 파일은 세션 전체가 공유한다. 되돌리지 않으면 뒤따르는 테스트가
         # 여기서 바꾼 본문으로 돌게 된다.

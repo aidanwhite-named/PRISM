@@ -31,16 +31,9 @@ from .. import (
     search_dates,
     search_manifest,
     search_prompt,
-    search_report,
-    search_verification,
-    search_quality,
-    search_agent_tools,
-    search_deadline,
-    search_session,
     settings_service,
 )
 from ..config import PATHS
-from .. import search_budget as search_limits
 from ..db import session_scope
 from ..enums import DeliveryPlan, ErrorCode, JobKind, JobStatus, RetrievalMode
 from ..evaluation.evaluator import Verdict, evaluate
@@ -55,7 +48,6 @@ from ..providers.base import (
     ExecutionRequest,
     ToolPolicy,
 )
-from ..providers import agy_mcp
 from ..providers.registry import build_provider
 from . import process as proc
 from .bus import BUS
@@ -67,11 +59,9 @@ _NON_PERSISTED = frozenset({"result_progress"})
 # 조립은 job_assembly 가 한다. runner 와 preflight 가 같은 함수를 부르지 않으면
 # 화면이 안내한 크기와 실제로 나가는 크기가 어긋난다. 기존 import 경로를 쓰는
 # 코드가 있으므로 이름만 여기 남긴다.
-_SEARCH_CONTEXT_BY_POLICY = job_assembly.SEARCH_CONTEXT_BY_POLICY
-search_spec = job_assembly.search_spec
 
 
-def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int) -> dict:
+def _search_mcp_servers(work_dir: Path, cutoff: str) -> dict:
     """Per-run MCP config.  No credentials are placed in CLI arguments."""
     backend_root = Path(__file__).resolve().parents[2]
     return {
@@ -83,7 +73,7 @@ def _search_mcp_servers(work_dir: Path, cutoff: str, max_calls: int) -> dict:
                 "PRISM_SEARCH_WORK_DIR": str(work_dir.resolve()),
                 "PRISM_DATA_DIR": str(PATHS.data_dir.resolve()),
                 "PRISM_SEARCH_CUTOFF": cutoff or "",
-                "PRISM_SEARCH_MAX_TOOL_CALLS": str(max(1, int(max_calls))),
+
             },
         }
     }
@@ -189,8 +179,6 @@ def _progress_counts_as(event_type: str, payload: dict) -> str:
         # 이벤트를 만들었다. 모르면 세지 않는다.
         return ""
     name = str(payload.get("name") or "")
-    if name == 'mcp__prism-search__start_collection':
-        return PROGRESS_SEARCH
     if name.startswith('mcp__prism-search__'):
         if name.endswith('_search'):
             return PROGRESS_SEARCH
@@ -388,8 +376,7 @@ class JobRunner:
             # 선택적 검색 기준일. 빈 문자열이면 **날짜 조건이 없다**는 뜻이고,
             # 여기서 오늘 날짜로 채우지 않는다.
             search_cutoff = search_dates.normalize_cutoff(job.search_cutoff_date)
-            # 검색 깊이는 새 subsystem의 시간·조회·검증 예산을 함께 선택한다.
-            search_depth = job.search_depth or "deep"
+            # 이전 기록의 검색 깊이 값은 호환성을 위해 보존한다.
             output_mode = job.output_mode
             work_dir = Path(job.work_dir) if job.work_dir else PATHS.run_dir(job_id)
             # 「분석에 포함」을 푼 자료는 여기서 빠진다. preflight 가 크기를
@@ -428,9 +415,6 @@ class JobRunner:
 
         # Provider 를 만든 뒤 그 Provider 가 선언한 검색 정책으로 교체한다.
         tool_policy: ToolPolicy = NO_TOOLS
-        search_budget = 0
-        if job_kind is JobKind.SIMILARITY_SEARCH:
-            search_budget, timeout = search_channels.execution_limits(values, search_depth)
 
         await self._emit(job_id, "stage", {"stage": "queued", "message": "실행 대기 중"})
 
@@ -445,7 +429,7 @@ class JobRunner:
                 )
                 return
 
-            if job_kind is JobKind.SIMILARITY_SEARCH and not values.get("progressive_search_enabled", True):
+            if job_kind is JobKind.SIMILARITY_SEARCH:
                 selected_policy = provider.search_tool_policy
                 if (
                     selected_policy is None
@@ -457,11 +441,6 @@ class JobRunner:
                         f"{provider_id} 는 유사 문헌 웹 검색 정책을 지원하지 않습니다.",
                     )
                     return
-                tool_policy = replace(
-                    selected_policy,
-                    max_tool_calls=max(1, search_budget),
-                    mcp_tools=(),
-                )
 
             if job_kind is JobKind.PATENT_ANALYSIS and not attachments:
                 # 작업 생성에서 이미 막지만, 큐에서 기다리는 사이에 자료가
@@ -488,10 +467,10 @@ class JobRunner:
                 job.started_at = started
                 job.preprocessing_versions = preprocessing_versions()
             await self._emit(job_id, "status", {"status": JobStatus.RUNNING})
-            if job_kind is JobKind.SIMILARITY_SEARCH and values.get("progressive_search_enabled", True):
+            if job_kind is JobKind.SIMILARITY_SEARCH:
                 from ..search_engine.job import run_job
                 await run_job(self, provider, job_id=job_id, work_dir=work_dir,
-                    claim=claim_text, cutoff=search_cutoff, depth=search_depth, values=values,
+                    claim=claim_text, cutoff=search_cutoff, values=values,
                     model=model, reasoning_effort=reasoning_effort, strategy=master_prompt,
                     attachments=attachments, focus=search_focus)
                 return
@@ -499,24 +478,8 @@ class JobRunner:
                 job_id, "stage", {"stage": "preprocessing", "message": "프롬프트 조립 중"}
             )
 
-            if job_kind is JobKind.SIMILARITY_SEARCH and provider_id == "agy":
-                # agy 는 실행별 MCP 인자가 없다. 도구 상태를 프롬프트에 넣기 전에
-                # 전역 설정 등록을 맞춰 둔다. 실패하면 채널이 not_registered 로
-                # 표시되고 웹 검색만으로 진행한다.
-                registration = agy_mcp.ensure_registered()
-                if not registration.ok:
-                    await self._emit(job_id, "search_channel_warning", {
-                        "provider": provider_id, "message": registration.detail()[:500]})
 
             # --- 프롬프트 조립 -------------------------------------------
-            search_prompt_sha = ""
-            search_runtime_context_sha = ""
-            search_prompt_mode = ""
-            strategy_boundary_neutralized = False
-            claim_boundary_neutralized = False
-            spec_boundary_neutralized = False
-            focus_boundary_neutralized = False
-            spec_document: dict | None = None
             try:
                 assembly = job_assembly.assemble_job(
                     job_kind=job_kind,
@@ -526,20 +489,11 @@ class JobRunner:
                     runtime_context_enabled=runtime_enabled,
                     max_chars=max_chars,
                     claim_text=claim_text,
-                    focus_text=render_search_focus(search_focus),
-                    search_cutoff=search_cutoff,
-                    search_tool_status=search_channels.availability(values, provider_id),
-                    search_call_limit=search_budget,
-                    search_prompt_id=prompt_id or search_prompt.SEARCH_PROMPT_ID,
                     followup_instruction=followup_instruction,
                     prior_claim_text=prior_claim_text,
                     prior_report=prior_report,
                     prior_citation_mapping=prior_mapping,
                     report_context=report_context,
-                    tool_policy_name=tool_policy.name,
-                    agy_allowed_hosts=job_assembly.allowed_hosts_for(
-                        tool_policy.name
-                    ),
                     retrieval_mode=retrieval_mode,
                     provider_byte_budget=getattr(provider, "max_input_bytes", None),
                     retrieval_budget=retrieval_budget,
@@ -550,27 +504,7 @@ class JobRunner:
                     **delivery_policy,
                 )
                 assembled = assembly.representative
-                if job_kind is JobKind.SIMILARITY_SEARCH:
-                    spec_document = assembly.spec_document
-                    search_prompt_sha = assembly.search_prompt_sha
-                    search_runtime_context_sha = assembly.search_runtime_context_sha
-                    claim_boundary_neutralized = assembly.claim_boundary_neutralized
-                    spec_boundary_neutralized = assembly.spec_boundary_neutralized
-                    focus_boundary_neutralized = assembly.focus_boundary_neutralized
-                    search_prompt_mode = assembly.search_prompt_mode
-                    strategy_boundary_neutralized = (
-                        assembly.strategy_boundary_neutralized
-                    )
 
-            except job_assembly.SpecUnreadable as exc:
-                await self._fail(
-                    job_id,
-                    ErrorCode.ATTACHMENT_ERROR,
-                    "출원발명 문서의 본문을 읽지 못했습니다: "
-                    f"{exc.filename}. 명세서를 반영하지 못한 채로 검색하지 "
-                    "않습니다.",
-                )
-                return
             except (InputTooLarge, job_assembly.ModelInputTooLarge, job_assembly.TransportInputTooLarge) as exc:
                 await self._fail(job_id, ErrorCode.INPUT_TOO_LARGE, str(exc))
                 return
@@ -749,181 +683,21 @@ class JobRunner:
             # 검색 작업은 도구 호출이 곧 진행 상황이다. 화면이 "무엇을 검색하고
             # 어디를 열어 보는 중"인지 보여줄 수 있도록 관측한 호출을 단계로
             # 옮긴다. 보고서를 기다리는 동안 아무 일도 없어 보이면 안 된다.
-            # 호출의 시작·완료 이벤트를 같은 ID로 중복 집계하지 않는다.
-            search_state = {
-                "searches": 0,
-                "fetches": 0,
-                "reads": 0,
-                "counted": set(),
-            }
-
-            # 모델 출력을 실시간으로 화면에 붙이지 않는다.
-            #
-            # 붙이면 완성 전의 원문이 그대로 보고서 자리에 흐른다 — 기계 판독
-            # 블록(구성별 분석·문헌 매핑)도 그 안에 있다. 실측(job d39dc2cc):
-            # 최종 스트림 5,748자 중 1,521자가 두 감사 블록이었다. 화면에
-            # 필요한 것은 "얼마나 받았는가"이고, 보고서는 블록을 걷어낸 최종
-            # 결과 하나로 충분하다. 원문은 stdout.log 에 그대로 남는다.
             received = 0
-            native_calls: set[str] = set()
-            checkpoint_mtime = None
 
             async def emit(event_type: str, payload: dict) -> None:
-                nonlocal received, checkpoint_mtime
-                payload = dict(payload)
+                nonlocal received
                 if event_type == "result_stream":
                     received += len(str(payload.get("delta") or ""))
                     await self._emit(job_id, "result_progress", {"chars": received})
                     return
-                await self._emit(job_id, event_type, payload)
-                if job_kind is not JobKind.SIMILARITY_SEARCH:
-                    return
-                checkpoint_path = work_dir / search_agent_tools.CHECKPOINT
-                if checkpoint_path.exists() and checkpoint_path.stat().st_mtime_ns != checkpoint_mtime:
-                    checkpoint_mtime = checkpoint_path.stat().st_mtime_ns
-                    saved = search_agent_tools.load_checkpoint(work_dir)
-                    if saved:
-                        saved_journal = search_manifest.read_tool_journal(work_dir)
-                        checked = search_verification.verify(saved, {}, saved_journal)
-                        preview = search_manifest.build(claim_text=claim_text, provider=provider_id, model=model,
-                            reported=checked, tool_journal=saved_journal,
-                            error='모델이 저장한 중간 후보입니다. 검색이 진행 중입니다.')
-                        preview['execution_mode'] = 'model_directed'
-                        with session_scope() as session:
-                            preview_job = session.get(ExecutionJob, job_id)
-                            if preview_job:
-                                preview_job.search_manifest = preview
-                                preview_job.result_text = search_report.render(preview)
-                        await self._emit(job_id, 'search_preview_ready', {'candidate_count': len(checked['candidates'])})
-                if event_type not in ("tool_use", "tool_use_resolved"):
-                    return
-                if not str(payload.get("name") or "").startswith("mcp__prism-search__"):
-                    call_id = str(payload.get("id") or "")
-                    if call_id and call_id not in native_calls:
-                        native_calls.add(call_id)
-                        counter = work_dir / search_limits.NATIVE_COUNT_FILE
-                        from ..search_engine.models import write_json
-                        write_json(counter, len(native_calls))
-                counts_as = _progress_counts_as(event_type, payload)
-                name = str(payload.get("name") or "")
-                if not counts_as and name not in (
-                    tool_policy.content_read_tools or ()
-                ):
-                    return
-                if not _progress_should_count(
-                    search_state["counted"],
-                    str(payload.get("id") or ""),
-                ):
-                    return
-                summary = payload.get("input") or {}
-                summary = summary.get('arguments', summary)
-                origin_label = "웹" if name in (search_manifest.SEARCH_TOOL_NAMES | search_manifest.FETCH_TOOL_NAMES) else "에이전트"
-                if name.startswith('mcp__prism-search__'):
-                    tool_name = name.removeprefix('mcp__prism-search__')
-                    origin_label = {'epo': 'EPO', 'kipris': '키프리스', 'source': '원문',
-                                    'citation': '인용·피인용'}.get(tool_name.split('_')[0], '논문')
-                    if tool_name.startswith('literature_'):
-                        origin_label = {'openalex': 'OpenAlex', 'arxiv': 'arXiv',
-                                        'crossref_epmc': 'Crossref·Europe PMC'}.get(summary.get('source'),
-                                                                                 'Crossref·Europe PMC·OpenAlex')
-                    elif tool_name == 'start_collection':
-                        origin_label = 'API 병렬'
-                        summary = {**summary, 'query': ' · '.join(label for field, label in
-                            [('epo_query', 'EPO'), ('kipris_query', '키프리스'), ('openalex_query', 'OpenAlex'), ('arxiv_query', 'arXiv')]
-                            if field in summary)}
-                if counts_as == PROGRESS_URL_LOOKUP:
-                    # 검색도 아니고 페이지 열람도 아니다. 성공 여부를 알 수
-                    # 없으므로 "시도" 로만 알린다.
-                    search_state["url_lookups"] = (
-                        search_state.get("url_lookups", 0) + 1
-                    )
-                    await self._emit(
-                        job_id,
-                        "search_progress",
-                        {
-                            "phase": "url_lookup",
-                            "searches": search_state["searches"],
-                            "fetches": search_state["fetches"],
-                            "url_lookups": search_state["url_lookups"],
-                            "message": (
-                                f"{origin_label} URL 조회 "
-                                f"{search_state['url_lookups']}건째"
-                                " (열람 성공 여부는 확인되지 않음): "
-                                f"{str(summary.get('url', ''))[:120]}"
-                            ),
-                        },
-                    )
-                elif counts_as == PROGRESS_SEARCH:
-                    search_state["searches"] += 1
-                    await self._emit(
-                        job_id,
-                        "search_progress",
-                        {
-                            "phase": "search",
-                            "searches": search_state["searches"],
-                            "fetches": search_state["fetches"],
-                            "query": summary.get("query", ""),
-                            "message": (
-                                f"{origin_label} 검색 "
-                                f"{search_state['searches']}회째: "
-                                f"{str(summary.get('query') or summary.get('identifier') or '')[:120]}"
-                            ),
-                        },
-                    )
-                elif counts_as == PROGRESS_FETCH:
-                    search_state["fetches"] += 1
-                    await self._emit(
-                        job_id,
-                        "search_progress",
-                        {
-                            "phase": "fetch",
-                            "searches": search_state["searches"],
-                            "fetches": search_state["fetches"],
-                            "url": summary.get("url", ""),
-                            "message": (
-                                f"{origin_label} 원문 페이지 확인 "
-                                f"{search_state['fetches']}건째: "
-                                f"{str(summary.get('url', ''))[:120]}"
-                            ),
-                        },
-                    )
-                elif name in (tool_policy.content_read_tools or ()):
-                    # 본문을 나눠 읽는 구간. 검색도 열람도 늘지 않으므로
-                    # 표시하지 않으면 화면이 멈춘 것처럼 보인다.
-                    search_state["reads"] += 1
-                    await self._emit(
-                        job_id,
-                        "search_progress",
-                        {
-                            "phase": "read",
-                            "searches": search_state["searches"],
-                            "fetches": search_state["fetches"],
-                            "reads": search_state["reads"],
-                            "message": (
-                                f"{origin_label} 페이지 본문 확인 "
-                                f"{search_state['reads']}회째"
-                            ),
-                        },
-                    )
-
+                await self._emit(job_id, event_type, dict(payload))
 
             if await self._reject_if_over_byte_budget(
                 job_id, provider, assembled.system_prompt, assembled.user_message
             ):
                 return
             mcp_servers = {}
-            tool_availability = {}
-            if job_kind is JobKind.SIMILARITY_SEARCH:
-                tool_availability = search_channels.availability(values, provider_id)
-                if search_channels.mcp_transport_ready(provider_id):
-                    mcp_servers = _search_mcp_servers(work_dir, search_cutoff, search_budget)
-                available_names = search_channels.available_mcp_names(tool_availability) if mcp_servers else ()
-                tool_policy = replace(
-                    tool_policy, mcp_tools=tuple(available_names),
-                    required_tools=(),
-                    max_search_calls=0, max_url_lookup_calls=0,
-                    max_content_read_calls=0,
-                )
             request = ExecutionRequest(
                 job_id=job_id, work_dir=work_dir,
                 system_prompt=assembled.system_prompt,
@@ -934,27 +708,8 @@ class JobRunner:
             await self._emit(
                 job_id, "stage", {"stage": "executing", "message": "Provider 실행 중"}
             )
-            deadline_audit = None
-            deadline_plan = None
-            overall_deadline = time.monotonic() + timeout
-            if job_kind is JobKind.SIMILARITY_SEARCH:
-                deadline_plan = search_deadline.allocation(timeout)
-                request = replace(request, timeout_seconds=deadline_plan['search_seconds'])
-                (work_dir / 'search_deadline.json').write_text(str(time.time() + request.timeout_seconds), encoding='utf-8')
-                await self._emit(job_id, 'search_time_budget', deadline_plan)
-            if job_kind is JobKind.SIMILARITY_SEARCH:
-                outcome = await search_session.execute(provider, request, emit,
-                    cancelled=lambda: job_id in self._cancel_requested)
-            else:
-                outcome = await provider.execute(request, emit)
-            if job_kind is JobKind.SIMILARITY_SEARCH:
-                outcome, deadline_audit = await search_deadline.finish(
-                    provider, request, outcome, emit, claim=claim_text, deadline=overall_deadline,
-                    cancelled=lambda: job_id in self._cancel_requested, keep_raw=keep_raw)
+            outcome = await provider.execute(request, emit)
             verdict = evaluate(outcome, attachments, fail_on_tool_use=fail_on_tool_use)
-            verification_followup = None
-            # The model chooses every retrieval. At the search deadline a tool-free
-            # model pass may finish classification; no automatic fetching is added.
             if job_id in self._cancel_requested:
                 verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, list(verdict.errors))
             await self._emit(
@@ -962,83 +717,6 @@ class JobRunner:
             )
             manifest = None
             manifest_error = None
-            model_narrative = ""
-            if job_kind is JobKind.SIMILARITY_SEARCH:
-                model_narrative = outcome.result_text
-                reported = None
-                notes = []
-                journal = search_manifest.read_tool_journal(work_dir)
-                observed = search_manifest.observed(outcome.tool_calls, outcome.tool_uses)
-                try:
-                    partial_search = (
-                        verdict.status == JobStatus.CANCELLED
-                        or verdict.error_code in (ErrorCode.TIMED_OUT, ErrorCode.SEARCH_BUDGET_EXCEEDED)
-                    )
-                    checkpoint = search_agent_tools.load_checkpoint(work_dir)
-                    if verdict.status != JobStatus.SUCCEEDED and not partial_search and not checkpoint:
-                        raise search_manifest.SearchLogError(
-                            "실행이 정상 완료되지 않아 최종 후보로 확정하지 않았습니다."
-                        )
-                    if not search_manifest.has_retrieval_attempt(outcome.tool_calls, outcome.tool_uses, journal):
-                        if verdict.error_code not in (ErrorCode.SEARCH_CHECKPOINT_FAILED, ErrorCode.SEARCH_CLASSIFICATION_FAILED):
-                            verdict = Verdict(JobStatus.FAILED, ErrorCode.SEARCH_NOT_PERFORMED, ["실제 검색 도구 호출이 없습니다."])
-                        raise search_manifest.SearchLogError("실제 검색 도구 호출이 없습니다.")
-                    try:
-                        reported, notes = search_manifest.parse(outcome.result_text, observed)
-                    except search_manifest.SearchLogError:
-                        if not checkpoint:
-                            raise
-                        reported = checkpoint
-                        manifest_error = "최종 응답이 없어 모델이 저장한 중간 후보를 복구했습니다. 추가 검토가 필요합니다."
-                        if verdict.status == JobStatus.SUCCEEDED:
-                            verdict = Verdict(JobStatus.FAILED, ErrorCode.INVALID_OUTPUT, [manifest_error])
-                    reported = search_verification.verify(reported, observed, journal)
-                    if verdict.status != JobStatus.SUCCEEDED:
-                        manifest_error = manifest_error or "검색 실행이 완료되지 않아 중간 후보를 보존했습니다."
-                    if partial_search:
-                        manifest_error = "검색이 중단되어 작성된 후보를 부분 결과로 보존했습니다. 추가 확인이 필요합니다."
-                except search_manifest.SearchLogError as exc:
-                    manifest_error = str(exc)
-                date_filter = search_dates.filter_candidates(reported, search_cutoff)
-                quality = search_quality.assess(reported, observed, journal, tool_availability,
-                                               execution_error=manifest_error, outcome=outcome, date_filter=date_filter)
-                manifest = search_manifest.build(
-                    claim_text=claim_text, provider=provider_id, model=model,
-                    prompt_id=prompt_id, prompt_name=prompt_name,
-                    prompt_sha256=search_prompt_sha,
-                    runtime_context_sha256=search_runtime_context_sha,
-                    spec_document=spec_document, search_focus=search_focus,
-                    started_at=started.isoformat(), completed_at=_utcnow().isoformat(),
-                    tool_calls=outcome.tool_calls, tool_uses=outcome.tool_uses,
-                    observed_section=observed, tool_journal=journal,
-                    tool_availability=tool_availability,
-                    reported=reported, notes=notes, error=manifest_error,
-                    date_filter=date_filter, max_tool_calls_total=search_budget,
-                    timeout_seconds=timeout, usage=outcome.usage, search_depth=search_depth,
-                    raw_output=model_narrative,
-                    claim_boundary_neutralized=claim_boundary_neutralized,
-                    spec_boundary_neutralized=spec_boundary_neutralized,
-                    focus_boundary_neutralized=focus_boundary_neutralized,
-                    template_mode=search_prompt_mode,
-                    strategy_boundary_neutralized=strategy_boundary_neutralized,
-                    tool_policy_name=tool_policy.name, allowed_tools=tool_policy.allowed_tools,
-                    mcp_tools=tool_policy.mcp_tools,
-                    advertised_tools_enforced=tool_policy.enforce_advertised_allowlist,
-                    quality=quality, verification_followup=verification_followup,
-                )
-                manifest['execution_mode'] = 'model_directed'
-                manifest['time_budget'] = deadline_plan
-                manifest['deadline_classification'] = deadline_audit
-                manifest['candidate_checkpoint'] = search_agent_tools.load_checkpoint(work_dir)
-                if reported is None:
-                    outcome.result_text = search_report.render(manifest) if manifest.get("retained_records") else ""
-                    if verdict.status == JobStatus.SUCCEEDED:
-                        verdict = Verdict(
-                            JobStatus.FAILED, ErrorCode.INVALID_OUTPUT,
-                            [*verdict.errors, manifest_error or "최종 JSON이 없습니다."],
-                        )
-                else:
-                    outcome.result_text = search_report.render(manifest)
             # 두 블록의 출력 규칙은 PRISM 이 분석 프롬프트 뒤에 직접 붙인다
             # (analysis_protocol). 그러니 읽는 쪽도 프롬프트의 capabilities 선언에
             # 매달리지 않는다 — 사용자가 프롬프트를 자기 것으로 바꿔도 선언을 잊었다는
@@ -1112,38 +790,6 @@ class JobRunner:
                 result_path = work_dir / "result.md"
                 result_path.write_text(outcome.result_text, encoding="utf-8")
                 artifacts.append(("result", result_path))
-
-            if model_narrative.strip():
-                # 모델이 실제로 쓴 출력. 사용자 보고서가 아니라 감사 자료다.
-                # 이 안의 인용문은 원문 대조를 거치지 않았으므로 발췌로 쓰면
-                # 안 된다.
-                narrative_path = work_dir / "model_report.md"
-                narrative_path.write_text(
-                    "<!-- PRISM: 모델이 생성한 원문 출력입니다. 검증되지 않았으며 "
-                    "여기 있는 인용문은 원문 직접 발췌가 아닙니다. -->\n\n"
-                    + model_narrative,
-                    encoding="utf-8",
-                )
-                artifacts.append(("model_report", narrative_path))
-
-            if manifest is not None:
-                manifest_path = work_dir / "search_manifest.json"
-                manifest_path.write_text(
-                    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-                    encoding="utf-8",
-                )
-                artifacts.append(("search_manifest", manifest_path))
-                followup_dir = work_dir / "verification_followup"
-                if followup_dir.exists():
-                    for path in sorted(followup_dir.iterdir()):
-                        if path.is_file() and path.name in {"prompt.txt", "initial_output.txt", "output.txt", "initial_usage.json", "usage.json"}:
-                            artifacts.append(("search_verification_" + path.stem, path))
-                classification_dir = work_dir / 'deadline_classification'
-                if classification_dir.exists():
-                    for path in sorted(classification_dir.iterdir()):
-                        if path.is_file() and path.name in {'input.json', 'system_prompt.txt', 'initial_output.txt',
-                                                          'output.txt', 'initial_usage.json', 'usage.json'}:
-                            artifacts.append(('search_classification_' + path.stem, path))
 
             if component_result is not None:
                 component_path = work_dir / "analysis_manifest.json"

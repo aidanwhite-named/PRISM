@@ -88,9 +88,6 @@ def make_backend(transport, store, **settings) -> epo_backend.EpoOpsBackend:
         secret=TEST_SECRET,
         ledger=backend.ledger,
         transport=transport,
-        # 설정한 예산을 그대로 물려준다. 여기서 기본값을 쓰면 예산 테스트가
-        # 설정과 무관한 값을 시험하게 된다.
-        http_budget_seconds=backend._http_budget,
         sleep=lambda _seconds: None,
     )
     return backend
@@ -443,7 +440,7 @@ def test_long_retry_after_does_not_wait(store) -> None:
         token_response(), ok(b"<error/>", headers={"Retry-After": "3600"}, status=429)
     )
     backend = make_backend(transport, store)
-    with pytest.raises(epo_client.OpsUnavailable, match="기다릴 수 없어"):
+    with pytest.raises(epo_client.OpsUnavailable, match="재시도 대기시간"):
         backend.search_structured(epo_cql.Term(epo_cql.FIELD_TITLE, "robot arm"))
 
 
@@ -530,15 +527,13 @@ class SteppingClock:
         return self.now
 
 
-def test_http_time_budget_is_enforced(store) -> None:
-    """토큰 발급만으로 예산을 다 쓰면 검색은 시작조차 하지 않는다."""
+def test_http_time_is_observed_without_a_separate_source_budget(store) -> None:
+    """Overall session time is owned by the search session, not individual sources."""
     transport = FakeTransport(token_response(), ok(fx.SEARCH_BIBLIO))
     backend = make_backend(transport, store, epo_http_budget_seconds=120)
     backend._client.clock = SteppingClock(200.0)
-    with pytest.raises(epo_client.OpsBudgetExceeded):
-        backend.search_structured(epo_cql.Term(epo_cql.FIELD_TITLE, "robot arm"))
-    # 검색 요청은 나가지 않았다. 토큰 하나뿐이다.
-    assert len(transport.requests) == 1
+    backend.search_structured(epo_cql.Term(epo_cql.FIELD_TITLE, "robot arm"))
+    assert len(transport.requests) == 2
 
 
 # ------------------------------------------------------------------ XML 파싱
@@ -709,17 +704,15 @@ def test_corrupted_artifact_fails_verification(store, tmp_path) -> None:
 # ------------------------------------------------------------ 상세 조회 상한
 
 
-def test_detail_fetch_budget_is_enforced(store) -> None:
+def test_detail_fetches_have_no_application_count_limit(store) -> None:
     transport = FakeTransport(token_response(), *[ok(fx.CLAIMS) for _ in range(4)])
     backend = make_backend(transport, store, epo_max_detail_fetches=2)
     backend.fetch_document("EP1000000A1")
     backend.fetch_document("EP1000000A1")
-    with pytest.raises(epo_backend.DetailBudgetExceeded, match="2건"):
-        backend.fetch_document("EP1000000A1")
+    backend.fetch_document("EP1000000A1")
+    assert backend.usage()["detail_fetches"] == 3
 
 
-def test_default_detail_budget_is_twelve() -> None:
-    assert epo_backend.DEFAULT_MAX_DETAIL_FETCHES == 12
 
 
 def test_constituent_allowlist() -> None:
@@ -734,7 +727,7 @@ def test_result_range_is_capped(store) -> None:
     backend.search_structured(
         epo_cql.Term(epo_cql.FIELD_TITLE, "robot arm"), max_results=500
     )
-    assert "Range=1-20" in transport.requests[1]["url"]
+    assert "Range=1-100" in transport.requests[1]["url"]
 
 
 # ------------------------------------------------------------------- 사용량
@@ -902,7 +895,7 @@ def test_usage_separates_call_kinds(store) -> None:
     assert usage["calls_by_kind"]["search"]["count"] == 1
     assert usage["calls_by_kind"]["detail"]["count"] == 1
     assert usage["detail_fetches"] == 1
-    assert usage["max_detail_fetches"] == epo_backend.DEFAULT_MAX_DETAIL_FETCHES
+    assert "max_detail_fetches" not in usage
 
 
 # --------------------------------------------------------------- 상태와 배선
@@ -1022,7 +1015,7 @@ def test_oversized_response_still_counts_bytes_and_headers(store) -> None:
 # --- (4) 재시도 대기가 예산을 소모하는가 ------------------------------------
 
 
-def test_retry_wait_is_charged_to_the_time_budget(store) -> None:
+def test_retry_wait_is_observed_without_a_source_time_budget(store) -> None:
     """기다린 시간을 안 깎으면 재시도를 반복하며 계약 시간을 조용히 넘긴다."""
     transport = FakeTransport(
         token_response(),
@@ -1032,10 +1025,8 @@ def test_retry_wait_is_charged_to_the_time_budget(store) -> None:
     )
     backend = make_backend(transport, store, epo_http_budget_seconds=30)
     backend._client.sleep = lambda _s: None
-    with pytest.raises(epo_client.OpsError):
-        backend.search_structured(epo_cql.Term(epo_cql.FIELD_TITLE, "robot arm"))
-    # 20초를 한 번 기다린 뒤 남은 예산(10초)으로는 두 번째 20초를 못 기다린다.
-    assert backend._client._spent_seconds >= 20
+    backend.search_structured(epo_cql.Term(epo_cql.FIELD_TITLE, "robot arm"))
+    assert backend._client._spent_seconds >= 40
 
 
 # --- (5) 실패한 상세 조회도 예산을 쓰는가 ------------------------------------
@@ -1053,9 +1044,8 @@ def test_failed_detail_fetch_consumes_its_budget(store) -> None:
     for _ in range(2):
         with pytest.raises(epo_client.OpsError):
             backend.fetch_document("EP1000000A1")
-    with pytest.raises(epo_backend.DetailBudgetExceeded):
-        backend.fetch_document("EP1000000A1")
-    assert backend.usage()["detail_fetches"] == 2
+    backend.fetch_document("EP1000000A1")
+    assert backend.usage()["detail_fetches"] == 3
 
 
 # --- (6) 번역 여부를 모른다고 정직하게 적는가 -------------------------------

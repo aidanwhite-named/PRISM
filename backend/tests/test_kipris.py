@@ -14,9 +14,6 @@ from app.patent_search.base import PatentSearchError, PatentSearchQuery, PatentS
 from app.patent_search.artifacts import ArtifactStore
 from app.patent_search.provenance import verify_excerpt
 from app.search_mcp_server import SearchTools
-from app.search_engine.sources import Sources
-from app.search_engine.engine import Engine
-from app.search_engine.planner import kipris_queries
 
 XML = '''<response><header><resultCode>00</resultCode></header><body><items>
 <TotalSearchCount>123</TotalSearchCount><SearchStartNumber>1</SearchStartNumber>
@@ -187,62 +184,6 @@ def test_tool_registration_artifacts_cache_and_no_secret_in_journal(tmp_path, mo
     result = tools.call('kipris_search', {'query': '고유 배터리', 'max_results': 20})
     assert result['records'][0]['document_number'] == 'KR20200012345A'
     assert 'test-access-key' not in tools.ledger_path.read_text(encoding='utf-8')
-    sources = Sources(VALUES, tmp_path / 'sources')
-    first = sources.search('kipris', tmp_path.name + ' 냉각')
-    second = sources.search('kipris', tmp_path.name + ' 냉각')
-    assert second['cache_hit'] and first['records'] == second['records']
-    assert len(sent) == 2 and quota.snapshot(state())['requests'] == 2
     page = tools.call('kipris_search', {'query': '고유 배터리', 'max_results': 20, 'begin': 2})
     assert page['coverage']['result_range'] == '21-21'
     assert page['coverage']['next_page'] == 3
-
-
-async def test_engine_domestic_search_runs_with_epo_and_literature_disabled(tmp_path):
-    sources = SimpleNamespace(search=lambda *args, **kwargs: {'records': [
-        {'document_number': 'KR20200012345A', 'title': '배터리 냉각', 'fields': {}}]})
-    inference = SimpleNamespace(usage=lambda: {'stages': []})
-    engine = Engine(claim='배터리 냉각 장치', directory=tmp_path, inference=inference,
-        values={**VALUES, 'epo_integration_enabled': False, 'literature_integration_enabled': False}, sources=sources)
-    await engine.query('kipris', '배터리 냉각', 'domestic')
-    assert len(engine.ledger.candidates) == 1 and engine.queries[0]['status'] == 'completed'
-    assert engine.queries[0]['source'] == 'kipris'
-
-
-async def test_domestic_lane_precedes_early_seed_success(tmp_path):
-    engine = Engine(claim='배터리 냉각', directory=tmp_path, inference=SimpleNamespace(usage=lambda: {}),
-                    values=VALUES, depth='fast')
-    engine.plan = AsyncMock()
-    engine.query = AsyncMock()
-    async def seeds():
-        assert engine.query.await_count == 1
-    engine.search_relation_seeds = seeds
-    engine.sufficient = lambda: True
-    engine.publish = AsyncMock()
-    await engine.run()
-    assert engine.query.call_args.args[0] == 'kipris'
-
-
-def test_korean_query_plan_and_fallback():
-    assert kipris_queries({'kipris_queries': ['배터리 냉각', '전지 방열', 'ignored']}, '') == ['배터리 냉각', '전지 방열']
-    assert kipris_queries({}, '상기 배터리 냉각 장치') == ['배터리 냉각']
-
-
-def test_korean_candidates_are_ranked_and_passages_retrieved(tmp_path):
-    from app.search_engine.planner import parse_plan
-    from app.search_engine.models import Candidate
-    from app.search_engine.ranking import rank
-    from app.search_engine.passages import retrieve
-    from app.retrieval.extraction import PageRecord
-
-    features, _, _ = parse_plan({'features': [{'text': '배터리 냉각',
-        'terms': ['battery', 'cooling'], 'korean_terms': ['배터리', '냉각']} ]}, '배터리 냉각')
-    domestic = Candidate('ko', 'KR20200012345A', '배터리 냉각', '', 'kipris')
-    foreign = Candidate('en', 'US20200012345A1', 'battery cooling', '', 'epo')
-    irrelevant = Candidate('other', 'KR20200012346A', '컴퓨터 화면', '', 'kipris')
-    rank([domestic, foreign, irrelevant], features)
-    assert domestic.lexical_score == foreign.lexical_score == 1
-    assert irrelevant.lexical_score == 0
-    passages = retrieve('ko', {'artifact_id': 'b' * 64, 'url': 'https://example.org',
-        'scope': 'abstract', 'content_type': 'application/xml'},
-        [PageRecord(1, '배터리 냉각 유체 채널을 구비한다. ' * 12)], features, tmp_path)
-    assert passages and '배터리' in passages[0]['text']

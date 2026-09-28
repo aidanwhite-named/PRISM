@@ -646,12 +646,8 @@ class DeterministicSearchProvider(Provider):
         if "SEARCH_STRAY_TOOL" in message:
             await call("Bash", {"keys": ["command"]})
         elif "SEARCH_BUDGET" in message:
-            for i in range(policy.max_tool_calls + 5):
+            for i in range(105):
                 await call("WebSearch", {"query": f"budget probe {i}"})
-                if len(outcome.tool_uses) > policy.max_tool_calls:
-                    outcome.tool_budget_exceeded = True
-                    outcome.cancelled = True
-                    break
         elif "SEARCH_BLOCKED" in message:
             # 검색은 정상, 열람만 전멸. 허용 목록 밖 주소(elsevier)는 아예
             # 부르지 않고, 허용된 주소는 403·로그인·유료벽에 막힌다.
@@ -685,6 +681,18 @@ class DeterministicSearchProvider(Provider):
         outcome.exit_code = 0
         outcome.terminal_reason = "completed"
         outcome.result_text = _search_report(message)
+        if request.system_prompt.startswith('청구항과 기술적으로 유사하여'):
+            if 'SEARCH_NOLOG' in message:
+                outcome.result_text = '확인한 검색 결과에 관한 자유로운 설명입니다.'
+            else:
+                payload = json.loads(message)
+                rows = [{'title': '테스트 특허', 'url': 'https://patents.example.com/AB1234',
+                         'document_number': 'AB1234', 'reason': '센서 모듈 110의 직렬 연결 구조가 같다',
+                         'reported_scope': '검색 단서·요약', 'publication_date': ''}]
+                if payload.get('specification'):
+                    rows.append({'title': '추가 특허', 'url': 'https://patents.example.com/CD5678',
+                                 'document_number': 'CD5678', 'reason': '명세서의 용어로 확인한 관련 문헌'})
+                outcome.result_text = json.dumps({'records': rows}, ensure_ascii=False)
         outcome.raw_stdout = outcome.result_text
         outcome.usage = {"note": "테스트 추정치입니다."}
         await emit("provider_done", {"message": "테스트 검색 완료"})

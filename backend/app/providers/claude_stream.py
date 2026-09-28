@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 _TOOL_INPUT_KEYS = {
     "mcp__prism-search__source_fetch": ("url", "section", "offset", "max_chars"),
     "mcp__prism-search__citation_search": ("identifier", "direction", "begin"),
-    "mcp__prism-search__save_candidates": (),
+    "mcp__prism-search__save_findings": (),
     "WebSearch": ("query", "allowed_domains", "blocked_domains"),
     "WebFetch": ("url",),
     "mcp__prism-search__search_capabilities": (),

@@ -58,7 +58,7 @@ from .base import (
     ProbeResult,
     Provider,
 )
-from .codex_stream import CodexStreamParser, split_call_kinds
+from .codex_stream import CodexStreamParser
 from .env import build_child_env
 from .resolver import ResolvedExecutable, resolve_simple
 
@@ -314,8 +314,9 @@ class CodexCliProvider(Provider):
             args += ["-c", f"{prefix}.enabled_tools={json.dumps(enabled)}"]
             # Keep approval requirements for writes except the job-local shortlist.
             args += ["-c", f'{prefix}.default_tools_approval_mode="writes"']
-            if "save_candidates" in enabled:
-                args += ["-c", f'{prefix}.tools.save_candidates.approval_mode="approve"']
+            for local_save in ('save_findings',):
+                if local_save in enabled:
+                    args += ["-c", f'{prefix}.tools.{local_save}.approval_mode="approve"']
             args += ["-c", f"{prefix}.required=true"]
         # 마지막 인수. 프롬프트를 stdin 에서 읽는다 — Windows 의 명령행 길이
         # 제한(32,767자) 때문에 인수로는 긴 프롬프트를 넘길 수 없다.
@@ -368,57 +369,10 @@ class CodexCliProvider(Provider):
             if policy is not None and policy.name == CODEX_WEB_SEARCH.name
             else None
         )
-        budget_exceeded = False
 
         async def on_stdout(line: str) -> None:
-            nonlocal budget_exceeded
             for event_type, payload in parser.feed(line):
                 await emit(event_type, payload)
-            if search_policy is None or budget_exceeded:
-                return
-            # 1층: 시작 이벤트 기준 전체 hard cap. 시작 시점에는 query 가 비어
-            # 있어 종류를 모르므로, 종류별 예산만으로는 폭주를 막을 수 없다.
-            over: tuple[int, str] | None = None
-            if (
-                search_policy.max_tool_calls
-                and len(parser.state.tool_uses) > search_policy.max_tool_calls
-            ):
-                over = (
-                    search_policy.max_tool_calls,
-                    f"도구 호출이 상한({search_policy.max_tool_calls}회)을 넘어 "
-                    "실행을 중단합니다.",
-                )
-            else:
-                # 2·3층: 완료 이벤트 기준. web_search 하나가 검색과 URL 조회를
-                # 겸하므로 한 예산에 섞으면 URL 을 몇 개 열어 보는 것만으로
-                # 검색 라운드가 마른다.
-                searches, lookups = split_call_kinds(parser.state.tool_calls)
-                if (
-                    search_policy.max_search_calls
-                    and searches > search_policy.max_search_calls
-                ):
-                    over = (
-                        search_policy.max_search_calls,
-                        f"검색 호출이 상한({search_policy.max_search_calls}회)을 "
-                        "넘어 실행을 중단합니다.",
-                    )
-                elif (
-                    search_policy.max_url_lookup_calls
-                    and lookups > search_policy.max_url_lookup_calls
-                ):
-                    over = (
-                        search_policy.max_url_lookup_calls,
-                        "URL 조회가 상한("
-                        f"{search_policy.max_url_lookup_calls}회)을 넘어 실행을 "
-                        "중단합니다.",
-                    )
-            if over is not None:
-                budget_exceeded = True
-                await emit(
-                    "tool_budget_exceeded",
-                    {"limit": over[0], "message": over[1]},
-                )
-                await proc.cancel_job(request.job_id)
 
         async def on_stderr(line: str) -> None:
             if line.strip():
@@ -462,7 +416,6 @@ class CodexCliProvider(Provider):
         # 광고 목록을 알 수 없다. Codex 는 사용 가능한 도구를 미리 알려주지 않는다.
         outcome.tools_advertised = []
         outcome.tool_calls = list(state.tool_calls)
-        outcome.tool_budget_exceeded = budget_exceeded
         # 분석은 예전과 같은 사후 탐지 경로(None)를 쓰고, 검색에만 Codex 전용
         # 정책을 붙여 web_search 호출을 정상 처리한다.
         outcome.tool_policy = search_policy

@@ -91,7 +91,7 @@ def test_availability_follows_registration(agy_home):
 def test_run_env_passes_only_run_scoped_keys():
     servers = {"prism-search": {"command": "py", "env": {
         "PYTHONPATH": "p", "PRISM_SEARCH_WORK_DIR": "w", "PRISM_SEARCH_MAX_TOOL_CALLS": 5}}}
-    assert agy_mcp.run_env(servers) == {"PRISM_SEARCH_WORK_DIR": "w", "PRISM_SEARCH_MAX_TOOL_CALLS": "5"}
+    assert agy_mcp.run_env(servers) == {"PRISM_SEARCH_WORK_DIR": "w"}
     assert agy_mcp.run_env({}) == {}
 
 

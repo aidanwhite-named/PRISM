@@ -10,7 +10,6 @@ from app import analysis_manifest, analysis_protocol, citation_mapping
 from app.prompt_assembly import (
     InputTooLarge,
     assemble,
-    assemble_search,
     estimate_total_chars,
 )
 
@@ -254,11 +253,6 @@ def test_output_rules_are_not_attached_twice() -> None:
     assert analysis_protocol.INSTRUCTIONS.strip() not in result.user_message
 
 
-def test_search_assembly_does_not_carry_the_analysis_output_rules() -> None:
-    """검색은 자기 출력 계약이 따로 있다. 분석 블록 규칙을 섞지 않는다."""
-    result = assemble_search("검색 전략 본문", RULES, 100_000)
-    assert "PRISM_COMPONENT_ANALYSIS_V1" not in result.user_message
-    assert "PRISM_CITATION_MAPPING_V1" not in result.user_message
 
 
 def test_partial_protocol_still_receives_the_missing_mapping_contract():

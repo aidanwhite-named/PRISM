@@ -40,12 +40,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from .literature_client import (
-    DEFAULT_HTTP_BUDGET_SECONDS,
     DEFAULT_TIMEOUT_SECONDS,
     MAX_RESPONSE_BYTES,
     MAX_ROWS_PER_QUERY,
     HttpResponse,
-    LiteratureBudgetExceeded,
     LiteratureCall,
     LiteratureError,
     normalize_doi,
@@ -230,30 +228,19 @@ class OpenAlexClient:
 
     api_key: str = ""
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
-    http_budget_seconds: float = DEFAULT_HTTP_BUDGET_SECONDS
     transport: Callable[[str, str, float], HttpResponse] = _default_transport
     _spent_seconds: float = field(default=0.0, init=False)
     _calls_by_kind: dict = field(default_factory=dict, init=False)
 
-    @property
-    def remaining_budget(self) -> float:
-        if not self.http_budget_seconds:
-            return float("inf")
-        return max(0.0, self.http_budget_seconds - self._spent_seconds)
 
     def usage(self) -> dict:
         return {
             "calls_by_kind": dict(self._calls_by_kind),
             "http_seconds": round(self._spent_seconds, 3),
-            "http_budget_seconds": self.http_budget_seconds,
             "api_key_configured": bool(self.api_key),
         }
 
     def _send(self, url: str, *, kind: str) -> LiteratureCall:
-        if self.remaining_budget <= 0:
-            raise LiteratureBudgetExceeded(
-                f"OpenAlex 네트워크 시간 예산({self.http_budget_seconds:.0f}초)을 모두 사용했습니다."
-            )
         started = time.monotonic()
         try:
             response = self.transport(url, self.api_key, self.timeout_seconds)
@@ -318,7 +305,7 @@ CHECK_DOI = "10.3390/s25103219"
 def check_access(api_key: str, *, transport=None) -> tuple[bool, str, int | None]:
     """설정 화면의 「연결 테스트」. (성공 여부, 안내 문구, HTTP 상태)."""
     options = {"transport": transport} if transport is not None else {}
-    client = OpenAlexClient(api_key=(api_key or "").strip(), http_budget_seconds=30, **options)
+    client = OpenAlexClient(api_key=(api_key or "").strip(), **options)
     try:
         call = client.fetch(CHECK_DOI)
     except LiteratureError as exc:

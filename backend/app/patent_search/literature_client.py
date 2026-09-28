@@ -71,7 +71,6 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 20.0
 # 이 클라이언트가 쓰는 네트워크 시간의 총합. EPO 와 같은 방식으로 센다 —
 # 호출 수만 세면 느린 응답 하나가 실행 전체를 잡아 둘 수 있다.
-DEFAULT_HTTP_BUDGET_SECONDS = 60.0
 
 # 한 질의가 받아 올 결과 수의 상한.
 MAX_ROWS_PER_QUERY = 20
@@ -139,8 +138,6 @@ class LiteratureError(PatentSearchError):
         self.status = int(status or 0)
 
 
-class LiteratureBudgetExceeded(LiteratureError):
-    """네트워크 시간 예산 초과. 남은 조회는 시도하지 않는다."""
 
 
 def normalize_doi(value) -> str:
@@ -258,7 +255,6 @@ class LiteratureClient:
     """Crossref·Europe PMC 조회. 자격증명이 없다."""
 
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
-    http_budget_seconds: float = DEFAULT_HTTP_BUDGET_SECONDS
     transport: Callable[[urllib.request.Request, float], HttpResponse] = (
         _default_transport
     )
@@ -266,30 +262,17 @@ class LiteratureClient:
     _calls_by_kind: dict = field(default_factory=dict, init=False)
 
     # --- 예산 -----------------------------------------------------------
-    @property
-    def remaining_budget(self) -> float:
-        if not self.http_budget_seconds:
-            return float("inf")
-        return max(0.0, self.http_budget_seconds - self._spent_seconds)
 
-    def _require_budget(self) -> None:
-        if self.remaining_budget <= 0:
-            raise LiteratureBudgetExceeded(
-                f"서지 조회 네트워크 시간 예산"
-                f"({self.http_budget_seconds:.0f}초)을 모두 사용했습니다."
-            )
 
     def usage(self) -> dict:
         """이번 실행에서 쓴 호출·시간. manifest 에 그대로 실린다."""
         return {
             "calls_by_kind": dict(self._calls_by_kind),
             "http_seconds": round(self._spent_seconds, 3),
-            "http_budget_seconds": self.http_budget_seconds,
         }
 
     # --- 전송 -----------------------------------------------------------
     def _send(self, url: str, *, source: str, kind: str) -> LiteratureCall:
-        self._require_budget()
         request = urllib.request.Request(
             url,
             headers={"User-Agent": "PRISM/1.0", "Accept": "application/json"},

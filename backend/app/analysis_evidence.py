@@ -18,7 +18,7 @@ from .enums import AttachmentRole, ErrorCode, JobStatus
 from .evaluation.evaluator import evaluate
 from .ingestion.service import read_normalized
 from .providers.base import NO_TOOLS
-from .search_engine.models import write_json
+from .search_engine.storage import write_json
 from .search_channels import cell
 
 OPEN = '[PRISM_EVIDENCE_COMPARISON_V1]'

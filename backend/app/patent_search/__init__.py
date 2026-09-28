@@ -42,14 +42,12 @@ from .epo_backend import (
     SETTING_ENABLED as EPO_SETTING_ENABLED,
     SETTING_QUOTA_STATE as EPO_SETTING_QUOTA_STATE,
     CredentialCheck,
-    DetailBudgetExceeded,
     EpoOpsBackend,
     check_credentials,
 )
 from .epo_client import (
     MAX_RESULTS_PER_QUERY as EPO_MAX_RESULTS_PER_QUERY,
     OpsAuthError,
-    OpsBudgetExceeded,
     OpsCancelled,
     OpsError,
     OpsUnavailable,
@@ -76,7 +74,6 @@ from .literature_backend import (
     LiteratureBackend,
 )
 from .literature_client import (
-    LiteratureBudgetExceeded,
     LiteratureError,
     looks_like_doi,
     normalize_doi,
@@ -132,7 +129,6 @@ __all__ = [
     "LITERATURE_CONSTITUENTS",
     "LITERATURE_SETTING_ENABLED",
     "LiteratureBackend",
-    "LiteratureBudgetExceeded",
     "LiteratureError",
     "PROFILE_CROSSREF_JSON",
     "PROFILE_EUROPEPMC_JSON",
@@ -140,7 +136,6 @@ __all__ = [
     "normalize_doi",
     "plain_query",
     "CredentialCheck",
-    "DetailBudgetExceeded",
     "EpoCqlError",
     "EpoDocument",
     "EpoOpsBackend",
@@ -149,7 +144,6 @@ __all__ = [
     "Group",
     "Term",
     "OpsAuthError",
-    "OpsBudgetExceeded",
     "OpsCancelled",
     "OpsError",
     "OpsUnavailable",

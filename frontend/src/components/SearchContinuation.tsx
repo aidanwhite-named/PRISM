@@ -37,21 +37,22 @@ export default function SearchContinuation({ job, disabled, onContinued }: {
   if (!eligible) return null;
   return <div className="no-print" style={{ marginBottom: 12 }}>
     <button className="btn" disabled={disabled || pending} onClick={() => dialog.current?.showModal()}>
-      정밀 검색 이어서 진행
+      검색 이어서 진행
     </button>
     <dialog ref={dialog} aria-labelledby="search-continuation-title"
       onCancel={event => { event.preventDefault(); if (!pending) dismiss(); }}
       style={{ maxWidth: 520, padding: 24, borderRadius: 12, border: "1px solid #888" }}>
-      <h3 id="search-continuation-title">정밀 검색을 계속할까요?</h3>
-      <p>{engine?.stop_reason === "classification_incomplete" ? "분류 응답을 모두 확보하지 못했습니다. 저장된 후보와 부분 분류를 이어받을 수 있습니다." :
+      <h3 id="search-continuation-title">추가로 검색할까요?</h3>
+      <p>{engine?.mode === "autonomous" ? "저장된 문헌과 출처를 이어받아 설정한 제한시간 동안 추가로 검색합니다." :
+        engine?.stop_reason === "classification_incomplete" ? "분류 응답을 모두 확보하지 못했습니다. 저장된 후보와 부분 분류를 이어받을 수 있습니다." :
         engine?.verified_match ? "더 넓은 범위에서 문헌을 검토할 수 있습니다." :
         "기본 검색 범위에서 원문 근거가 확인된 X·Y 문헌을 찾지 못했습니다."}</p>
-      <p>기존 후보와 원문 근거를 이어받아 검색 범위와 검토 문헌 수를 늘립니다. 추가 시간이 걸릴 수 있습니다.</p>
+      <p>기존 결과를 보존하고 새로운 검색 세션을 실행합니다. 추가 토큰이 사용됩니다.</p>
       {error && <p role="alert">{error}</p>}
       <div className="btn-row">
         <button className="btn" autoFocus disabled={pending} onClick={dismiss}>현재 결과 보기</button>
         <button className="btn primary" disabled={disabled || pending} onClick={proceed}>
-          {pending ? "이어가는 중…" : "정밀 검색 계속"}
+          {pending ? "이어가는 중…" : "추가 검색 시작"}
         </button>
       </div>
     </dialog>

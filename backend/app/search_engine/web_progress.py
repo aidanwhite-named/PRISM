@@ -30,7 +30,9 @@ def finding(value):
             if number and number.replace(' ', '').upper() != url_number:
                 return None
             number = url_number
-    return {'title': title.strip(), 'url': url, 'document_number': number,
+    return {**{key: value[key] for key in ('reason', 'difference', 'reported_scope', 'publication_date', 'authors')
+               if isinstance(value.get(key), str)},
+            'title': title.strip(), 'url': url, 'document_number': number,
             'snippet': value.get('snippet') if isinstance(value.get('snippet'), str) else '',
             'feature': value.get('feature') if isinstance(value.get('feature'), str) else 'context'}
 

@@ -210,7 +210,7 @@ def unusable_channel_message(statuses: dict) -> str:
 
 def available_mcp_names(statuses: dict) -> tuple[str, ...]:
     names = ["mcp__prism-search__" + name for name in
-             ("search_capabilities", "save_candidates", "source_fetch", "citation_search", "start_collection", "collect_results")]
+             ("search_capabilities", "save_findings", "source_fetch", "citation_search")]
     for name in ("epo", "literature", "kipris"):
         if statuses.get(name, {}).get("status") == "available":
             names.append(f"mcp__prism-search__{name}_search")
@@ -224,22 +224,3 @@ def cell(value) -> str:
     for char in ("\\", "|", "*", "_", "[", "]", "`"):
         text = text.replace(char, "\\" + char)
     return text.replace("\r", " ").replace("\n", " ")
-
-# 유사문헌 검색은 넓은 탐색 뒤에 후보·패밀리를 확인할 시간이 필요한 하나의
-# 실행 방식만 제공한다. 빠른/기본 프리셋은 정작 상세 조회 직전에 끝나는 경우가
-# 많아 제거했다. 이 값은 분석 작업의 전역 timeout 설정과 별개다.
-SEARCH_CALL_LIMIT = 80
-SEARCH_TIMEOUT_SECONDS = 300
-
-
-def execution_limits(values: dict, depth: str = "deep") -> tuple[int, int]:
-    """All new similarity searches use the fixed deep-search allowance.
-
-    ``depth``와 ``values`` 인자는 과거 실행을 읽는 호출 경로 호환을 위해서만
-    남긴다. 설정값이나 옛 quick/standard 값으로 새 검색의 범위를 줄이지 않는다.
-    """
-    if values.get("progressive_search_enabled", False):
-        from .search_engine.models import Limits
-        limits = Limits.for_depth(depth, values)
-        return limits.queries, limits.seconds
-    return SEARCH_CALL_LIMIT, SEARCH_TIMEOUT_SECONDS

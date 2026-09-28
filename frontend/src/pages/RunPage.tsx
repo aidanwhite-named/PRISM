@@ -142,9 +142,9 @@ function SizeNotice({
     >
       <div>
         <span className={`pill ${narrowed ? "accent" : "neutral"}`}>
-          {preflight.delivery_plan === "progressive_search" ? "단계별 검색 계획" : DELIVERY_LABEL[preflight.delivery_plan]}
+          {preflight.delivery_plan === "autonomous_search" ? "자율 검색" : DELIVERY_LABEL[preflight.delivery_plan]}
         </span>{" "}
-        {preflight.delivery_plan === "progressive_search" ? "구성 분해 입력 " : "최종 프롬프트 "}{narrowed ? "최대 " : ""}
+        {preflight.delivery_plan === "autonomous_search" ? "검색 입력 " : "최종 프롬프트 "}{narrowed ? "최대 " : ""}
         {preflight.chars.toLocaleString()}자 ·{" "}
         {preflight.bytes.toLocaleString()} bytes
       </div>
@@ -252,7 +252,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   // 최종 조립 프롬프트의 크기를 맞힐 수 없고, Provider 한도는 문자가 아니라
   // UTF-8 바이트로 걸린다. null 이면 아직 못 받았다는 뜻이다.
   const [preflight, setPreflight] = useState<Preflight | null>(null);
-  const progressiveSearch = preflight?.delivery_plan === "progressive_search";
+  const progressiveSearch = preflight?.delivery_plan === "autonomous_search";
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [gapSearchOpen, setGapSearchOpen] = useState(false);
@@ -1066,7 +1066,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             )}
 
             <div className="notice info search-depth-notice">
-              {progressiveSearch ? preflight?.message : "심층 검색 · 최대 80회 / 5분"}
+              {progressiveSearch ? preflight?.message : "설정한 전체 시간 안에서 자율 검색"}
               <div className="hint">구성별 검색으로 후보를 모으고, 원문에서 관계와 근거를 확인합니다.</div>
             </div>
             <section className="input-panel claim-panel search-panel-input">

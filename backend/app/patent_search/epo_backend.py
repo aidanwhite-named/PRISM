@@ -70,12 +70,8 @@ SETTING_CONSUMER_SECRET = "epo_consumer_secret"
 # 사용량 상태. 사용자가 편집하는 값이 아니라 PRISM 이 관측해 적는 값이므로
 # EDITABLE_KEYS 에 넣지 않는다. 화면에는 보여 준다.
 SETTING_QUOTA_STATE = "epo_quota_state"
-# 네트워크 시간 예산. 채널 전체 벽시계와 다른 축이다(모듈 주석 참조).
-SETTING_HTTP_BUDGET = "epo_http_budget_seconds"
 # 시간당 사용량 상한. 0 = 관측만 하고 차단하지 않음.
 SETTING_HOURLY_LIMIT = "epo_hourly_quota_bytes"
-# 한 실행에서 상세 조회할 후보 수 상한.
-SETTING_MAX_DETAIL = "epo_max_detail_fetches"
 
 # 토큰 엔드포인트의 단일 출처는 epo_client 다. 여기서 다시 정의하면 두 값이
 # 어긋날 수 있고, 자격증명을 보내는 주소가 둘이 된다.
@@ -84,8 +80,6 @@ TOKEN_URL = epo_client.TOKEN_URL
 # 응답 본문을 읽는 상한. 오류 메시지 몇 줄이면 충분하다.
 _MAX_BODY_BYTES = 64 * 1024
 
-# 한 실행에서 상세 조회할 후보 수. 사용자 확정값.
-DEFAULT_MAX_DETAIL_FETCHES = 12
 
 _READY_DETAIL = (
     "검색할 수 있습니다. 응답 원본을 보존하고 등록된 EPO 파서로 재파싱해 "
@@ -245,8 +239,6 @@ def check_credentials(
     )
 
 
-class DetailBudgetExceeded(PatentSearchError):
-    """이 실행에서 허용된 상세 조회 횟수를 다 썼다."""
 
 
 class EpoOpsBackend(PatentSearchBackend):
@@ -266,20 +258,12 @@ class EpoOpsBackend(PatentSearchBackend):
         # configure 뒤에 만들어진 것을 쓴다.
         self._client = client
         self._ledger = epo_quota.QuotaLedger()
-        self._http_budget = epo_client.DEFAULT_HTTP_BUDGET_SECONDS
-        self._max_detail_fetches = DEFAULT_MAX_DETAIL_FETCHES
         self._detail_fetches = 0
 
     # --- 설정 -----------------------------------------------------------
     def configure(self, values: Mapping[str, Any]) -> None:
         self._key = str(values.get(SETTING_CONSUMER_KEY, "") or "").strip()
         self._secret = str(values.get(SETTING_CONSUMER_SECRET, "") or "").strip()
-        self._http_budget = _positive_float(
-            values.get(SETTING_HTTP_BUDGET), epo_client.DEFAULT_HTTP_BUDGET_SECONDS
-        )
-        self._max_detail_fetches = _positive_int(
-            values.get(SETTING_MAX_DETAIL), DEFAULT_MAX_DETAIL_FETCHES
-        )
         self._ledger = epo_quota.QuotaLedger(
             state=epo_quota.QuotaState.from_dict(values.get(SETTING_QUOTA_STATE)),
             hourly_limit=_positive_int(values.get(SETTING_HOURLY_LIMIT), 0),
@@ -318,11 +302,9 @@ class EpoOpsBackend(PatentSearchBackend):
         base = client.usage() if client is not None else {
             "calls_by_kind": {},
             "http_seconds": 0.0,
-            "http_budget_seconds": self._http_budget,
             "quota": self._ledger.snapshot(),
         }
         base["detail_fetches"] = self._detail_fetches
-        base["max_detail_fetches"] = self._max_detail_fetches
         return base
 
     def status(self) -> BackendStatus:
@@ -343,7 +325,6 @@ class EpoOpsBackend(PatentSearchBackend):
                 key=self._key,
                 secret=self._secret,
                 ledger=self._ledger,
-                http_budget_seconds=self._http_budget,
             )
         else:
             # 주입된 클라이언트도 같은 원장을 봐야 한다. 따로 세면 한도가
@@ -388,7 +369,7 @@ class EpoOpsBackend(PatentSearchBackend):
         return replace(response, notes=response.notes + notes) if notes else response
 
     def search_structured(
-        self, node, *, max_results: int = epo_client.MAX_RESULTS_PER_QUERY, begin: int = 1
+        self, node, *, max_results: int = epo_client.DEFAULT_RESULTS_PER_QUERY, begin: int = 1
     ) -> PatentSearchResponse:
         """구조화된 질의로 검색한다. 2단계에서 LLM 도구가 부르는 입구다.
 
@@ -409,8 +390,6 @@ class EpoOpsBackend(PatentSearchBackend):
         self,
         doc_key: str,
         constituent: str = epo_client.CONSTITUENT_CLAIMS,
-        *,
-        agent_budget: bool = True,
     ) -> PatentSearchResponse:
         """후보 하나의 상세를 받는다. 검색 스니펫과 증거 범위를 나누는 지점.
 
@@ -418,25 +397,8 @@ class EpoOpsBackend(PatentSearchBackend):
         가리킨다. 그래서 "초록까지만 본 후보"와 "청구항까지 본 후보"가 기록에서
         구분된다 — 두 범위를 한 레코드에 뭉개면 그 구분이 사라진다.
 
-        ``agent_budget`` 이 거짓이면 _max_detail_fetches 상한을 세지 않는다.
-        그 상한은 **LLM 루프의 폭주**를 막으려고 있는 것이다 — 모델이 도구를
-        몇 번 부를지 우리가 모르기 때문에 건 것이지, OPS 를 몇 번 부를 수
-        있는가의 계약이 아니다. 호출 횟수를 PRISM 이 직접 정하는 경로(후보 검증)
-        는 자기 상한을 따로 들고 오므로 이 상한에 걸릴 이유가 없다. 실제로
-        걸리면 EPO 레인이 상한을 다 쓴 실행에서만 검증이 조용히 0건이 된다.
-
-        어느 쪽이든 **OPS 쿼터 원장은 그대로 적용된다.** 여기서 면제되는 것은
-        루프 상한 하나뿐이다.
         """
-        if agent_budget:
-            if self._detail_fetches >= self._max_detail_fetches:
-                raise DetailBudgetExceeded(
-                    f"상세 조회 상한({self._max_detail_fetches}건)에 도달했습니다."
-                )
-            # 예산은 **시도**에서 깎는다. 성공했을 때만 세면 빠르게 실패하는 상세
-            # 조회가 상한을 소모하지 않아, 12건 상한이 걸린 채로 무한히 시도할 수
-            # 있다. 실패한 호출도 OPS 사용량과 시간을 쓴다.
-            self._detail_fetches += 1
+        self._detail_fetches += 1
         client = self._require_client()
         call = client.fetch(doc_key, constituent)
         return self._materialize(call, cql="")

@@ -123,7 +123,42 @@ def strip_block(text: str) -> str:
     사용자가 받아 가는 산출물에 기계용 JSON 이 섞여 나오면 안 된다. 원문은
     stdout.log 에 그대로 남으므로 감사 기록은 잃지 않는다.
     """
+    orphan = _unclosed_block(text)
+    if orphan is not None:
+        start, end, _ = orphan
+        text = text[:start] + text[end:]
     return _BLOCK.sub("", text).rstrip() + ("\n" if text.endswith("\n") else "")
+
+
+def _unclosed_block(text: str) -> tuple[int, int, str] | None:
+    """Accept a complete terminal JSON object with only its closing tag missing.
+
+    Never repair truncated JSON or choose between multiple blocks. Historical
+    reports may have PRISM's completeness notice appended after the JSON.
+    """
+    if text.count(_OPEN) != 1 or _CLOSE in text:
+        return None
+    start = text.index(_OPEN)
+    payload_start = start + len(_OPEN)
+    payload_start += len(text[payload_start:]) - len(text[payload_start:].lstrip())
+    try:
+        payload, length = json.JSONDecoder().raw_decode(text[payload_start:])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    end = payload_start + length
+    # Remove a surrounding Markdown fence only when it belongs to this block.
+    fence = re.search(r"(?m)^```[\w-]*[^\S\n]*\n\s*$", text[:start])
+    if fence:
+        start = fence.start()
+        closing_fence = re.match(r"\s*```[^\S\n]*(?:\n|$)", text[end:])
+        if closing_fence:
+            end += closing_fence.end()
+    tail = text[end:].strip()
+    if tail and not tail.startswith("---\n\n## 분석 완전성 점검\n"):
+        return None
+    return start, end, text[payload_start:payload_start + length]
 
 
 def parse(text: str, aliases: dict[str, AliasedAttachment]) -> dict:
@@ -134,8 +169,11 @@ def parse(text: str, aliases: dict[str, AliasedAttachment]) -> dict:
     """
     matches = _BLOCK.findall(text)
     if not matches:
-        raise MappingError("보고서에서 문헌 매핑 블록을 찾지 못했습니다.")
-    if len(matches) > 1:
+        orphan = _unclosed_block(text)
+        if orphan is None:
+            raise MappingError("보고서에서 문헌 매핑 블록을 찾지 못했습니다.")
+        matches = [orphan[2]]
+    if len(matches) > 1 or text.count(_OPEN) != 1 or text.count(_CLOSE) > 1:
         raise MappingError(
             f"문헌 매핑 블록이 {len(matches)}개 있습니다. 하나만 있어야 합니다."
         )
@@ -283,12 +321,39 @@ def resolved_for_job(job) -> tuple[dict | None, str | None]:
         return job.citation_mapping, job.citation_mapping_error
     if job.citation_mapping_error not in (None, "보고서에서 문헌 매핑 블록을 찾지 못했습니다."):
         return None, job.citation_mapping_error
+    if _OPEN in (job.result_text or ""):
+        try:
+            return parse(job.result_text, _saved_aliases(job)), None
+        except MappingError as exc:
+            return None, str(exc)
     aliases = {f"ATT-{i:02d}": AliasedAttachment(f"ATT-{i:02d}", a.id, a.sha256, a.original_filename)
                for i, a in enumerate(job.attachments, 1) if a.included and a.role == "CITATION"}
     try:
         return recover_report_table(job.result_text or "", aliases, source_headers(job.attachments)), None
     except MappingError:
         return None, job.citation_mapping_error
+
+
+def _saved_aliases(job) -> dict[str, AliasedAttachment]:
+    """Read the aliases actually sent, never infer them from database row order."""
+    try:
+        prompt = Path(job.final_prompt_path or "").read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        raise MappingError("자료 번호를 대조할 실행 프롬프트를 읽지 못했습니다.")
+    sources = {a.id: a for a in job.attachments if a.included}
+    aliases = {}
+    seen_ids = set()
+    for alias, attachment_id in re.findall(
+        r"(?m)^=== 첨부 \d+/\d+ ===\n자료 번호: (ATT-\d{2,})\nattachment_id: ([^\n]+)\n", prompt
+    ):
+        source = sources.get(attachment_id)
+        if source is None or alias in aliases or attachment_id in seen_ids:
+            raise MappingError("실행 프롬프트의 자료 번호와 첨부가 일대일로 일치하지 않습니다.")
+        seen_ids.add(attachment_id)
+        aliases[alias] = AliasedAttachment(alias, source.id, source.sha256, source.original_filename)
+    if not aliases or seen_ids != set(sources):
+        raise MappingError("실행 프롬프트에서 모든 첨부의 자료 번호를 확인하지 못했습니다.")
+    return aliases
 
 
 def render(mapping: dict | None, aliases: dict[str, AliasedAttachment]) -> str:

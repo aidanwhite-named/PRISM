@@ -460,29 +460,8 @@ def test_process_error_wins_over_search_not_performed() -> None:
     assert evaluate(outcome).error_code == ErrorCode.PROCESS_ERROR
 
 
-def test_budget_exceeded_is_reported_as_its_own_failure() -> None:
-    """PRISM 이 끊은 것이므로 cancelled 도 참이다. 사용자 취소와 구별한다."""
-    outcome = _ok(
-        tool_policy=WEB_SEARCH,
-        tool_uses=["WebSearch"] * 41,
-        tool_budget_exceeded=True,
-        cancelled=True,
-    )
-    verdict = evaluate(outcome)
-    assert verdict.status == JobStatus.FAILED
-    assert verdict.error_code == ErrorCode.SEARCH_BUDGET_EXCEEDED
 
 
-def test_stray_tool_outranks_budget_exceeded() -> None:
-    """둘 다 걸렸으면 알아야 할 것은 '많이 불렀다'가 아니라 '뭘 불렀다'이다."""
-    outcome = _ok(
-        tool_policy=WEB_SEARCH,
-        tools_advertised=["WebSearch", "WebFetch"],
-        tool_uses=["WebSearch", "Bash"],
-        tool_budget_exceeded=True,
-        cancelled=True,
-    )
-    assert evaluate(outcome).error_code == ErrorCode.TOOL_POLICY_VIOLATION
 
 
 def test_user_cancel_is_still_cancelled() -> None:

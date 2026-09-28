@@ -13,7 +13,7 @@ async def test_installed_cli_can_call_only_capabilities(provider_type, client, t
     provider = provider_type()
     name = "mcp__prism-search__search_capabilities"
     policy = replace(provider.search_tool_policy, allowed_tools=(), mcp_tools=(name,),
-        required_tools=(name,), max_tool_calls=2)
+        required_tools=(name,))
     servers = _search_mcp_servers(tmp_path, "", 2)
     # TestClient owns an isolated database, never the user's settings.
     client.put("/api/settings", json={"values": {

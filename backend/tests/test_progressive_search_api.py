@@ -1,205 +1,26 @@
-import json
-
+"""Legacy depth selections route to the same autonomous session."""
 import pytest
-
-from app.config import PATHS, DEFAULTS
-from app.patent_search.artifacts import ArtifactStore
+from app.config import DEFAULTS
 from .conftest import wait_for_job
+from .test_autonomous_search_api import autonomous_runtime
 
-
-@pytest.fixture
-def progressive_runtime(monkeypatch):
-    calls = []
-    monkeypatch.setitem(DEFAULTS, 'progressive_search_enabled', True)
-    monkeypatch.setitem(DEFAULTS, 'progressive_search_web_enabled', False)
-
-    class Sources:
-        def __init__(self, *args, **kwargs): pass
-        def search(self, source, query, **kwargs):
-            text = 'Gaussian cloning uses neighbor distance to make the cloning decision. ' * 8
-            aid = ArtifactStore(PATHS.evidence_dir).put(text.encode('utf-8'))
-            return {'records': [{'document_number': '10.1234/test', 'title': 'Gaussian distance cloning',
-                'url': '', 'publication_date': '2024-01-01', 'fields': {'abstract': text},
-                'evidence_refs': {'abstract': {'artifact_id': aid}}}]}
-
-    class Inference:
-        def __init__(self, provider, **kwargs):
-            self.provider, self.model, self.last_outcome = provider, None, None
-        def usage(self): return {'input_tokens': 10, 'usage_complete': True, 'stages': []}
-        async def call(self, phase, system, payload, **kwargs):
-            calls.append((phase, payload))
-            if phase == 'plan':
-                return {'features': [{'text': payload['claim'], 'terms': ['Gaussian', 'distance', 'cloning'],
-                                      'queries': ['Gaussian cloning distance']}], 'context_query': ''}
-            if phase == 'verify':
-                p = payload['passages'][0]
-                return {'evidence': [{'candidate_id': p['candidate_id'], 'feature': p['feature'],
-                    'match': 'explicit', 'passage_id': p['id'],
-                    'quote': 'Gaussian cloning uses neighbor distance to make the cloning decision.',
-                    'relation': '거리 -> 복제 판단'}], 'classifications': [
-                        {'candidate_id': p['candidate_id'], 'group': 'B', 'reason': '핵심 관계 유사'}]}
-            if phase == 'triage':
-                return {'candidate_ids': [r['id'] for r in payload['candidates'][:3]], 'classifications': [
-                    {'candidate_id': r['id'], 'group': 'Y', 'status': 'classified', 'reason': '초록의 핵심 관계 유사'}
-                    for r in payload['candidates']]}
-            return {'candidate_ids': []}
-
-    monkeypatch.setattr('app.search_engine.engine.Sources', Sources)
-    monkeypatch.setattr('app.search_engine.job.Inference', Inference)
-    return calls
-
-
-@pytest.mark.parametrize('depth,seconds', [('fast', 45), ('deep', 120), ('exhaustive', 300)])
-def test_default_api_runs_progressive_engine_and_persists_evidence(client, progressive_runtime, depth, seconds):
+@pytest.mark.parametrize('depth', ['fast', 'deep', 'exhaustive'])
+def test_legacy_depth_uses_configured_total_time_only(client, monkeypatch, autonomous_runtime, depth):
+    monkeypatch.setitem(DEFAULTS, 'search_timeout_seconds', 75)
     payload = {'job_kind': 'similarity_search', 'provider': 'test-search',
                'claim_text': 'Gaussian cloning uses neighbor distance.', 'search_depth': depth}
     ahead = client.post('/api/jobs/preflight', json=payload)
-    assert ahead.status_code == 200, ahead.text
-    assert ahead.json()['delivery_plan'] == 'progressive_search'
-    assert str(seconds) in ahead.json()['message']
+    assert ahead.status_code == 200
+    assert '75초' in ahead.json()['message']
     created = client.post('/api/jobs', json=payload)
-    assert created.status_code == 201, created.text
-    assert created.json()['prompt_id'] == 'search_prompt.md'
+    assert created.status_code == 201
     job = wait_for_job(client, created.json()['id'])
     assert job['status'] == 'SUCCEEDED', job['errors']
-    data = job['search_manifest']['engine']
-    assert data['limits']['seconds'] == seconds
-    assert data['candidates'][0]['evidence'][0]['quote_verified']
-    assert data['candidates'][0]['data_status'] == 'ABSTRACT_ONLY'
-    assert data['candidates'][0]['document_classification']['group'] == 'Y'
-    assert data['candidates'][0]['evidence'][0]['feature'] == 'A'
-    assert job['search_manifest']['reported']['candidates'][0]['group'] == 'Y'
-    assert 'Y분류' in job['result_text']
-    assert '거리' in job['result_text']
-    assert client.get(f"/api/jobs/{job['id']}/final-prompt").status_code == 200
-
-
-def test_selected_strategy_and_original_claim_reach_planner_and_verifier(client, progressive_runtime):
-    strategy = '핵심 관계를 중시하고 문헌을 A/B/C로 분류해줘.'
-    prompt = client.post('/api/prompts', json={'name': '분류 회귀', 'body': strategy, 'kind': 'search'}).json()
-    claim = 'Gaussian cloning uses neighbor distance.'
-    try:
-        created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
-            'prompt_id': prompt['id'], 'claim_text': claim, 'search_depth': 'fast'})
-        assert created.status_code == 201, created.text
-        assert created.json()['prompt_id'] == prompt['id']
-        job = wait_for_job(client, created.json()['id'])
-        assert job['status'] == 'SUCCEEDED', job['errors']
-        assert job['search_manifest']['prompt']['id'] == prompt['id']
-        import hashlib
-        assert job['search_manifest']['prompt']['sha256'] == hashlib.sha256(strategy.encode('utf-8')).hexdigest()
-        phases = [phase for phase, _ in progressive_runtime]
-        assert phases.count('verify') == 1
-        assert all(phase in ('plan', 'triage', 'verify') for phase in phases)
-        for phase, payload in progressive_runtime:
-            if phase in ('plan', 'triage', 'verify'):
-                assert payload['search_strategy'] == strategy
-                assert payload['claim'] == claim
-    finally:
-        client.delete('/api/prompts/' + prompt['id'])
-
-
-def test_progressive_api_keeps_unknown_dates_and_excludes_future(client, progressive_runtime):
-    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
-        'claim_text': 'Gaussian cloning uses neighbor distance.', 'search_depth': 'fast', 'search_cutoff_date': '2023-01-01'})
-    job = wait_for_job(client, created.json()['id'])
-    assert job['search_manifest']['engine']['candidates'][0]['date_status'] == 'after_cutoff'
-    assert not job['search_manifest']['reported']['candidates']
-
+    assert job['search_manifest']['engine']['limits'] == {'seconds': 75}
+    assert len(autonomous_runtime) == 1
+    assert not hasattr(autonomous_runtime[0].tool_policy, 'max_tool_calls')
 
 def test_invalid_depth_is_rejected(client):
     response = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
                                             'claim_text': 'A sensor', 'search_depth': 'unlimited'})
     assert response.status_code == 422
-
-
-def test_failed_classification_is_not_success_and_can_continue_with_saved_candidates(client, progressive_runtime, monkeypatch):
-    from app.search_engine.job import Inference
-    original = Inference.call
-    async def fail(self, phase, *args, **kwargs):
-        if phase == 'triage':
-            raise RuntimeError('inference_timeout')
-        return await original(self, phase, *args, **kwargs)
-    monkeypatch.setattr(Inference, 'call', fail)
-    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
-        'claim_text': 'Gaussian cloning uses neighbor distance.', 'search_depth': 'deep'})
-    source = wait_for_job(client, created.json()['id'])
-    assert source['status'] == 'FAILED'
-    assert '분류 미완료' in source['errors'][0]
-    assert source['search_manifest']['status'] == 'classification_incomplete'
-    assert source['search_manifest']['engine']['candidates']
-    assert source['search_manifest']['engine']['can_continue']
-    monkeypatch.setattr(Inference, 'call', original)
-    response = client.post(f"/api/jobs/{source['id']}/continue-search")
-    assert response.status_code == 201
-    target = wait_for_job(client, response.json()['id'])
-    assert target['status'] == 'SUCCEEDED', target['errors']
-    assert target['search_manifest']['engine']['classification']['status'] == 'complete'
-    assert client.get(f"/api/jobs/{source['id']}").json()['status'] == 'FAILED'
-
-
-def test_completed_negative_assessment_is_success_without_xyz(client, progressive_runtime, monkeypatch):
-    from app.search_engine.job import Inference
-    original = Inference.call
-    async def unrelated(self, phase, system, payload, **kwargs):
-        if phase == 'triage':
-            return {'candidate_ids': [], 'classifications': [
-                {'candidate_id': r['id'], 'group': None, 'status': 'low_relevance', 'reason': '다른 기술 관계'}
-                for r in payload['candidates']]}
-        return await original(self, phase, system, payload, **kwargs)
-    monkeypatch.setattr(Inference, 'call', unrelated)
-    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
-        'claim_text': 'Gaussian cloning uses neighbor distance.', 'search_depth': 'fast'})
-    result = wait_for_job(client, created.json()['id'])
-    assert result['status'] == 'SUCCEEDED', result['errors']
-    assert result['search_manifest']['engine']['classification']['status'] == 'complete'
-    assert result['search_manifest']['engine']['candidates'][0]['document_classification']['group'] is None
-    assert '검토 결과 관련성 낮음' in result['result_text']
-
-
-def test_continue_search_reuses_candidates_and_is_idempotent(client, progressive_runtime):
-    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
-        'claim_text': 'Gaussian cloning uses neighbor distance.', 'search_depth': 'deep'})
-    source = wait_for_job(client, created.json()['id'])
-    assert source['search_manifest']['engine']['can_continue']
-    assert not source['search_manifest']['engine']['verified_match']  # abstract-only Y
-    plan_calls = sum(phase == 'plan' for phase, _ in progressive_runtime)
-    response = client.post(f"/api/jobs/{source['id']}/continue-search")
-    assert response.status_code == 201, response.text
-    target = wait_for_job(client, response.json()['id'])
-    assert target['status'] == 'SUCCEEDED', target['errors']
-    snapshot = target['search_manifest']['engine']
-    assert snapshot['depth'] == 'exhaustive'
-    assert not snapshot['can_continue']
-    assert snapshot['candidates'][0]['id'] == source['search_manifest']['engine']['candidates'][0]['id']
-    assert sum(phase == 'plan' for phase, _ in progressive_runtime) == plan_calls
-    assert any(row['lane'] == 'continuation' for row in snapshot['route'])
-    repeated = client.post(f"/api/jobs/{source['id']}/continue-search")
-    assert repeated.json()['id'] == target['id']
-    assert client.post(f"/api/jobs/{target['id']}/continue-search").status_code == 409
-
-
-def test_progressive_limits_can_be_configured_through_settings(client):
-    from app.db import session_scope
-    from app.models import AppSetting
-    keys = ('progressive_search_enabled', 'progressive_search_web_enabled', 'progressive_search_limits')
-    with session_scope() as session:
-        previous = {key: session.get(AppSetting, key).value if session.get(AppSetting, key) else None for key in keys}
-    try:
-        response = client.put('/api/settings', json={'values': {
-            'progressive_search_enabled': True, 'progressive_search_web_enabled': False,
-            'progressive_search_limits': {'fast': {'seconds': 60, 'queries': 8}}}})
-        assert response.status_code == 200, response.text
-        ahead = client.post('/api/jobs/preflight', json={'job_kind': 'similarity_search',
-            'provider': 'test-search', 'claim_text': 'A sensor.', 'search_depth': 'fast'})
-        assert '60' in ahead.json()['message'] and '8' in ahead.json()['message']
-        bad = client.put('/api/settings', json={'values': {'progressive_search_limits': {'fast': {'seconds': 99999}}}})
-        assert bad.status_code == 400
-    finally:
-        with session_scope() as session:
-            for key, value in previous.items():
-                row = session.get(AppSetting, key)
-                if row and value is None:
-                    session.delete(row)
-                elif row:
-                    row.value = value

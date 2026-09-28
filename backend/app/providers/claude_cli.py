@@ -243,31 +243,10 @@ class ClaudeCliProvider(Provider):
 
         parser = ClaudeStreamParser()
         policy = request.tool_policy or NO_TOOLS
-        budget_exceeded = False
 
         async def on_stdout(line: str) -> None:
-            nonlocal budget_exceeded
             for event_type, payload in parser.feed(line):
                 await emit(event_type, payload)
-            # 도구 호출 상한. 프롬프트로 "최대 2라운드"를 요구하는 것과 별개로,
-            # 실제로 멈추는 것은 여기다. 상한을 넘으면 프로세스 트리를 끊는다.
-            if (
-                policy.max_tool_calls
-                and not budget_exceeded
-                and len(parser.state.tool_uses) > policy.max_tool_calls
-            ):
-                budget_exceeded = True
-                await emit(
-                    "tool_budget_exceeded",
-                    {
-                        "limit": policy.max_tool_calls,
-                        "message": (
-                            f"도구 호출이 상한({policy.max_tool_calls}회)을 넘어 "
-                            "실행을 중단합니다."
-                        ),
-                    },
-                )
-                await proc.cancel_job(request.job_id)
 
         async def on_stderr(line: str) -> None:
             if line.strip():
@@ -309,7 +288,6 @@ class ClaudeCliProvider(Provider):
         outcome.tools_advertised = list(state.tool_names)
         outcome.tool_uses = list(state.tool_uses)
         outcome.tool_calls = list(state.tool_calls)
-        outcome.tool_budget_exceeded = budget_exceeded
 
         if run.launch_error:
             outcome.is_error = True

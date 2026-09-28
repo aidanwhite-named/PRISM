@@ -11,12 +11,12 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from . import search_dates, search_channels, search_manifest, settings_service, search_budget
+from . import search_dates, search_channels, search_manifest, settings_service
 from .config import PATHS
 from .db import session_scope
 from .patent_search import get_backend, epo_cql
 from .patent_search.base import PatentSearchError, PatentSearchQuery
-from .patent_search.epo_client import scrub, credential_tokens
+from .patent_search.epo_client import scrub, credential_tokens, MAX_RESULTS_PER_QUERY, MAX_SEARCH_RESULTS
 
 SERVER_NAME = "prism-search"
 PROTOCOL_VERSION = "2025-06-18"
@@ -47,8 +47,6 @@ def _quota_lock(filename="epo-mcp.lock"):
             else:
                 fcntl.flock(handle, fcntl.LOCK_UN)
 
-class ToolLimitExceeded(RuntimeError):
-    pass
 
 
 def error_response(exc, name, arguments, secrets=()):
@@ -56,12 +54,14 @@ def error_response(exc, name, arguments, secrets=()):
     value = {"error_code": getattr(exc, "fault_code", "") or type(exc).__name__,
              "detail": scrub(str(exc), *secrets)[:500]}
     args = arguments if isinstance(arguments, dict) else {}
-    if name == 'save_candidates' and isinstance(exc, search_manifest.SearchLogError):
-        value['recoverable'] = True
-        value['recovery'] = {
-            'next_step': 'Correct the arguments and call save_candidates again. '
-                         'Use JSON null, not the string "null", for an unclassified group. '
-                         'The previous checkpoint is unchanged.',
+    if name == "epo_search":
+        value["not_evidence_of_absence"] = True
+        value["recovery"] = {
+            "page_size": {"minimum": 1, "maximum": MAX_RESULTS_PER_QUERY},
+            "next_step": "Use at most 100 results per call, then coverage.next_begin with the same query for another page. Each AND/OR/NOT group has type=group, op and items; each term has type=term, field and value. Do not change the search meaning to repair syntax.",
+            "query_example": {"type": "group", "op": "and", "items": [
+                {"type": "term", "field": "ta", "value": "speech"},
+                {"type": "term", "field": "ta", "value": "noise reduction"}]},
         }
     if name == "epo_fetch":
         value["requested_identifier"] = args.get("publication_number", "")
@@ -88,6 +88,7 @@ def epo_search_advice(result, begin=1):
     coverage["result_range"] = f"{begin}-{begin + returned - 1}" if returned else None
     coverage["more_results_available"] = begin + returned - 1 < total if total is not None else None
     coverage["next_begin"] = begin + returned if returned and coverage["more_results_available"] and begin + returned <= 2000 else None
+    coverage["retrieval_limit_reached"] = bool(total and total > MAX_SEARCH_RESULTS and begin + returned > MAX_SEARCH_RESULTS)
     dates = sorted(str(r.get("publication_date")) for r in result["records"] if r.get("publication_date"))
     coverage["publication_date_range"] = {"earliest": dates[0], "latest": dates[-1]} if dates else None
     coverage["ordering"] = "provider_default; no relevance ordering requested"
@@ -100,11 +101,10 @@ def epo_search_advice(result, begin=1):
 
 
 class SearchTools:
-    def __init__(self, *, values=None, work_dir=None, max_calls=None, cutoff=None):
+    def __init__(self, *, values=None, work_dir=None, cutoff=None):
         self.work_dir = Path(work_dir or os.environ["PRISM_SEARCH_WORK_DIR"])
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.ledger_path = self.work_dir / LEDGER_NAME
-        self.max_calls = max(1, int(max_calls or os.environ.get("PRISM_SEARCH_MAX_TOOL_CALLS", 40)))
         self.calls = sum(row.get("state") == "started" for row in search_manifest.read_tool_journal(self.work_dir))
         self.cutoff = search_dates.normalize_cutoff(cutoff if cutoff is not None else os.environ.get("PRISM_SEARCH_CUTOFF", ""))
         if values is None:
@@ -126,7 +126,16 @@ class SearchTools:
         row = {**row, "timestamp": datetime.now(timezone.utc).isoformat()}
         serialized = scrub(json.dumps(row, ensure_ascii=False), *self.secrets)
         with self._lock:
-            with self.ledger_path.open("a", encoding="utf-8") as handle:
+            # Windows antivirus/indexing can briefly hold a freshly written journal.
+            for attempt in range(6):
+                try:
+                    handle = self.ledger_path.open("a", encoding="utf-8")
+                    break
+                except PermissionError:
+                    if os.name != 'nt' or attempt == 5:
+                        raise
+                    time.sleep(.02 * (attempt + 1))
+            with handle:
                 handle.write(serialized + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -138,42 +147,27 @@ class SearchTools:
         return statuses
 
     def budget(self):
-        try:
-            native = json.loads((self.work_dir / search_budget.NATIVE_COUNT_FILE).read_text(encoding="utf-8"))
-            native = max(0, int(native))
-        except (OSError, ValueError, TypeError):
-            native = 0
-        result = search_budget.budget_status(self.calls + native, self.max_calls)
+        result = {'used': self.calls}
         try:
             deadline = float((self.work_dir / 'search_deadline.json').read_text(encoding='utf-8'))
-            result['seconds_remaining'] = max(0, round(deadline - time.time()))
-            if result['seconds_remaining'] <= 30:
-                result.update(action='finalize_now', instruction='시간 한도가 임박했습니다. 현재 후보를 저장하고 미확인 사항을 포함한 최종 JSON을 작성하십시오.')
+            result['seconds_remaining'] = max(0, round(deadline - time.time(), 1))
         except (OSError, ValueError):
             pass
         return result
 
     def tool_definitions(self):
         statuses = self.statuses()
-        return [_CAPABILITIES, _SAVE_CANDIDATES, _SOURCE_FETCH, _CITATION_SEARCH, _START_COLLECTION, _COLLECT_RESULTS] + [
+        return [_CAPABILITIES, _SAVE_FINDINGS, _SOURCE_FETCH, _CITATION_SEARCH] + [
             tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIPRIS_SEARCH)
-            if statuses[tool["name"].split("_")[0]]["status"] == "available"
-        ]
+            if statuses[tool['name'].split('_')[0]]['status'] == 'available']
 
     def call(self, name: str, arguments: dict) -> dict:
-        if name in ('epo_search', 'kipris_search', 'literature_search') and isinstance(arguments, dict):
-            size = arguments.get('max_results', 3)
-            if type(size) is int and size > 0:
-                arguments = {**arguments, 'max_results': min(size, 4)}
         with self._lock:
             return_row = self._reserve_call(name, arguments)
         return self._run_call(name, arguments, return_row)
 
     def _reserve_call(self, name, arguments):
         row = {"id": str(uuid.uuid4()), "tool": name, "arguments": arguments, "sequence": self.calls}
-        if name not in ('save_candidates', 'collect_results') and self.budget()["remaining"] <= 0:
-            self._record({**row, "state": "rejected", "ok": False, "error_code": "tool_call_limit_exceeded"})
-            raise ToolLimitExceeded("tool_call_limit_exceeded")
         self.calls += 1
         row["sequence"] = self.calls
         self._record({**row, "state": "started"})
@@ -184,16 +178,8 @@ class SearchTools:
             definition = next((tool for tool in self.tool_definitions() if tool["name"] == name), None)
             if definition is None:
                 raise ValueError("tool_unavailable")
-            try:
-                _validate(arguments, definition["inputSchema"])
-            except ValueError as exc:
-                if name == 'save_candidates':
-                    raise search_manifest.SearchLogError('후보 입력 형식 오류: ' + str(exc)) from exc
-                raise
-            budget = self.budget()
-            if name not in ("search_capabilities", "save_candidates", "collect_results") and (
-                    budget['used'] > budget['finalize_at'] or budget.get('seconds_remaining', 999999) <= 10
-                    or (self.work_dir / 'search_x_complete.json').exists()):
+            _validate(arguments, definition["inputSchema"])
+            if name not in ("search_capabilities", "save_findings") and self.budget().get('seconds_remaining', 1) <= 0:
                 result = {"records": [], "budget": self.budget(), "budget_stopped": True,
                           "not_evidence_of_absence": True}
                 self._record({**row, "state": "completed", "ok": True, "result": result})
@@ -215,7 +201,7 @@ class SearchTools:
                         return result
             if name == "search_capabilities":
                 result = {"tools": self.statuses(), "publication_cutoff": self.cutoff or None,
-                          "tool_calls_used": self.calls, "tool_calls_limit": self.max_calls}
+                          "tool_calls_used": self.calls}
             elif name.startswith("epo_"):
                 with self._source_locks['epo'], _quota_lock():
                     # Sync another process's committed quota before every call.
@@ -238,12 +224,12 @@ class SearchTools:
         return result
 
     def _execute(self, name, arguments):
-        if name in ('start_collection', 'collect_results'):
-            from . import search_session
-            return getattr(search_session, name)(self, arguments)
-        if name in ('save_candidates', 'source_fetch', 'citation_search'):
-            from . import search_agent_tools
-            return getattr(search_agent_tools, name)(self, arguments)
+        if name == 'save_findings':
+            from .search_engine.autonomous_store import save_findings
+            return save_findings(self, arguments)
+        if name in ('source_fetch', 'citation_search'):
+            from . import search_source_tools
+            return getattr(search_source_tools, name)(self, arguments)
         if name == "epo_search":
             return self._epo_search(arguments)
         backend_id = name.split("_")[0]
@@ -267,7 +253,8 @@ class SearchTools:
         return self.backends[backend_id]
 
     def _epo_search(self, arguments):
-        node = _query_node(arguments["query"])
+        corrections = []
+        node = _query_node(arguments["query"], corrections=corrections)
         normalized = []
         # Do not silently hide unknown publication dates with a DB-side cutoff.
         cql = epo_cql.build(node, normalized=normalized)
@@ -275,7 +262,8 @@ class SearchTools:
         paging = {"begin": begin} if begin != 1 else {}
         response = self._backend("epo").search_structured(node, max_results=arguments.get("max_results", 10), **paging)
         return epo_search_advice({**_response(response, scope="bibliographic_search"), "cql": cql,
-                "normalized_classifications": normalized, "publication_cutoff": self.cutoff or None}, begin)
+                "normalized_classifications": normalized, "query_normalizations": corrections,
+                "publication_cutoff": self.cutoff or None}, begin)
 
     def _plain_search(self, backend_id, arguments):
         query = arguments["query"]
@@ -316,7 +304,8 @@ class SearchTools:
     def _fetch(self, backend_id, arguments, identifier_key):
         identifier = arguments[identifier_key]
         constituent = arguments.get("constituent", "abstract" if backend_id == "literature" else "claims")
-        response = self._backend(backend_id).fetch_document(identifier, constituent)
+        backend = self._backend(backend_id)
+        response = backend.fetch_document(identifier, constituent)
         result = _response(response, scope=constituent)
         def identity(number):
             return search_manifest.identity_key(doi=number) if backend_id == "literature" else search_manifest.identity_key(number)
@@ -325,6 +314,14 @@ class SearchTools:
         return result
 
 def _validate(value, schema, depth=0):
+    if "anyOf" in schema:
+        for branch in schema["anyOf"]:
+            try:
+                _validate(value, branch, depth)
+                return
+            except ValueError:
+                pass
+        raise ValueError('invalid_cql_node: use {type:"term",field,value}, {type:"group",op,items}, or {type:"date_range",field:"pd",begin,end}; do not mix node fields')
     if depth > 12:
         raise ValueError("arguments_too_deep")
     kind = schema.get("type")
@@ -340,7 +337,7 @@ def _validate(value, schema, depth=0):
             if key in props:
                 _validate(item, props[key], depth + 1)
     elif kind == "string":
-        if not isinstance(value, str) or not schema.get("minLength", 1) <= len(value) <= schema.get("maxLength", 500):
+        if not isinstance(value, str) or not schema.get("minLength", 0) <= len(value) <= schema.get("maxLength", float('inf')):
             raise ValueError("invalid_string")
     elif kind == "integer":
         if type(value) is not int or not schema.get("minimum", 1) <= value <= schema.get("maximum", 20):
@@ -348,17 +345,30 @@ def _validate(value, schema, depth=0):
     elif kind == 'boolean' and type(value) is not bool:
         raise ValueError('expected_boolean')
     elif kind == 'array':
-        if not isinstance(value, list) or not schema.get('minItems', 0) <= len(value) <= schema.get('maxItems', 100):
+        if not isinstance(value, list) or not schema.get('minItems', 0) <= len(value) <= schema.get('maxItems', float('inf')):
             raise ValueError('invalid_array')
         for item in value:
             _validate(item, schema.get('items', {}), depth + 1)
     if "enum" in schema and value not in schema["enum"]:
         raise ValueError(f"invalid_enum: expected {json.dumps(schema['enum'], ensure_ascii=False)}, received {json.dumps(value, ensure_ascii=False)}")
 
-def _query_node(raw: Any, depth=0):
+def _query_node(raw: Any, depth=0, *, corrections=None, path="query"):
     if depth > epo_cql.MAX_DEPTH or not isinstance(raw, dict):
         raise ValueError("invalid_cql_structure_or_depth")
-    kind = raw.get("type", "term")
+    kind = raw.get("type")
+    if kind is None:
+        # Only fill an unambiguous discriminator; never infer an operator or terms.
+        keys = set(raw)
+        if keys == {"op", "items"}:
+            kind = "group"
+        elif {"begin", "end"} <= keys <= {"field", "begin", "end"}:
+            kind = "date_range"
+        elif {"field", "value"} <= keys <= {"field", "value", "match"}:
+            kind = "term"
+        else:
+            raise ValueError('missing_cql_type: specify type=group with op/items, term with field/value, or date_range with begin/end')
+        if corrections is not None:
+            corrections.append({"path": path + ".type", "inferred": kind})
     if kind == "term":
         if set(raw) - {"type", "field", "value", "match"}:
             raise ValueError("unknown_cql_term_field")
@@ -368,7 +378,9 @@ def _query_node(raw: Any, depth=0):
         items = raw.get("items")
         if set(raw) - {"type", "op", "items"} or not isinstance(items, list) or not 1 <= len(items) <= 20:
             raise ValueError("invalid_cql_group")
-        return epo_cql.Group(op=raw.get("op", ""), items=tuple(_query_node(item, depth+1) for item in items))
+        return epo_cql.Group(op=raw.get("op", ""), items=tuple(
+            _query_node(item, depth+1, corrections=corrections, path=f"{path}.items[{i}]")
+            for i, item in enumerate(items)))
     if kind == "date_range":
         if set(raw) - {"type", "field", "begin", "end"}:
             raise ValueError("unknown_cql_date_field")
@@ -377,6 +389,9 @@ def _query_node(raw: Any, depth=0):
     raise ValueError("unsupported_cql_type")
 
 def _response(response, *, scope: str) -> dict:
+    from .search_engine.source_observations import record_scopes
+    records = [_record(record) for record in response.records]
+    obtained = list(dict.fromkeys(s for r in records for s in record_scopes(r)))
     stats = list(response.source_stats)
     returned = len(response.records)
     # A multi-source literature count is returned rows, not an index-wide total.
@@ -410,7 +425,9 @@ def _response(response, *, scope: str) -> dict:
     }
     return {
         "untrusted_external_data": True,
-        "verification_scope": scope,
+        "requested_scope": scope,
+        "verification_scope": scope if is_search else (
+            obtained[0] if len(obtained) == 1 else "mixed" if obtained else "not_available"),
         "total_found": response.total_found,
         "raw_artifact_id": response.raw_artifact_id,
         "fetched_at": response.fetched_at,
@@ -418,27 +435,18 @@ def _response(response, *, scope: str) -> dict:
         "request_url": response.request_url,
         "notes": list(response.notes),
         "failed_sources": list(response.failed_sources),
-        "records": [_record(record, compact=scope == "bibliographic_search") for record in response.records],
+        "records": records,
         "coverage": coverage,
         "available_fields": sorted({k.split(":")[0] for r in response.records for k in r.fields}),
         "scope_note": "Bibliographic search/abstract is not claims or full-text verification." if is_search else "Only returned fields were obtained.",
     }
 
 
-def _record(record, *, compact=False) -> dict:
+def _record(record) -> dict:
     fields = {}
     evidence = {}
-    selected = set(record.fields)
-    if compact:
-        selected = {name for name in selected if name in {"applicants", "authors", "publication_date", "ipc", "cpc", "container", "family_id", "arxiv_id", "version_updated"}}
-        abstracts = [name for name in record.fields if name.split(":")[0] == "abstract"]
-        if abstracts:
-            selected.add("abstract:en" if "abstract:en" in abstracts else abstracts[0])
-    limit = 1200 if compact else 40000
     for name, field in record.fields.items():
-        if name not in selected:
-            continue
-        fields[name] = field.value[:limit]
+        fields[name] = field.value
         if field.evidence is not None:
             evidence[name] = {
                 "artifact_id": field.evidence.artifact_id,
@@ -453,8 +461,6 @@ def _record(record, *, compact=False) -> dict:
         "publication_date": publication_date,
         "fields": fields,
         "evidence_refs": evidence,
-        "truncated_fields": [name for name, field in record.fields.items() if name in selected and len(field.value) > limit],
-        "omitted_fields": [name for name in record.fields if name not in selected],
     }
 
 
@@ -473,11 +479,33 @@ def _tool(name: str, description: str, properties: dict, required: list[str]) ->
     }
 
 
-_QUERY_SCHEMA = {
-    "type": "object",
-    "description": 'Term: {type:"term",field:"ta",value:"image matching",match:"all"}. Group: {type:"group",op:"and"|"or"|"not",items:[nodes]}. Term fields: ti,ab,ta,txt,pa,in,pn,ap,pr,ipc,cpc,cl. Match: all/any/exact. Publication-date node: {type:"date_range",field:"pd",begin:"19000101",end:"20240131"}. A date-limited query may omit unknown dates; choose whether an additional unrestricted query is needed. Maximum nesting: 3.',
-    "additionalProperties": True,
-}
+def _query_schema(depth=0):
+    def node(properties, required):
+        return {"type": "object", "properties": properties, "required": required,
+                "additionalProperties": False}
+    choices = [node({
+        "type": {"type": "string", "enum": ["term"]},
+        "field": {"type": "string", "enum": list(epo_cql.ALLOWED_FIELDS)},
+        "value": {"type": "string", "minLength": 1, "maxLength": epo_cql.MAX_VALUE_CHARS},
+        "match": {"type": "string", "enum": list(epo_cql.MATCH_KINDS)},
+    }, ["field", "value"]), node({
+        "type": {"type": "string", "enum": ["date_range"]},
+        "field": {"type": "string", "enum": ["pd"]},
+        "begin": {"type": "string", "minLength": 8, "maxLength": 8},
+        "end": {"type": "string", "minLength": 8, "maxLength": 8},
+    }, ["begin", "end"])]
+    if depth < epo_cql.MAX_DEPTH:
+        choices.append(node({
+            "type": {"type": "string", "enum": ["group"]},
+            "op": {"type": "string", "enum": list(epo_cql.OPERATORS)},
+            "items": {"type": "array", "minItems": 1, "maxItems": 20,
+                      "items": _query_schema(depth + 1)},
+        }, ["op", "items"]))
+    return {"anyOf": choices}
+
+
+_QUERY_SCHEMA = {**_query_schema(), "description":
+    'Include type=term for field/value, type=group for op/items (AND/OR/NOT), or type=date_range for pd/begin/end (YYYYMMDD). Missing type is accepted only when the shape is unambiguous. NOT needs exactly two items. Maximum nesting: 3. Date filtering can omit unknown publication dates; consider a separate unrestricted search.'}
 _KIPRIS_SEARCH = _tool(
     'kipris_search',
     'Search Korean patents and utility models in KIPRIS Plus. Prefer short Korean technical keyword queries. Returns bibliographic metadata and abstracts, not claims/full text. Each page costs one of 1000 monthly requests. begin is a 1-based page number.',
@@ -488,8 +516,9 @@ _KIPRIS_SEARCH = _tool(
 _EPO_SEARCH = _tool(
     "epo_search",
     "Search EPO OPS with structured CQL. Provider-default order is not relevance ranking. Inspect coverage/date range and broad_query_sample warnings. Use observed ipc/cpc plus technical terms, date_range partitions, or begin for subsequent pages. Keep each OR branch technically specific; match=any splits words with OR. Returns actual CQL and artifact references.",
-    {"query": _QUERY_SCHEMA, "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
-     "begin": {"type": "integer", "minimum": 1, "maximum": 2000}},
+    {"query": _QUERY_SCHEMA, "max_results": {"type": "integer", "minimum": 1, "maximum": MAX_RESULTS_PER_QUERY,
+        "description": "Results per page (default 10), at most 100. Request additional pages using coverage.next_begin; do not repeat begin=1."},
+     "begin": {"type": "integer", "minimum": 1, "maximum": MAX_SEARCH_RESULTS}},
     ["query"],
 )
 _EPO_FETCH = _tool(
@@ -516,25 +545,18 @@ _LITERATURE_FETCH = _tool(
     {"doi": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "biblio"]}},
     ["doi"],
 )
-for _search_tool in (_EPO_SEARCH, _KIPRIS_SEARCH, _LITERATURE_SEARCH):
-    _search_tool['inputSchema']['properties']['max_results'].update(maximum=4, default=3)
-    _search_tool['description'] += ' PRISM returns 3 per source by default, maximum 4 per request; choose additional queries/pages only after reviewing results.'
 _CAPABILITIES = _tool("search_capabilities", "Report which PRISM search tools are enabled and configured without making a network request.", {}, [])
 
-_SAVE_CANDIDATES = _tool('save_candidates',
-    'Persist model-selected shortlist, maximum 15. Merge by identifier/DOI/URL by default; replace=true replaces with your newly ranked shortlist and audits removals. When X covers all essential claim features, supply x_review after source reading: all declared core_features must exactly match mapping.feature rows backed by preserved claims/description/full_text. Accepted X review terminates exploration automatically. Abstract-only X cannot terminate.',
-    {'report': {'type': 'object', 'required': ['candidates'], 'additionalProperties': True,
-                'properties': {'candidates': {'type': 'array', 'maxItems': 100,
-                    'items': {'type': 'object', 'additionalProperties': True,
-                        'properties': {'group': {'type': ['string', 'null'],
-                            'enum': ['A', 'B', 'C', None],
-                            'description': 'Assessment group. Unclassified is JSON null (without quotes), never the string "null".'}}}}}},
-     'replace': {'type': 'boolean'},
-     'x_review': {'type': 'object', 'required': ['candidate_id', 'core_features', 'rationale'], 'additionalProperties': False,
-                  'properties': {'candidate_id': {'type': 'string', 'description': 'patent:JP7475618B1 or doi:10... or url:https://...'},
-                                 'core_features': {'type': 'array', 'minItems': 1, 'maxItems': 30, 'items': {'type': 'string'}},
-                                 'rationale': {'type': 'string', 'maxLength': 4000}}}}, ['report'])
-_SAVE_CANDIDATES['annotations'].update(readOnlyHint=False, openWorldHint=False)
+_SAVE_FINDINGS = _tool('save_findings',
+    'Save useful findings immediately. No classification, count limit or mandatory full-text check. '
+    'ranked=true places these findings first in your relevance order; other saved leads remain. '
+    'reported_scope describes what you actually inspected; storage does not certify that assessment.',
+    {'records': {'type': 'array', 'items': {'type': 'object', 'required': ['title', 'url', 'reason'],
+        'additionalProperties': False, 'properties': {key: {'type': 'string'} for key in
+        ('title', 'url', 'document_number', 'reason', 'difference', 'reported_scope', 'publication_date', 'authors')}}},
+     'ranked': {'type': 'boolean'}}, ['records'])
+_SAVE_FINDINGS['annotations'].update(readOnlyHint=False, openWorldHint=False)
+
 _SOURCE_FETCH = _tool('source_fetch',
     'Read and preserve a public HTTPS source page or PDF with evidence_refs. No login, no TLS bypass. Prefer a known canonical source URL to a failing redirect. section=claims extracts labelled Google Patents claims; section=page retains description, family and citation tables. offset reads later text windows from the same capture. Identity is confirmed only when parsed from the page; other pages match by URL.',
     {'url': {'type': 'string', 'maxLength': 4000},
@@ -545,16 +567,6 @@ _CITATION_SEARCH = _tool('citation_search',
     'Retrieve one hop of backward (cited) or forward (citing) publications for an exact patent number, DOI or openalex:W identifier. Uses enabled EPO/OpenAlex APIs. Does not union families: inspect the family/source page and select additional family identifiers yourself. Citation adjacency never proves claim similarity. begin pages patent forward results.',
     {'identifier': {'type': 'string'}, 'direction': {'type': 'string', 'enum': ['backward', 'forward']},
      'begin': {'type': 'integer', 'minimum': 1, 'maximum': 2000}}, ['identifier', 'direction'])
-
-_START_COLLECTION = _tool('start_collection',
-    'Start independent EPO, KIPRIS, OpenAlex and arXiv requests in background, returning immediately. Include arxiv_query for direct arXiv search alongside openalex_query. Supply source-specific model-written queries for all useful available sources. Results use literature_search for OpenAlex and arxiv_search for arXiv. Run native web search while these requests run; then collect_results. Default 3, maximum 4 results per source. One active round at a time; no automatic query planning.',
-    {'epo_query': _QUERY_SCHEMA, 'kipris_query': {'type': 'string', 'maxLength': 500},
-     'openalex_query': {'type': 'string', 'maxLength': 500},
-     'arxiv_query': {'type': 'string', 'maxLength': 500},
-     'max_results': {'type': 'integer', 'minimum': 1, 'maximum': 4}}, [])
-_COLLECT_RESULTS = _tool('collect_results',
-    'Nonblocking snapshot of the current parallel collection. Read completed results and continue useful work while any sources are pending. Results stay in journal even if this session ends.', {}, [])
-
 
 def _reply(request_id, result=None, error=None):
     payload = {"jsonrpc": "2.0", "id": request_id}
@@ -571,13 +583,11 @@ def main():
     # 작업 폴더가 없으면(터미널의 agy, 문서 분석 실행) 도구를 내놓지 않는다.
     tools = SearchTools() if os.environ.get("PRISM_SEARCH_WORK_DIR") else None
     while True:
-        line = sys.stdin.readline(65537)
+        line = sys.stdin.readline()
         if not line:
             break
         request_id = None
         try:
-            if len(line) > 65536:
-                raise ValueError("request_too_large")
             request = json.loads(line)
             if not isinstance(request, dict) or request.get("jsonrpc") != "2.0":
                 raise ValueError("invalid_request")

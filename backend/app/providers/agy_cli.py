@@ -165,19 +165,6 @@ def content_artifact_step(
     return int(step)
 
 
-def split_tool_calls(calls, content_read_tools) -> tuple[int, int]:
-    """(검색 호출 수, 본문 읽기 호출 수).
-
-    한 예산에 섞으면 본문을 성실히 읽을수록 검색 예산이 마른다. 2026-08-25
-    실행이 그랬다 — 검색 4회·열람 3회에 본문 읽기 14회가 더해져 상한 20을 넘겼고,
-    사용자에게는 "검색 범위를 좁히라"는 엉뚱한 지시가 나갔다.
-
-    범위를 벗어난 열람 호출도 본문 읽기로 센다. 그 호출은 어차피 정책 위반으로
-    따로 잡히며, 위반을 검색 예산에 얹어서 두 번 벌줄 이유가 없다.
-    """
-    scoped = set(content_read_tools or ())
-    content = sum(1 for call in calls if call.get("name") in scoped)
-    return len(calls) - content, content
 
 
 def audit_content_reads(state, policy) -> None:
@@ -473,8 +460,6 @@ class AgyCliProvider(Provider):
             # prism-search 서버 정의는 agy 전역 설정에 있고, 이 실행의 작업 폴더·
             # 상한·기준일은 agy 가 물려주는 환경으로만 전달한다(agy_mcp 참고).
             env.update(agy_mcp.run_env(request.mcp_servers))
-        budget_exceeded = False
-        content_budget_exceeded = False
         # agy 1.1.26 은 최종 result 를 보낸 뒤에도 프로세스가 남는 경우가 있다.
         # 실측(job d39dc2cc): 15:58:47 에 response + status SUCCESS 가 왔는데
         # stdout 이 닫히지 않아 PRISM 이 16:13:29 까지 기다리다 타임아웃으로
@@ -483,61 +468,12 @@ class AgyCliProvider(Provider):
         finished = asyncio.Event()
 
         async def on_stdout(line: str) -> None:
-            nonlocal budget_exceeded, content_budget_exceeded
             for event_type, payload in parser.feed(line):
                 await emit(event_type, payload)
             if parser.state.saw_result:
-                # 신호일 뿐 판정이 아니다. status 가 무엇이든(SUCCESS/FAILURE/
-                # CANCELED) 더 기다릴 이유가 없다는 뜻이고, 성공·실패는 아래
-                # evaluator 가 status·도구 기록·인증 상태를 보고 정한다.
                 finished.set()
-            if search_policy is None:
-                return
-
-            # 판정을 먼저 붙인다. 아래 예산 계산이 "검색 호출"과 "본문 읽기"를
-            # 나누려면 각 호출이 어느 쪽인지 정해져 있어야 한다.
-            audit_content_reads(parser.state, search_policy)
-            search_calls, content_calls = split_tool_calls(
-                parser.state.tool_calls, search_policy.content_read_tools
-            )
-
-            if (
-                search_policy.max_tool_calls
-                and not budget_exceeded
-                and search_calls + content_calls > search_policy.max_tool_calls
-            ):
-                budget_exceeded = True
-                await emit(
-                    "tool_budget_exceeded",
-                    {
-                        "limit": search_policy.max_tool_calls,
-                        "message": (
-                            f"검색 도구 호출이 상한({search_policy.max_tool_calls}회)을 "
-                            "넘어 실행을 중단합니다."
-                        ),
-                    },
-                )
-                await proc.cancel_job(request.job_id)
-                return
-
-            if (
-                search_policy.max_content_read_calls
-                and not content_budget_exceeded
-                and content_calls > search_policy.max_content_read_calls
-            ):
-                content_budget_exceeded = True
-                await emit(
-                    "content_read_budget_exceeded",
-                    {
-                        "limit": search_policy.max_content_read_calls,
-                        "message": (
-                            "페이지 본문 읽기 호출이 상한"
-                            f"({search_policy.max_content_read_calls}회)을 넘어 "
-                            "실행을 중단합니다."
-                        ),
-                    },
-                )
-                await proc.cancel_job(request.job_id)
+            if search_policy is not None:
+                audit_content_reads(parser.state, search_policy)
 
         async def on_stderr(line: str) -> None:
             if line.strip():
@@ -632,8 +568,6 @@ class AgyCliProvider(Provider):
         outcome.tool_uses = list(state.tool_uses)
         outcome.tools_advertised = list(state.tools_advertised)
         outcome.tool_calls = list(state.tool_calls)
-        outcome.tool_budget_exceeded = budget_exceeded
-        outcome.content_read_budget_exceeded = content_budget_exceeded
         # 기존 분석은 예전과 같은 사후 탐지 경로(None)를 유지한다. 검색에만 agy
         # 전용 정책을 붙여 search_web/read_url_content 호출을 정상 처리한다.
         outcome.tool_policy = search_policy

@@ -251,6 +251,85 @@ def test_strip_block_handles_a_fenced_block() -> None:
     assert parse(report, _aliases("a.pdf"))["items"][0]["citation_number"] == 1
 
 
+@pytest.mark.parametrize("fenced", [False, True])
+@pytest.mark.parametrize("notice", ["", "\n\n---\n\n## 분석 완전성 점검\n\n점검 내용\n"])
+def test_complete_json_without_closing_tag_is_read_and_hidden(fenced, notice):
+    block = _block([{"citation_number": 1, "attachment": "ATT-02", "document_number": "paper"}])
+    block = block.replace("[/PRISM_CITATION_MAPPING_V1]", "").strip()
+    if fenced:
+        block = "```json\n" + block + "\n```"
+    report = "# 보고서\n\n" + block + notice
+    mapping = parse(report, _aliases("a.pdf", "b.pdf"))
+    assert mapping["items"][0]["attachment_id"] == "id-2"
+    cleaned = strip_block(report)
+    assert "PRISM_CITATION_MAPPING" not in cleaned
+    assert '"items"' not in cleaned
+    assert "```" not in cleaned
+    assert "# 보고서" in cleaned
+    if notice:
+        assert "점검 내용" in cleaned
+
+
+@pytest.mark.parametrize("suffix", ['\n{"items": []}', " trailing garbage", "\n[PRISM_CITATION_MAPPING_V1]\n{}"])
+def test_missing_closing_tag_does_not_accept_ambiguous_tail(suffix):
+    block = _block([{"citation_number": 1, "attachment": "ATT-01", "document_number": "K"}])
+    with pytest.raises(MappingError):
+        parse(block.replace("[/PRISM_CITATION_MAPPING_V1]", "") + suffix, _aliases("a.pdf"))
+
+
+def test_missing_closing_tag_still_validates_json_and_attachment():
+    block = _block([{"citation_number": 1, "attachment": "ATT-99", "document_number": "K"}])
+    block = block.replace("[/PRISM_CITATION_MAPPING_V1]", "").strip()
+    with pytest.raises(MappingError, match="없는 자료"):
+        parse(block, _aliases("a.pdf"))
+    with pytest.raises(MappingError):
+        parse(block[:-1], _aliases("a.pdf"))
+    assert strip_block(block[:-1]) == block[:-1]
+    complete = _block([{"citation_number": 1, "attachment": "ATT-01", "document_number": "K"}])
+    with pytest.raises(MappingError):
+        parse(complete + block, _aliases("a.pdf"))
+
+
+def test_unclosed_historical_mapping_uses_saved_aliases_and_enables_followup(client, capable_prompt):
+    from app.db import session_scope
+    from app.models import ExecutionJob
+    from app.citation_mapping import resolved_for_job
+    parent = _run(client, capable_prompt, batch_id=_upload(client, "paper.txt", "patent.txt"))
+    with session_scope() as session:
+        source = session.get(ExecutionJob, parent["id"])
+        source.citation_mapping = None
+        source.citation_mapping_error = "보고서에서 문헌 매핑 블록을 찾지 못했습니다."
+        source.result_text = "# 보고서\n" + _block([
+            {"citation_number": 1, "attachment": "ATT-02", "document_number": "paper"},
+            {"citation_number": 2, "attachment": "ATT-01", "document_number": "patent"},
+        ]).replace("[/PRISM_CITATION_MAPPING_V1]", "")
+        # ORM relationship order must not decide the meaning of ATT-01.
+        source.attachments.reverse()
+        recovered, error = resolved_for_job(source)
+        assert error is None
+        assert [r["filename"] for r in recovered["items"]] == ["patent.txt", "paper.txt"]
+    loaded = client.get(f"/api/history/{parent['id']}").json()
+    assert loaded["citation_mapping_error"] is None
+    assert "PRISM_CITATION_MAPPING" not in loaded["result_text"]
+    assert next(r for r in client.get('/api/history').json() if r['id'] == parent['id'])["has_citation_mapping"]
+    child = _run(client, capable_prompt, source_job_id=parent["id"], relation_type="MAPPED",
+                 claim_text="청구항 2. 제1항에 있어서, 추가 한정")
+    assert child["prior_report"] == ""
+    assert [r["filename"] for r in child["prior_citation_mapping"]["items"]] == ["patent.txt", "paper.txt"]
+
+
+def test_historical_alias_recovery_requires_saved_input(tmp_path):
+    from types import SimpleNamespace
+    from app.citation_mapping import resolved_for_job
+    source = SimpleNamespace(citation_mapping=None, citation_mapping_error=None,
+        job_kind="patent_analysis", status="SUCCEEDED", attachments=[],
+        final_prompt_path=str(tmp_path / "missing.txt"),
+        result_text=_block([{"citation_number": 1, "attachment": "ATT-01", "document_number": "K"}]).replace("[/PRISM_CITATION_MAPPING_V1]", ""))
+    mapping, error = resolved_for_job(source)
+    assert mapping is None
+    assert "프롬프트" in error
+
+
 def test_rebind_follows_content_not_identifiers() -> None:
     """복제하면 attachment_id 가 바뀐다. 같은 자료라는 근거는 sha256 이다."""
 
@@ -316,6 +395,21 @@ def test_mapping_is_verified_and_removed_from_the_deliverable(
     # 사용자가 받아 가는 보고서에는 프로토콜 블록이 남지 않는다.
     assert "PRISM_CITATION_MAPPING" not in (job["result_text"] or "")
     assert "PRISM_CITATION_MAPPING" in client.get(f"/api/jobs/{job['id']}/raw").text
+
+
+def test_runner_accepts_a_complete_mapping_without_its_closing_tag(client, capable_prompt, monkeypatch):
+    from . import fake_provider
+    original = fake_provider._mapping_block
+
+    def without_close(message):
+        return [part for part in original(message) if "[/PRISM_CITATION_MAPPING_V1]" not in part]
+
+    monkeypatch.setattr(fake_provider, "_mapping_block", without_close)
+    job = _run(client, capable_prompt, batch_id=_upload(client, "c1.txt", "c2.txt"))
+    assert job["status"] == "SUCCEEDED"
+    assert job["citation_mapping_error"] is None
+    assert len(job["citation_mapping"]["items"]) == 2
+    assert "PRISM_CITATION_MAPPING" not in job["result_text"]
 
 
 def test_mapping_is_read_from_a_prompt_that_declares_nothing(

@@ -44,7 +44,6 @@ from .base import (
 
 SETTING_ENABLED = "literature_integration_enabled"
 SETTING_MAX_RESULTS = "literature_max_results_per_query"
-SETTING_HTTP_BUDGET = "literature_http_budget_seconds"
 SETTING_OPENALEX_KEY = "literature_openalex_api_key"
 
 BACKEND_ID = "literature"
@@ -84,7 +83,6 @@ class LiteratureBackend(PatentSearchBackend):
         self._use_openalex = openalex is not None
         self._openalex_key = ""
         self._max_results = 10
-        self._http_budget = literature_client.DEFAULT_HTTP_BUDGET_SECONDS
         self._search_calls = 0
         self._detail_fetches = 0
         literature_parser.register()
@@ -92,19 +90,10 @@ class LiteratureBackend(PatentSearchBackend):
     # --- 설정 -----------------------------------------------------------
     def configure(self, values: Mapping[str, Any]) -> None:
         self._max_results = _positive_int(values.get(SETTING_MAX_RESULTS), 10)
-        self._http_budget = float(
-            _positive_int(
-                values.get(SETTING_HTTP_BUDGET),
-                int(literature_client.DEFAULT_HTTP_BUDGET_SECONDS),
-            )
-        )
         self._openalex_key = str(values.get(SETTING_OPENALEX_KEY) or "").strip()
         self._use_openalex = True
-        if self._client is not None:
-            self._client.http_budget_seconds = self._http_budget
         if self._openalex is not None:
             self._openalex.api_key = self._openalex_key
-            self._openalex.http_budget_seconds = self._http_budget
 
     def status(self) -> BackendStatus:
         detail = _READY_DETAIL
@@ -127,7 +116,6 @@ class LiteratureBackend(PatentSearchBackend):
             else {
                 "calls_by_kind": {},
                 "http_seconds": 0.0,
-                "http_budget_seconds": self._http_budget,
             }
         )
         base["search_calls"] = self._search_calls
@@ -139,16 +127,13 @@ class LiteratureBackend(PatentSearchBackend):
     # --- 내부 자원 -------------------------------------------------------
     def _require_client(self) -> literature_client.LiteratureClient:
         if self._client is None:
-            self._client = literature_client.LiteratureClient(
-                http_budget_seconds=self._http_budget,
-            )
+            self._client = literature_client.LiteratureClient()
         return self._client
 
     def _require_openalex(self) -> openalex_client.OpenAlexClient:
         if self._openalex is None:
             self._openalex = openalex_client.OpenAlexClient(
                 api_key=self._openalex_key,
-                http_budget_seconds=self._http_budget,
             )
         return self._openalex
 
@@ -318,7 +303,7 @@ class LiteratureBackend(PatentSearchBackend):
 
     # --- 확보 -----------------------------------------------------------
     def fetch_document(
-        self, doi: str, constituent: str = "abstract", *, agent_budget: bool = True
+        self, doi: str, constituent: str = "abstract"
     ) -> PatentSearchResponse:
         """후보 하나의 등록 서지를 받는다. 발행사 사이트를 열지 않는다.
 
@@ -329,8 +314,6 @@ class LiteratureBackend(PatentSearchBackend):
         Crossref 가 먼저 제목만 돌려주면 초록을 찾지 못한 채 끝난다.
         ``biblio`` 는 Crossref 를 보고, 없으면 OpenAlex 로 넘어간다.
 
-        ``agent_budget`` 인자는 EPO 백엔드와 시그니처를 맞추기 위한 것이다. 이
-        백엔드에는 LLM 루프가 없어 상한이 없고, 호출 횟수는 호출부가 센다.
         """
         notes: list[str] = []
         failed: list[str] = []

@@ -11,56 +11,20 @@ runner 와 preflight 가 **같은 함수**를 부른다.
 
 from __future__ import annotations
 
-import hashlib
-import json
-from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
-from . import retrieval, search_manifest, search_prompt
-from .config import (
-    AGY_SEARCH_RUNTIME_CONTEXT,
-    CODEX_SEARCH_RUNTIME_CONTEXT,
-    SEARCH_RUNTIME_CONTEXT,
-    with_agy_allowlist,
-)
-from .enums import AttachmentRole, DeliveryPlan, JobKind, RetrievalMode
-from .providers import agy_permissions, model_limits
-from .ingestion.service import IngestedFile, read_normalized
+from . import retrieval
+from .enums import DeliveryPlan, JobKind, RetrievalMode
+from .providers import model_limits
+from .ingestion.service import IngestedFile
 from .prompt_assembly import (
     AssembledPrompt,
     InputTooLarge,
     assemble,
-    assemble_search,
     char_gate,
     ordered_attachments,
 )
 from .prompt_assembly import included_attachments as prompt_assembly_included
-
-# 검색 실행의 런타임 규칙은 Provider 가 실제로 가진 도구에 맞춰야 한다.
-# 도구 이름이 다를 뿐 아니라, Codex 는 web_search 하나로 검색과 URL 조회를
-# 겸하고(성공 여부는 PRISM 이 확인할 수 없다) agy 는
-# 가져온 페이지를 파일로만 돌려준다. 정책 이름으로 고르므로 Provider 가 늘어도
-# 이 표만 채우면 된다.
-SEARCH_CONTEXT_BY_POLICY = {
-    "agy_web_search": AGY_SEARCH_RUNTIME_CONTEXT,
-    "codex_web_search": CODEX_SEARCH_RUNTIME_CONTEXT,
-}
-
-# 실행 시점의 허용 목록을 프롬프트에 붙이는 정책. agy 만 호스트 단위 승인
-# 파일을 갖고 있으므로 여기 하나뿐이다.
-ALLOWLIST_POLICY = "agy_web_search"
-
-
-def allowed_hosts_for(tool_policy_name: str) -> tuple[str, ...]:
-    """이 정책이 지금 실제로 열 수 있는 호스트.
-
-    파일을 읽는 일은 assemble_job 안에서 하지 않는다. 준비 화면과 실행이 **같은
-    함수**로 값을 얻어 같은 크기를 보게 하되, 조립 함수 자체는 순수하게 두어
-    테스트가 사용자 홈 디렉터리를 건드리지 않게 하기 위해서다.
-    """
-    if tool_policy_name != ALLOWLIST_POLICY:
-        return ()
-    return agy_permissions.allowed_hosts()
 
 # 분석 경로에는 레인이 없다. 하나뿐인 조립본을 담는 이름.
 LANE_SINGLE = "single"
@@ -79,15 +43,6 @@ NO_INCLUDED_MATERIAL = (
 included_attachments = prompt_assembly_included
 
 
-class SpecUnreadable(Exception):
-    """출원발명 문서를 넣었는데 본문을 읽지 못했다.
-
-    그냥 지나치면 사용자는 명세서를 반영한 검색을 받았다고 믿게 된다.
-    """
-
-    def __init__(self, filename: str) -> None:
-        self.filename = filename
-        super().__init__(filename)
 
 
 class TransportInputTooLarge(Exception):
@@ -145,25 +100,6 @@ class AssemblyResult:
     """조립 결과. 분석·검색 모두 레인 하나(LANE_SINGLE)를 같은 모양으로 돌려준다."""
 
     lanes: dict[str, AssembledPrompt]
-    spec_document: dict | None = None
-    # 명세서 본문(조립에 쓴 스냅샷). 없으면 빈 문자열. 따로 프롬프트를 만들던
-    # EPO 레인이 쓰던 필드로, 단일 실행이 된 뒤로는 읽는 곳이 없다.
-    spec_text: str = ""
-    search_prompt_sha: str = ""
-    # 검색 전략 프롬프트의 신원. 예약 프롬프트 하나로 고정되어 있던 시절에는
-    # 러너가 상수를 적었지만, 이제 실행마다 다르므로 조립본이 들고 다닌다.
-    search_prompt_id: str = ""
-    # 사용자 전략 뒤에 데이터 구간을 붙였는가(appended_sections), 아니면 옛
-    # placeholder 를 치환했는가(legacy_placeholders).
-    search_prompt_mode: str = ""
-    # 전략 본문 자체에 경계 표시가 있어 중화했는가.
-    strategy_boundary_neutralized: bool = False
-    # 런타임 컨텍스트의 해시. 템플릿이 그대로여도 이것이 바뀌면 모델이 받은
-    # 프롬프트가 달라진다 — Provider 별 파생 컨텍스트가 여기에 들어간다.
-    search_runtime_context_sha: str = ""
-    claim_boundary_neutralized: bool = False
-    spec_boundary_neutralized: bool = False
-    focus_boundary_neutralized: bool = False
     notes: list[str] = field(default_factory=list)
     # 인용발명 문헌을 최종 분석 모델에게 어떻게 전달하는가. 분석 경로에서만
     # 의미가 있다. 검색 작업은 첨부 본문을 애초에 넣지 않으므로 항상 기본값이다.
@@ -527,16 +463,6 @@ def delivery_policy_from_settings(values: dict) -> dict:
     }
 
 
-def search_spec(attachments: list[IngestedFile]) -> IngestedFile | None:
-    """검색 실행에 넣은 출원발명 문서. 없으면 None.
-
-    검색 작업의 첨부는 이것 하나뿐이다. 여러 건이 들어오는 경우는 작업 생성
-    단계에서 이미 거절된다.
-    """
-    for item in attachments:
-        if item.role == AttachmentRole.APPLICATION:
-            return item
-    return None
 
 
 def assemble_job(
@@ -550,25 +476,11 @@ def assemble_job(
     # 모델 컨텍스트 한도는 남는다 — 그 검사는 조립 뒤에 바이트로 이뤄진다.
     max_chars: int | None,
     claim_text: str = "",
-    focus_text: str = "",
-    # 선택적 검색 기준일. 빈 문자열이면 "날짜 조건 없음" 구간이 나간다 — 절을
-    # 빼지 않는다. 빼면 모델이 오늘 날짜를 기준으로 삼는다.
-    search_cutoff: str = "",
-    search_tool_status: dict | None = None,
-    search_call_limit: int = 40,
-    # 이 실행이 고른 검색 전략 프롬프트의 id. 오류 메시지와 감사 기록이 어떤
-    # 프롬프트였는지 말할 수 있어야 한다 — 이제 하나가 아니다.
-    search_prompt_id: str = search_prompt.SEARCH_PROMPT_ID,
     followup_instruction: str = "",
     prior_claim_text: str = "",
     prior_report: str = "",
     prior_citation_mapping: dict | None = None,
     report_context: str = "",
-    tool_policy_name: str = "",
-    # agy 가 지금 실제로 열 수 있는 호스트. 검색 조립에서만 쓰이며, 호출부가
-    # 넘기지 않으면 "하나도 열 수 없음"으로 안내한다 — 모르는 상태를 제한 없음
-    # 으로 읽게 두면 거부 한 번에 실행 전체가 사라진다.
-    agy_allowed_hosts: Sequence[str] | None = None,
     retrieval_mode: str = RetrievalMode.AUTO,
     provider_byte_budget: int | None = None,
     retrieval_budget: retrieval.RetrievalBudget | None = None,
@@ -587,8 +499,8 @@ def assemble_job(
 ) -> AssemblyResult:
     """이 작업이 Provider 에게 실제로 보낼 본문을 만든다.
 
-    분석이든 검색이든 레인 하나를 돌려준다. 명세서가 있어도 레인을 나누지 않는다.
-    InputTooLarge 와 SearchPromptError 는 그대로 올린다 — 호출부가 실행 실패로
+    구성대비 분석의 최종 입력을 조립한다.
+    입력 크기 오류는 그대로 올린다 — 호출부가 실행 실패로
     기록할지(runner) 화면에 안내할지(preflight) 정한다.
 
     호출부가 이미 걸렀더라도 여기서 한 번 더 included_attachments 를 통과시킨다.
@@ -596,205 +508,151 @@ def assemble_job(
     바로 앞에서 지키기 위해서다.
     """
     attachments = included_attachments(attachments)
-    if job_kind is not JobKind.SIMILARITY_SEARCH:
-        common = {
-            "master_prompt": master_prompt,
-            "attachments": attachments,
-            "runtime_context": runtime_context,
-            "runtime_context_enabled": runtime_context_enabled,
-            "claim_text": claim_text,
-            "followup_instruction": followup_instruction,
-            "prior_claim_text": prior_claim_text,
-            "prior_report": prior_report,
-            "prior_citation_mapping": prior_citation_mapping,
-            "report_context": report_context,
-        }
+    common = {
+        "master_prompt": master_prompt,
+        "attachments": attachments,
+        "runtime_context": runtime_context,
+        "runtime_context_enabled": runtime_context_enabled,
+        "claim_text": claim_text,
+        "followup_instruction": followup_instruction,
+        "prior_claim_text": prior_claim_text,
+        "prior_report": prior_report,
+        "prior_citation_mapping": prior_citation_mapping,
+        "report_context": report_context,
+    }
 
-        # auto 판정에는 전체 인라인 조립본의 실제 바이트가 필요하다. 이 조립에는
-        # 글자 수 한도를 걸지 않는다 — 한도를 넘었다고 여기서 예외를 던지면
-        # "너무 커서 로컬 검색으로 간다"는 판정 자체를 못 한다. 전체 인라인으로
-        # 확정되면 아래에서 같은 조립본에 한도를 건다.
-        probe: AssembledPrompt | None = None
-        full_bytes = 0
-        full_chars = 0
-        full_tokens = 0
-        if RetrievalMode.coerce(retrieval_mode) is RetrievalMode.AUTO:
-            probe = assemble(max_chars=None, **common)
-            # 바이트는 Provider 에게 묻는다. 감싸기·이스케이프 이후의 크기가
-            # 전송 한도와 비교되는 값이다.
-            full_bytes = _payload_bytes(probe, provider_measure)
-            full_chars = probe.total_chars
-            full_tokens = model_limits.estimate_tokens(
-                probe.system_prompt, probe.user_message, provider_id=provider_id, model=model,
-            )
-        budget_for_model = (
-            model_limits.token_budget(
-                provider_id=provider_id,
-                model=model,
-                overrides=model_context_overrides,
-                reserve_tokens=model_output_reserve_tokens,
-                fallback_context_tokens=unknown_model_context_tokens,
-            )
-            if provider_byte_budget is None and unknown_model_context_tokens
-            else None
+    # auto 판정에는 전체 인라인 조립본의 실제 바이트가 필요하다. 이 조립에는
+    # 글자 수 한도를 걸지 않는다 — 한도를 넘었다고 여기서 예외를 던지면
+    # "너무 커서 로컬 검색으로 간다"는 판정 자체를 못 한다. 전체 인라인으로
+    # 확정되면 아래에서 같은 조립본에 한도를 건다.
+    probe: AssembledPrompt | None = None
+    full_bytes = 0
+    full_chars = 0
+    full_tokens = 0
+    if RetrievalMode.coerce(retrieval_mode) is RetrievalMode.AUTO:
+        probe = assemble(max_chars=None, **common)
+        # 바이트는 Provider 에게 묻는다. 감싸기·이스케이프 이후의 크기가
+        # 전송 한도와 비교되는 값이다.
+        full_bytes = _payload_bytes(probe, provider_measure)
+        full_chars = probe.total_chars
+        full_tokens = model_limits.estimate_tokens(
+            probe.system_prompt, probe.user_message, provider_id=provider_id, model=model,
         )
-        decision = decide_delivery(
-            retrieval_mode=retrieval_mode,
-            full_inline_bytes=full_bytes,
-            provider_byte_budget=provider_byte_budget,
-            full_inline_tokens=full_tokens,
-            token_budget=budget_for_model,
-            scale=DeliveryScale(
-                documents=len(attachments),
-                pages=sum(int(item.page_count or 0) for item in attachments),
-                claim_elements=claim_element_count,
-            ),
-            scale_limits=delivery_scale_limits,
+    budget_for_model = (
+        model_limits.token_budget(
+            provider_id=provider_id,
+            model=model,
+            overrides=model_context_overrides,
+            reserve_tokens=model_output_reserve_tokens,
+            fallback_context_tokens=unknown_model_context_tokens,
         )
-        decision.full_inline_chars = full_chars
-        plan = decision.plan
+        if provider_byte_budget is None and unknown_model_context_tokens
+        else None
+    )
+    decision = decide_delivery(
+        retrieval_mode=retrieval_mode,
+        full_inline_bytes=full_bytes,
+        provider_byte_budget=provider_byte_budget,
+        full_inline_tokens=full_tokens,
+        token_budget=budget_for_model,
+        scale=DeliveryScale(
+            documents=len(attachments),
+            pages=sum(int(item.page_count or 0) for item in attachments),
+            claim_elements=claim_element_count,
+        ),
+        scale_limits=delivery_scale_limits,
+    )
+    decision.full_inline_chars = full_chars
+    plan = decision.plan
 
-        if plan == DeliveryPlan.FULL_INLINE:
-            assembled = probe if probe is not None else assemble(
-                max_chars=None, **common
-            )
-            # 한도 검사는 조립본을 다시 만들지 않고 같은 값에 건다. 다시 만들면
-            # 큰 첨부를 두 번 읽게 되고, 두 조립본이 미세하게 달라질 여지도 생긴다.
-            char_gate(assembled.total_chars, max_chars)
-            actual_tokens = model_input_gate(assembled, budget_for_model)
-            if not decision.full_inline_tokens:
-                decision.full_inline_tokens = actual_tokens
-            measured = full_bytes or _payload_bytes(assembled, provider_measure)
-            decision.full_inline_bytes = measured
-            decision.full_inline_chars = full_chars or assembled.total_chars
-            return AssemblyResult(
-                lanes={LANE_SINGLE: assembled},
-                delivery_plan=plan,
-                full_inline_bytes=measured,
-                full_inline_chars=decision.full_inline_chars,
-                decision=decision,
-            )
-
-        # 로컬 검색. 실제 근거 패키지가 아직 없으면(preflight) 예산만큼의
-        # 자리표로 크기를 잰다. 실행은 같은 예산을 넘지 못하므로 여기서 잰
-        # 값이 실제 크기의 상한이 된다.
-        budget = retrieval_budget or retrieval.RetrievalBudget()
-        # 1바이트 자리표로 청구항·지시문·경계 표시를 모두 센다. 빈 문자열은
-        # 조립기의 strip() 이 구분 개행까지 제거하므로 1자를 넣고 빼야 한다.
-        # 문자 예산은 유지하고, 전송/모델 한도에서 남은 바이트만 별도로 제한한다.
-        empty = assemble(
-            max_chars=max_chars,
-            evidence_bundle={retrieval.PLACEHOLDER_KEY: "a"},
-            **common,
+    if plan == DeliveryPlan.FULL_INLINE:
+        assembled = probe if probe is not None else assemble(
+            max_chars=None, **common
         )
-        model_input_gate(empty, budget_for_model)
-        if provider_byte_budget is not None and _payload_bytes(empty, provider_measure) > provider_byte_budget:
-            raise TransportInputTooLarge(
-                "청구항과 지시문만으로 Provider 전송 한도를 사용해 근거를 담을 공간이 "
-                "없습니다. 청구항이나 추가 지시를 나눠 실행하십시오."
-            )
-        if max_chars:
-            remaining_chars = max_chars - (empty.total_chars - 1)
-            if remaining_chars <= 0:
-                raise InputTooLarge(empty.total_chars + 1, max_chars)
-            budget = replace(budget, max_evidence_chars=min(budget.max_evidence_chars, remaining_chars))
-
-        def ceiling(byte_limit: int) -> AssembledPrompt:
-            return assemble(
-                max_chars=None,
-                evidence_bundle={retrieval.PLACEHOLDER_KEY: retrieval.render_placeholder(
-                    replace(budget, max_evidence_bytes=byte_limit), []
-                )},
-                **common,
-            )
-
-        # Provider 가 감싸기 크기를 따로 세더라도 동일한 측정 함수로 검증한다.
-        low, high = 0, min(budget.evidence_byte_limit, budget.max_evidence_chars * 3)
-        while low < high:
-            middle = (low + high + 1) // 2
-            candidate = ceiling(middle)
-            fits_transport = provider_byte_budget is None or _payload_bytes(candidate, provider_measure) <= provider_byte_budget
-            fits_model = budget_for_model is None or model_limits.estimate_tokens(
-                candidate.system_prompt, candidate.user_message,
-                provider_id=provider_id, model=model,
-            ) <= budget_for_model.input_tokens
-            if fits_transport and fits_model:
-                low = middle
-            else:
-                high = middle - 1
-        budget = replace(budget, max_evidence_bytes=low)
-        placeholder = evidence_bundle is None
-        bundle = evidence_bundle
-        if placeholder:
-            # 실제 근거 패키지가 아직 없다(preflight). 예산만큼의 자리표로
-            # 크기를 잰다. 실행은 같은 예산을 넘지 못하므로 여기서 잰 값이
-            # 실제 크기의 상한이 된다.
-            bundle = {
-                retrieval.PLACEHOLDER_KEY: retrieval.render_placeholder(
-                    budget, preflight_documents(attachments)
-                )
-            }
-        lane = assemble(max_chars=max_chars, evidence_bundle=bundle, **common)
-        model_input_gate(lane, budget_for_model)
+        # 한도 검사는 조립본을 다시 만들지 않고 같은 값에 건다. 다시 만들면
+        # 큰 첨부를 두 번 읽게 되고, 두 조립본이 미세하게 달라질 여지도 생긴다.
+        char_gate(assembled.total_chars, max_chars)
+        actual_tokens = model_input_gate(assembled, budget_for_model)
+        if not decision.full_inline_tokens:
+            decision.full_inline_tokens = actual_tokens
+        measured = full_bytes or _payload_bytes(assembled, provider_measure)
+        decision.full_inline_bytes = measured
+        decision.full_inline_chars = full_chars or assembled.total_chars
         return AssemblyResult(
-            lanes={LANE_SINGLE: lane},
+            lanes={LANE_SINGLE: assembled},
             delivery_plan=plan,
-            full_inline_bytes=full_bytes,
-            full_inline_chars=full_chars,
-            evidence_placeholder=placeholder,
-            evidence_budget=budget,
+            full_inline_bytes=measured,
+            full_inline_chars=decision.full_inline_chars,
             decision=decision,
         )
 
-    # 검색 프롬프트는 실행 시점에 파일에서 다시 읽지 않는다. 작업 생성 시
-    # 스냅샷한 본문으로 돈다 — 큐에서 기다리는 동안 파일이 바뀌어도 이 실행의
-    # 계약은 흔들리지 않아야 한다. 해시는 그 스냅샷에 대해 계산한다.
-    spec = search_spec(attachments)
-    spec_text = read_normalized(spec) if spec is not None else ""
-    if spec is not None and not spec_text.strip():
-        raise SpecUnreadable(spec.original_filename)
+    # 로컬 검색. 실제 근거 패키지가 아직 없으면(preflight) 예산만큼의
+    # 자리표로 크기를 잰다. 실행은 같은 예산을 넘지 못하므로 여기서 잰
+    # 값이 실제 크기의 상한이 된다.
+    budget = retrieval_budget or retrieval.RetrievalBudget()
+    # 1바이트 자리표로 청구항·지시문·경계 표시를 모두 센다. 빈 문자열은
+    # 조립기의 strip() 이 구분 개행까지 제거하므로 1자를 넣고 빼야 한다.
+    # 문자 예산은 유지하고, 전송/모델 한도에서 남은 바이트만 별도로 제한한다.
+    empty = assemble(
+        max_chars=max_chars,
+        evidence_bundle={retrieval.PLACEHOLDER_KEY: "a"},
+        **common,
+    )
+    model_input_gate(empty, budget_for_model)
+    if provider_byte_budget is not None and _payload_bytes(empty, provider_measure) > provider_byte_budget:
+        raise TransportInputTooLarge(
+            "청구항과 지시문만으로 Provider 전송 한도를 사용해 근거를 담을 공간이 "
+            "없습니다. 청구항이나 추가 지시를 나눠 실행하십시오."
+        )
+    if max_chars:
+        remaining_chars = max_chars - (empty.total_chars - 1)
+        if remaining_chars <= 0:
+            raise InputTooLarge(empty.total_chars + 1, max_chars)
+        budget = replace(budget, max_evidence_chars=min(budget.max_evidence_chars, remaining_chars))
 
-    rendered = search_prompt.compose(
-        master_prompt, claim_text, spec_text, focus_text,
-        prompt_id=search_prompt_id, cutoff=search_cutoff,
-    )
-    search_context = SEARCH_CONTEXT_BY_POLICY.get(tool_policy_name, SEARCH_RUNTIME_CONTEXT)
-    if tool_policy_name == ALLOWLIST_POLICY:
-        search_context = with_agy_allowlist(search_context, agy_allowed_hosts)
-        from .providers import agy_mcp
-        from .search_channels import available_mcp_names
-        names = [name.removeprefix(agy_mcp.TOOL_PREFIX) for name in available_mcp_names(search_tool_status or {})]
-        search_context += ('\n[MCP 설명 파일의 정확한 경로]\n'
-            '도구 목록은 아래에 있습니다. 파일을 찾기 위한 find_by_name/list_dir 호출은 금지합니다. '
-            '필요한 도구의 아래 경로만 view_file로 읽거나 바로 call_mcp_tool로 호출하십시오.\n' +
-            '\n'.join(f'{name}: {agy_mcp.schema_dir() / (name + ".json")}' for name in names))
-    if search_tool_status is not None:
-        search_context += "\n[이 실행의 도구 상태]\n" + json.dumps(search_tool_status, ensure_ascii=False)
-    from .search_budget import prompt as budget_prompt
-    search_context += budget_prompt(search_call_limit)
-    lane = assemble_search(
-        search_prompt_body=rendered.body, runtime_context=search_context,
-        max_chars=max_chars, attachments=[spec] if spec else [],
-    )
-    lanes = {LANE_SINGLE: lane}
-    spec_document = None if spec is None else {
-        "attachment_id": spec.attachment_id, "filename": spec.original_filename,
-        "sha256": spec.sha256, "page_count": spec.page_count, "char_count": len(spec_text),
-    }
+    def ceiling(byte_limit: int) -> AssembledPrompt:
+        return assemble(
+            max_chars=None,
+            evidence_bundle={retrieval.PLACEHOLDER_KEY: retrieval.render_placeholder(
+                replace(budget, max_evidence_bytes=byte_limit), []
+            )},
+            **common,
+        )
+
+    # Provider 가 감싸기 크기를 따로 세더라도 동일한 측정 함수로 검증한다.
+    low, high = 0, min(budget.evidence_byte_limit, budget.max_evidence_chars * 3)
+    while low < high:
+        middle = (low + high + 1) // 2
+        candidate = ceiling(middle)
+        fits_transport = provider_byte_budget is None or _payload_bytes(candidate, provider_measure) <= provider_byte_budget
+        fits_model = budget_for_model is None or model_limits.estimate_tokens(
+            candidate.system_prompt, candidate.user_message,
+            provider_id=provider_id, model=model,
+        ) <= budget_for_model.input_tokens
+        if fits_transport and fits_model:
+            low = middle
+        else:
+            high = middle - 1
+    budget = replace(budget, max_evidence_bytes=low)
+    placeholder = evidence_bundle is None
+    bundle = evidence_bundle
+    if placeholder:
+        # 실제 근거 패키지가 아직 없다(preflight). 예산만큼의 자리표로
+        # 크기를 잰다. 실행은 같은 예산을 넘지 못하므로 여기서 잰 값이
+        # 실제 크기의 상한이 된다.
+        bundle = {
+            retrieval.PLACEHOLDER_KEY: retrieval.render_placeholder(
+                budget, preflight_documents(attachments)
+            )
+        }
+    lane = assemble(max_chars=max_chars, evidence_bundle=bundle, **common)
+    model_input_gate(lane, budget_for_model)
     return AssemblyResult(
-        lanes=lanes,
-        spec_document=spec_document,
-        spec_text=spec_text,
-        search_prompt_sha=search_prompt.sha256(master_prompt),
-        search_prompt_id=search_prompt_id,
-        search_prompt_mode=rendered.mode,
-        strategy_boundary_neutralized=(
-            rendered.strategy_boundary_neutralized
-        ),
-        search_runtime_context_sha=hashlib.sha256(
-            search_context.encode("utf-8")
-        ).hexdigest(),
-        claim_boundary_neutralized=rendered.claim_boundary_neutralized,
-        spec_boundary_neutralized=rendered.spec_boundary_neutralized,
-        focus_boundary_neutralized=rendered.focus_boundary_neutralized,
+        lanes={LANE_SINGLE: lane},
+        delivery_plan=plan,
+        full_inline_bytes=full_bytes,
+        full_inline_chars=full_chars,
+        evidence_placeholder=placeholder,
+        evidence_budget=budget,
+        decision=decision,
     )

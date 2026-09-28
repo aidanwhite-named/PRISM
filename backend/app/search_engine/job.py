@@ -10,39 +10,34 @@ from ..models import ExecutionJob, ResultArtifact
 from ..enums import JobStatus, ErrorCode
 from ..execution.bus import BUS
 from ..patent_search import retention
-from .engine import Engine
-from .inference import Inference
-from .models import Limits, write_json
+from .autonomous import AutonomousSearch as Engine, SearchSession
+from .storage import write_json
 from .report import manifest, render
 
 
-async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, depth, values,
+async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, values,
                   model, reasoning_effort, strategy, attachments, focus):
-    limits = Limits.for_depth(depth, values)
     with session_scope() as session:
         current_job = session.get(ExecutionJob, job_id)
         prompt_metadata = {'prompt_id': current_job.prompt_id if current_job else '',
                            'prompt_name': current_job.prompt_name if current_job else '',
                            'prompt_sha256': hashlib.sha256(strategy.encode('utf-8')).hexdigest()}
     cancelled = lambda: job_id in runner._cancel_requested
-    inference = Inference(provider, job_id=job_id, directory=work_dir / 'inference', model=model,
-        reasoning_effort=reasoning_effort, emit=lambda kind, payload: runner._emit(job_id, kind, payload),
-        cancelled=cancelled, max_calls=limits.llm_calls, max_input_tokens=limits.input_tokens)
+    inference = SearchSession(provider, job_id=job_id, model=model, reasoning_effort=reasoning_effort,
+        emit=lambda kind, payload: runner._emit(job_id, kind, payload))
     specification = ''
     for attachment in attachments:
         if attachment.normalized_text_path:
             specification += Path(attachment.normalized_text_path).read_text(encoding='utf-8') + '\n'
-    # Specifications clarify vocabulary, but are not a second implicit claim.
-    spec_truncated = len(specification) > 6000
-    specification = specification[:6000]
-    from .planner import PLAN_SYSTEM
     import json
-    (work_dir / 'final_prompt.txt').write_text(PLAN_SYSTEM + '\n\n' + json.dumps({
-        'claim': claim, 'specification': specification, 'focus': focus,
-        'search_strategy': strategy}, ensure_ascii=False), encoding='utf-8')
+
+    def make_manifest(snapshot):
+        data = manifest(snapshot, claim=claim, provider=provider.id, model=model, **prompt_metadata)
+        data['input']['spec_document'] = {'filename': attachments[0].original_filename} if attachments else None
+        return data
 
     async def publish(snapshot):
-        data = manifest(snapshot, claim=claim, provider=provider.id, model=model, **prompt_metadata)
+        data = make_manifest(snapshot)
         text = render(snapshot)
         with session_scope() as session:
             job = session.get(ExecutionJob, job_id)
@@ -53,7 +48,7 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, depth, v
         await runner._emit(job_id, 'search_preview_ready', {'candidate_count': len(snapshot['candidates']),
                                                          'phase': snapshot['phase']})
 
-    engine = Engine(claim=claim, directory=work_dir, inference=inference, values=values, depth=depth,
+    engine = Engine(claim=claim, directory=work_dir, inference=inference, values=values,
                     cutoff=cutoff, strategy=strategy, specification=specification, focus=focus,
                     emit=publish, cancelled=cancelled)
     resume_path = work_dir / 'resume-search.json'
@@ -62,34 +57,34 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, depth, v
         engine.restore(checkpoint)
         inference.calls = list(checkpoint['snapshot']['usage'].get('stages', []))
     error = None
+    error_code = ErrorCode.PROCESS_ERROR
     try:
         await engine.run()
     except Exception as exc:
+        error_code = getattr(exc, 'code', ErrorCode.PROCESS_ERROR)
         error = type(exc).__name__ + ': ' + str(exc)[:500]
         engine.warnings.append(error)
         engine.stop_reason = 'engine_error'
     finally:
-        if spec_truncated:
-            engine.warnings.append('specification_context_limited_to_6000_characters; claim preserved')
         if cancelled():
             engine.stop_reason = 'cancelled'
+        engine.phase = 'complete'
+        engine.refresh()
         snapshot = engine.snapshot()
         if not snapshot['candidates'] and snapshot['warnings'] and not cancelled():
             error = error or '검색 후보를 확보하지 못했습니다. 채널·질의 계획 오류를 확인하십시오.'
-        if snapshot['classification']['status'] == 'incomplete' and not cancelled():
-            error = error or '분류 미완료: 선별 대상의 분류 응답을 모두 확보하지 못했습니다. 후보와 반환된 부분 분류는 보존했습니다.'
-        if error and engine.stop_reason != 'classification_incomplete' and not cancelled():
+        if error and not cancelled():
             engine.stop_reason = 'engine_error'
             snapshot = engine.snapshot()
-        engine.ledger.save()
-        data = manifest(snapshot, claim=claim, provider=provider.id, model=model, **prompt_metadata)
+        write_json(work_dir / 'candidates.json', snapshot['candidates'])
+        data = make_manifest(snapshot)
         text = render(snapshot)
         write_json(work_dir / 'engine.json', snapshot)
         write_json(work_dir / 'checkpoint.json', engine.checkpoint())
         write_json(work_dir / 'search_manifest.json', data)
         (work_dir / 'result.md').write_text(text, encoding='utf-8')
         status = JobStatus.CANCELLED if cancelled() else JobStatus.FAILED if error else JobStatus.SUCCEEDED
-        code = ErrorCode.CANCELLED if cancelled() else ErrorCode.PROCESS_ERROR if error else None
+        code = ErrorCode.CANCELLED if cancelled() else error_code if error else None
         with session_scope() as session:
             job = session.get(ExecutionJob, job_id)
             if job:
@@ -97,6 +92,7 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, depth, v
                 job.errors = [error] if error else []
                 job.search_manifest, job.result_text, job.usage = data, text, snapshot['usage']
                 job.final_prompt_path = str(work_dir / 'final_prompt.txt')
+                job.final_prompt_chars = snapshot.get('input_chars', 0)
                 job.search_manifest_error = error
                 job.completed_at = datetime.now(timezone.utc)
                 job.duration_ms = int(snapshot['elapsed_seconds'] * 1000)
@@ -104,11 +100,16 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, depth, v
                 if outcome:
                     job.cli_path, job.cli_version, job.cli_args = outcome.cli_path, outcome.cli_version, outcome.cli_args
                     job.exit_code, job.terminal_reason = outcome.exit_code, outcome.terminal_reason
+                    for stream in ('stdout', 'stderr'):
+                        path = work_dir / (stream + '.log')
+                        path.write_text(getattr(outcome, 'raw_' + stream, '') or '', encoding='utf-8')
+                        setattr(job, 'raw_' + stream + '_path', str(path))
                 from ..execution.runner import _evidence_artifact_ids
                 for aid in _evidence_artifact_ids(data):
                     retention.reference(session, job_id, aid)
                 for kind, name in [('result', 'result.md'), ('search_manifest', 'search_manifest.json'),
                                    ('search_engine', 'engine.json'), ('search_candidates', 'candidates.json'),
+                                   ('model_report', 'raw_response.txt'),
                                    ('search_trace', 'search_trace.jsonl')]:
                     path = work_dir / name
                     if path.exists():

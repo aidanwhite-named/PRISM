@@ -338,43 +338,6 @@ def assemble(
     )
 
 
-def assemble_search(
-    search_prompt_body: str,
-    runtime_context: str,
-    max_chars: int | None,
-    attachments: list[IngestedFile] | None = None,
-) -> AssembledPrompt:
-    """유사 문헌 검색 실행의 최종 프롬프트.
-
-    분석 경로와 조립 방식이 다르다. Master Prompt 도 청구항 섹션도 붙이지 않고,
-    첨부 본문을 별도 절로 덧붙이지도 않는다. 청구항과(넣었다면) 출원발명 문서는
-    이미 search_prompt.py 가 본문 안의 각자 경계 표시 사이에 넣어 두었다 —
-    여기서 다시 붙이면 경계 밖에 한 벌이 더 생긴다.
-
-    attachments 는 그래서 본문에 쓰이지 않고 manifest 에만 들어간다. 어떤 파일이
-    이 실행의 입력이었는지는 남아야 한다.
-
-    PRISM 은 여기서도 업무 지시를 덧붙이지 않는다. 시스템 프롬프트는 신뢰 경계와
-    증거 등급 계약이고, 무엇을 검색해서 어떻게 정리할지는 프롬프트 파일에 있다.
-    """
-    attachments = included_attachments(attachments or [])
-    user_message = search_prompt_body.strip() + "\n"
-    system_prompt = runtime_context.strip()
-
-    total = len(user_message) + len(system_prompt)
-    char_gate(total, max_chars)
-
-    digest = hashlib.sha256(
-        (system_prompt + "\n\x00\n" + user_message).encode("utf-8")
-    ).hexdigest()
-
-    return AssembledPrompt(
-        system_prompt=system_prompt,
-        user_message=user_message,
-        sha256=digest,
-        total_chars=total,
-        manifest=[item.manifest_entry() for item in attachments],
-    )
 
 
 def estimate_total_chars(

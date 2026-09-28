@@ -72,27 +72,27 @@ def test_no_tools_policy_does_not_enable_search(tmp_path: Path) -> None:
 
 def test_only_enabled_job_checkpoint_tool_is_preapproved(tmp_path):
     import tomllib
-    from app.search_mcp_server import _SAVE_CANDIDATES
+    from app.search_mcp_server import _SAVE_FINDINGS
     servers = {'prism-search': {'command': 'python', 'args': ['-m', 'app.search_mcp_server']}}
     for names in (('mcp__prism-search__epo_search',),
-                  ('mcp__prism-search__save_candidates', 'mcp__prism-search__epo_search')):
+                  ('mcp__prism-search__save_findings', 'mcp__prism-search__epo_search')):
         args = CodexCliProvider().build_args(_request(tmp_path,
             tool_policy=replace(CODEX_WEB_SEARCH, mcp_tools=names), mcp_servers=servers))
         overrides = [args[i + 1] for i, arg in enumerate(args) if arg == '-c']
         config = tomllib.loads('\n'.join(overrides))['mcp_servers']['prism-search']
         assert config['default_tools_approval_mode'] == 'writes'
-        assert config.get('tools', {}) == ({'save_candidates': {'approval_mode': 'approve'}}
-            if 'mcp__prism-search__save_candidates' in names else {})
+        assert config.get('tools', {}) == ({'save_findings': {'approval_mode': 'approve'}}
+            if 'mcp__prism-search__save_findings' in names else {})
         assert args[args.index('--sandbox') + 1] == 'read-only'
-    assert _SAVE_CANDIDATES['annotations']['readOnlyHint'] is False
+    assert _SAVE_FINDINGS['annotations']['readOnlyHint'] is False
 
 
 def test_checkpoint_denial_event_identifies_the_exact_tool():
     events = _feed(CodexStreamParser(), {'type': 'item.completed', 'item': {
-        'id': 'save-1', 'type': 'mcp_tool_call', 'server': 'prism-search', 'tool': 'save_candidates',
+        'id': 'save-1', 'type': 'mcp_tool_call', 'server': 'prism-search', 'tool': 'save_findings',
         'status': 'failed', 'error': {'message': 'MCP tool call requires approval, but approval policy is never'}}})
     error = next(payload for kind, payload in events if kind == 'tool_error')
-    assert error['name'] == 'mcp__prism-search__save_candidates'
+    assert error['name'] == 'mcp__prism-search__save_findings'
     assert error['id'] == 'save-1'
     assert 'approval policy is never' in error['detail']
 
@@ -348,20 +348,8 @@ def test_broken_json_does_not_discard_earlier_state() -> None:
 # ------------------------------------------------- 도구 능력에 맞춘 증거 계약
 
 
-def test_codex_search_context_never_mentions_tools_it_does_not_have() -> None:
-    """없는 도구를 전제한 문구가 남으면 열지도 않은 페이지에 등급이 붙는다."""
-    from app.config import CODEX_SEARCH_RUNTIME_CONTEXT
-
-    assert "WebFetch" not in CODEX_SEARCH_RUNTIME_CONTEXT
-    assert "WebSearch" not in CODEX_SEARCH_RUNTIME_CONTEXT
-    assert "read_url_content" not in CODEX_SEARCH_RUNTIME_CONTEXT
-    assert "web_search" in CODEX_SEARCH_RUNTIME_CONTEXT
 
 
-def test_codex_native_url_lookup_never_claims_verified_body():
-    from app.config import CODEX_SEARCH_RUNTIME_CONTEXT as text
-    assert "본문 열람 성공을 검증할 수 없습니다" in text
-    assert "직접 인용" in text
 
 
 def test_codex_search_tool_name_is_counted_by_the_manifest() -> None:
@@ -373,14 +361,6 @@ def test_codex_search_tool_name_is_counted_by_the_manifest() -> None:
     assert "web_search" not in search_manifest.FETCH_TOOL_NAMES
 
 
-def test_runner_picks_the_codex_context_for_the_codex_policy() -> None:
-    from app.config import CODEX_SEARCH_RUNTIME_CONTEXT
-    from app.execution.runner import _SEARCH_CONTEXT_BY_POLICY
-
-    assert (
-        _SEARCH_CONTEXT_BY_POLICY[CODEX_WEB_SEARCH.name]
-        is CODEX_SEARCH_RUNTIME_CONTEXT
-    )
 
 
 # --------------------------------------------- web_search 는 검색과 URL 조회를 겸한다

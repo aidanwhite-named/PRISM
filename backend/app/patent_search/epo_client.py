@@ -6,15 +6,10 @@
 XML 을 읽지 않는다. 그건 epo_parser 가 보존된 아티팩트에서 다시 할 일이다.
 여기서 파싱해서 넘기면, 검증기가 대조할 '원본'이 이미 한 번 가공된 것이 된다.
 
-시간 예산이 둘인 이유
----------------------
-    timeout             HTTP 요청 **하나**가 기다리는 시간
-    http_budget_seconds 이 클라이언트가 쓰는 **네트워크 시간의 총합**
-
-EPO 채널 전체의 벽시계(LLM 턴 포함)와 네트워크 시간은 다른 축이다. 하나로
-묶으면 모델이 오래 생각한 실행에서 OPS 호출이 남은 예산 없이 시작되고, 그
-실패가 "EPO 가 느리다"로 기록된다. 채널 벽시계는 이 클라이언트를 부르는
-쪽(3단계 러너)이 따로 건다.
+요청 대기시간
+------------
+각 HTTP 요청에 timeout을 적용한다. 검색 전체 제한시간은 검색 세션이 관리한다.
+출처별 누적 통신시간은 관측값이며 추가 차단 기준으로 사용하지 않는다.
 
 토큰
 ----
@@ -59,7 +54,9 @@ CONSTITUENTS = (
 )
 
 # 질의당 결과 상한. 사용자 확정값.
-MAX_RESULTS_PER_QUERY = 20
+MAX_RESULTS_PER_QUERY = 100  # OPS maximum page size, not a relevance cutoff.
+DEFAULT_RESULTS_PER_QUERY = 20
+MAX_SEARCH_RESULTS = 2000
 # 응답 하나를 읽는 상한. 청구항·설명은 클 수 있지만 무한하지는 않다. 넘으면
 # 자르지 않고 실패시킨다 — 잘린 바이트를 아티팩트로 보존하면 그 해시는 원본의
 # 해시가 아니고, 그 위에서 내린 판정은 재현되지 않는다.
@@ -81,7 +78,6 @@ PERMANENT_FAULT_CODES = frozenset({"SERVER.DomainAccess"})
 MAX_RETRY_SLEEP_SECONDS = 30.0
 
 DEFAULT_TIMEOUT = 30.0
-DEFAULT_HTTP_BUDGET_SECONDS = 120.0
 # 만료 직전에 쓰다가 401 을 맞지 않도록 미리 바꾼다.
 TOKEN_REFRESH_MARGIN_SECONDS = 60.0
 
@@ -116,8 +112,6 @@ class OpsAuthError(OpsError):
     """자격증명이 거절되었다. 재시도로 풀리지 않는다."""
 
 
-class OpsBudgetExceeded(OpsError):
-    """이 클라이언트에 허용된 네트워크 시간을 다 썼다."""
 
 
 class OpsUnavailable(OpsError):
@@ -314,7 +308,6 @@ class OpsClient:
         _default_transport
     )
     timeout: float = DEFAULT_TIMEOUT
-    http_budget_seconds: float = DEFAULT_HTTP_BUDGET_SECONDS
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
 
@@ -333,20 +326,7 @@ class OpsClient:
         return f"<OpsClient spent={self._spent_seconds:.1f}s calls={len(self.calls)}>"
 
     # --- 예산 -----------------------------------------------------------
-    @property
-    def remaining_budget(self) -> float:
-        if not self.http_budget_seconds:
-            return float("inf")
-        return max(0.0, self.http_budget_seconds - self._spent_seconds)
 
-    def _require_budget(self) -> float:
-        remaining = self.remaining_budget
-        if remaining <= 0:
-            raise OpsBudgetExceeded(
-                f"EPO OPS 네트워크 시간 예산({self.http_budget_seconds:.0f}초)을 "
-                "다 썼습니다."
-            )
-        return min(self.timeout, remaining) if remaining != float("inf") else self.timeout
 
     # --- 토큰 -----------------------------------------------------------
     def _token_valid(self) -> bool:
@@ -433,7 +413,7 @@ class OpsClient:
         예약은 무슨 일이 있어도 풀려야 하므로 finally 에서 정산한다. 남으면
         쓰지도 않은 양이 한도를 차지한 채 굳는다.
         """
-        timeout = self._require_budget()
+        timeout = self.timeout
         reservation = self.ledger.reserve(MAX_RESPONSE_BYTES)
         started = self.clock()
         try:
@@ -554,15 +534,13 @@ class OpsClient:
                 wait = _retry_after_seconds(response.headers)
                 if wait is None:
                     wait = 1.0 * (retries + 1)
-                if wait > MAX_RETRY_SLEEP_SECONDS or wait > self.remaining_budget:
+                if wait > MAX_RETRY_SLEEP_SECONDS:
                     raise OpsUnavailable(
                         f"EPO OPS 가 {wait:.0f}초 뒤 재시도를 요구했습니다. "
-                        "남은 예산으로는 기다릴 수 없어 EPO 채널을 중단합니다."
+                        "단일 요청의 재시도 대기시간을 넘어 이번 요청을 중단합니다."
                     )
                 retries += 1
-                # 기다린 시간도 예산에서 깎는다. 깎지 않으면 재시도를 여러 번
-                # 하는 동안 120초 계약을 조용히 넘긴다 — 예산은 "요청에 쓴
-                # 시간"이 아니라 "이 채널이 붙잡고 있은 시간"이다.
+                # Record time spent waiting for the source to permit a retry.
                 self._spent_seconds += wait
                 self.sleep(wait)
                 # 방금 응답이 black 을 보고했으면 더 보내지 않는다.
@@ -615,13 +593,13 @@ class OpsClient:
             )
 
     # --- 공개 호출 -------------------------------------------------------
-    def search(self, cql: str, *, begin: int = 1, end: int = MAX_RESULTS_PER_QUERY):
+    def search(self, cql: str, *, begin: int = 1, end: int = DEFAULT_RESULTS_PER_QUERY):
         """검색 한 번. cql 은 epo_cql.build 가 만든 문자열이어야 한다."""
         if not str(cql or "").strip():
             raise OpsError("검색식이 비어 있습니다.")
-        begin = max(1, int(begin))
-        end = min(int(end), begin + MAX_RESULTS_PER_QUERY - 1)
-        if end < begin:
+        begin = int(begin)
+        end = min(int(end), begin + MAX_RESULTS_PER_QUERY - 1, MAX_SEARCH_RESULTS)
+        if not 1 <= begin <= MAX_SEARCH_RESULTS or end < begin:
             raise OpsError("결과 범위가 올바르지 않습니다.")
         query = urllib.parse.urlencode({"q": cql, "Range": f"{begin}-{end}"})
         url = f"{SEARCH_URL}?{query}"
@@ -688,7 +666,6 @@ class OpsClient:
             "calls_by_kind": by_kind,
             "faults": faults,
             "http_seconds": round(self._spent_seconds, 3),
-            "http_budget_seconds": self.http_budget_seconds,
             "quota": self.ledger.snapshot(),
         }
 

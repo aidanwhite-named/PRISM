@@ -88,7 +88,7 @@ _MCP_DISPATCH_TOOL = "call_mcp_tool"
 _MCP_INPUT_KEYS = {
     "source_fetch": ("url", "section", "offset", "max_chars"),
     "citation_search": ("identifier", "direction", "begin"),
-    "save_candidates": (),
+    "save_findings": (),
     "search_capabilities": (),
     "epo_search": ("query", "max_results"),
     "epo_fetch": ("publication_number", "constituent"),

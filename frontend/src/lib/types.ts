@@ -316,7 +316,7 @@ export interface SearchManifestV14 {
   time_budget?: { total_seconds: number; search_seconds: number; classification_reserve_seconds: number; save_reserve_seconds: number };
   deadline_classification?: { attempted: boolean; completed: boolean; reason: string; candidate_count?: number } | null;
   engine?: ProgressiveSearchSnapshot;
-  version: 14; status: "complete" | "incomplete" | "classification_incomplete" | "verification_incomplete" | "search_incomplete" | "in_progress"; provider: string; model: string;
+  version: 14 | 15; status: "complete" | "incomplete" | "classification_incomplete" | "verification_incomplete" | "search_incomplete" | "in_progress"; provider: string; model: string;
   quality?: { execution_status: string; verification_status: string; search_coverage: string;
     search_audit?: { status: "incomplete" | "recorded"; unaccounted_fetches: string[];
       broad_searches: unknown[]; missing_review_fields: string[]; reported_review: SearchReview };
@@ -328,7 +328,7 @@ export interface SearchManifestV14 {
   input: { claim_text: string; spec_document: unknown; search_focus: GapSearchFocus | null };
   prompt: { id: string; name: string; sha256: string; runtime_context_sha256: string };
   started_at: string; completed_at: string;
-  limits: { max_tool_calls: number; timeout_seconds: number };
+  limits: { seconds?: number; max_tool_calls?: number; timeout_seconds?: number };
   tool_availability: Record<string, { status: "available" | "disabled" | "not_configured" |
     "not_implemented" | "unsupported_transport" | "not_registered" | "unverified" | "unreachable"; detail: string }>;
   tool_journal: Record<string, unknown>[];
@@ -352,6 +352,8 @@ export interface LegacySearchManifest {
 export type SearchManifest = SearchManifestV14 | LegacySearchManifest;
 
 export interface ProgressiveSearchSnapshot {
+  mode?: "autonomous";
+  summary?: string;
   classification?: { status: "complete" | "incomplete" | "not_applicable"; target_count: number; reviewed_count: number; unreviewed_count: number };
   verified_match?: boolean;
   can_continue?: boolean;
@@ -360,6 +362,9 @@ export interface ProgressiveSearchSnapshot {
   route?: { lane: string; outcome?: string; reason?: string; seconds?: number }[];
   features: { id: string; text: string; relation: string }[];
   candidates: { id: string; document_number: string; title: string; url: string;
+      reason?: string; difference?: string; reported_scope?: string; authors?: string;
+      observed_scope?: string; observed_scopes?: string[];
+      source_receipts?: { call_id: string; tool: string; scope: string; observed_scopes?: string[] }[];
       publication_date: string; family_id: string; data_status: string; date_status: string;
       document_classification?: { group: SearchGroup; reason: string; basis: string; evidence_status: string;
         status?: "classified" | "insufficient_information" | "low_relevance"; provisional?: boolean } | null;
@@ -643,13 +648,13 @@ export interface HistoryItem {
 
 export interface AppSettings {
   values: {
-    progressive_search_enabled?: boolean;
     max_file_size_bytes: number;
     max_total_upload_bytes: number;
     max_files_per_job: number;
     /** 0 = 제한 없음(기본값). */
     max_inline_chars: number;
     default_timeout_seconds: number;
+    search_timeout_seconds?: number;
     max_concurrency_per_provider: number;
     runtime_context: string;
     runtime_context_enabled: boolean;
@@ -707,10 +712,8 @@ export interface AppSettings {
      */
     epo_consumer_secret: string;
     /** OPS HTTP 대기 시간의 총합. 실행 전체 시간과 별개인 내부 안전 한도. */
-    epo_http_budget_seconds: number;
     /** 0 = 시간당 사용량을 관측·표시만 하고 차단하지 않음. 주간 한도는 계약값이라 별도. */
     epo_hourly_quota_bytes: number;
-    epo_max_detail_fetches: number;
     /** PRISM 이 관측해 적는 값. 사용자가 PUT 으로 못 고친다(사용량 되돌리기 방지). */
     epo_quota_state: Record<string, unknown>;
     /**
@@ -726,7 +729,6 @@ export interface AppSettings {
     /** 질의 하나가 받아 오는 결과 건수 상한. 두 DB 각각에 적용된다. */
     literature_max_results_per_query: number;
     /** 서지 API HTTP 대기 시간의 총합(초). */
-    literature_http_budget_seconds: number;
   };
   warnings: string[];
   data_dir: string;
@@ -826,7 +828,7 @@ export type Preflight = {
   over_bytes: boolean;
   blocked: boolean;
   /** 이 입력이 실제로 어떻게 전달되는가. runner 와 같은 판정 함수를 쓴다. */
-  delivery_plan: DeliveryPlan | "progressive_search";
+  delivery_plan: DeliveryPlan | "autonomous_search";
   /** 왜 그 방식을 골랐는가. 화면이 문장을 새로 만들지 않고 이 값을 그대로 쓴다. */
   selection_reason: string;
   /** 전체 인라인으로 넣었을 때의 크기. auto 가 왜 좁혔는지 설명한다. */

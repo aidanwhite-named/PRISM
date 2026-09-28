@@ -65,62 +65,16 @@ class ProbeResult:
 
 @dataclass(frozen=True)
 class ToolPolicy:
-    """이 실행에서 허용되는 도구. 작업 종류마다 하나씩 고정된다.
-
-    v0.1 은 '도구 없음'을 불리언 하나로 표현했다. 검색 작업이 생기면서
-    '허용 목록'이라는 세 번째 상태가 필요해졌는데, 전역 설정
-    (fail_on_tool_use) 을 느슨하게 푸는 방식은 쓰지 않는다. 그렇게 하면
-    기존 PDF 분석의 fail-closed 까지 같이 풀린다.
-
-    대신 실행마다 정책을 명시적으로 붙이고, 판정은 그 정책에 대해서만 한다.
-    기본값은 도구 없음이다. 정책을 지정하지 않은 호출 경로는 예전과 똑같이
-    도구가 전부 꺼진 채 실행된다(fail-closed).
-
-      allowed_tools  : 이 실행이 광고해도 되고 호출해도 되는 도구. 비어 있으면
-                       도구 전면 금지.
-      required_tools : 최소 한 번은 실제로 호출되어야 하는 도구. 하나도 부르지
-                       않았으면 실행을 성공으로 두지 않는다.
-      max_tool_calls : 도구 호출 총 횟수 상한. 0 이면 상한 없음. 넘으면
-                       Provider 가 프로세스를 끊는다.
-      enforce_advertised_allowlist : Provider 가 모델에게 노출한 도구 목록까지
-                       allowed_tools 와 일치해야 하는가. Claude 는 --tools 로 이를
-                       강제할 수 있다. agy 는 모든 도구를 항상 노출하므로 False 이며,
-                       이 경우 실제 호출만 사후 검사한다.
-      content_read_tools : 이름만으로는 허용하지 않고, 인자 범위까지 봐야 허용
-                       여부가 갈리는 도구. 가져온 페이지 본문을 파일로만 돌려주는
-                       Provider 가 여기에 해당한다. Provider 가 인자를 검사해
-                       call["scope_ok"] 를 True 로 표시한 호출만 허용된다.
-      max_search_calls : **검색어로 부른** 호출의 상한. 0 이면 상한 없음.
-                       max_tool_calls 와 따로 센다. 도구 하나가 검색과 URL
-                       조회를 겸하는 Provider(Codex web_search)가 있어서,
-                       도구 이름만 세면 URL 을 몇 개 열어 보는 것으로 검색
-                       라운드가 마른다.
-      max_url_lookup_calls : **URL 로 부른** 호출의 상한. 0 이면 상한 없음.
-                       성공이 아니라 **시도**를 센다 — 이 Provider 들은 열람
-                       성공 여부를 구조화된 형태로 알려주지 않으므로, 성공만
-                       세는 예산은 영원히 소진되지 않는다.
-      max_content_read_calls : 위 도구의 호출 상한. 검색 호출 상한과 따로 센다.
-                       페이지 하나를 100줄씩 나눠 읽는 것과 검색을 100번 하는
-                       것은 다른 행동이고, 한 예산에 섞으면 본문을 성실히 읽을수록
-                       검색 예산이 말라 버린다.
-
-    도메인 제한은 여기에 없다. Claude CLI 는 WebFetch 에만 도메인 규칙을 걸 수
-    있고 WebSearch 에는 걸 수 없으므로, PRISM 이 '검색 도메인을 제한한다'고
-    주장할 근거가 없다. 없는 보증을 필드로 만들지 않는다.
-    """
+    """Allowed source tools and argument scopes for this execution."""
 
     name: str
     allowed_tools: tuple[str, ...] = ()
     required_tools: tuple[str, ...] = ()
-    max_tool_calls: int = 0
     enforce_advertised_allowlist: bool = True
     content_read_tools: tuple[str, ...] = ()
-    max_content_read_calls: int = 0
-    max_search_calls: int = 0
-    max_url_lookup_calls: int = 0
     # MCP tools are kept separate from built-ins because Claude's ``--tools``
     # flag only accepts built-in names.  They are still part of the enforced
-    # allow-list and the same total call budget.
+    # allow-list.
     mcp_tools: tuple[str, ...] = ()
 
     @property
@@ -189,7 +143,6 @@ WEB_SEARCH = ToolPolicy(
     name="web_search",
     allowed_tools=("WebSearch", "WebFetch"),
     required_tools=("WebSearch",),
-    max_tool_calls=40,
 )
 
 # agy 검색 실행. agy 는 search_web/read_url_content 를 실제로 제공하지만
@@ -208,10 +161,8 @@ AGY_WEB_SEARCH = ToolPolicy(
     name="agy_web_search",
     allowed_tools=("search_web", "read_url_content"),
     required_tools=("search_web",),
-    max_tool_calls=40,
     enforce_advertised_allowlist=False,
     content_read_tools=("view_file",),
-    max_content_read_calls=40,
 )
 
 # Codex 검색 실행. Codex 는 `[tools]` 설정으로 web_search 를 켜고 끌 수 있지만
@@ -229,23 +180,15 @@ AGY_WEB_SEARCH = ToolPolicy(
 # 구성 대응표의 page_text 행은 여전히 만들어질 수 없다. 열람 성공을 판정할
 # 구조화된 신호가 생기기 전까지는 스니펫 기반 후보 탐색 전용이다.
 #
-# 예산이 세 층인 이유: 도구 이름 하나로 두 가지 행동을 하므로, 이름만 세면
-# URL 을 스무 개 열어 보는 것만으로 검색 예산이 마른다.
 CODEX_WEB_SEARCH = ToolPolicy(
     name="codex_web_search",
     allowed_tools=("web_search",),
     required_tools=("web_search",),
-    # 1층: 시작 이벤트 기준 전체 hard cap. 시작 시점에는 query 가 비어 있어
-    # 종류를 모르므로, 종류별 예산만으로는 폭주를 막을 수 없다.
-    max_tool_calls=40,
-    # 2층: 검색어 호출. 3층: URL 조회 호출. 둘 다 완료 이벤트 기준이다.
-    max_search_calls=40,
-    max_url_lookup_calls=20,
     enforce_advertised_allowlist=False,
 )
 
 PRISM_MCP_TOOL_NAMES = (
-    "source_fetch", "citation_search", "save_candidates", "start_collection", "collect_results",
+    "source_fetch", "citation_search", "save_findings",
     "search_capabilities",
     "epo_search",
     "epo_fetch",
@@ -332,12 +275,6 @@ class ExecutionOutcome:
     # 도구 호출 감사 기록. 이름·시각·요약된 입력·성공 여부.
     # 검색 작업의 "실제 검색어"는 모델의 자기 보고가 아니라 여기서 온다.
     tool_calls: list[dict] = field(default_factory=list)
-    # 정책의 max_tool_calls 를 넘겨서 PRISM 이 프로세스를 끊었다.
-    tool_budget_exceeded: bool = False
-    # 정책의 max_content_read_calls 를 넘겨서 PRISM 이 프로세스를 끊었다.
-    # 검색 상한과 따로 센다 — 사용자에게 "검색을 줄여라"와 "본문 읽기를
-    # 줄여라"는 다른 지시다.
-    content_read_budget_exceeded: bool = False
 
 
 # 실행 중 진행 상황을 밖으로 흘려보내는 콜백.

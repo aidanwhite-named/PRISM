@@ -28,7 +28,6 @@ from app.evaluation.evaluator import evaluate
 from app.providers.agy_cli import (
     audit_content_reads,
     content_artifact_step,
-    split_tool_calls,
 )
 from app.providers.agy_stream import AgyStreamParser
 from app.providers.base import AGY_WEB_SEARCH, ExecutionOutcome
@@ -195,26 +194,8 @@ def test_fetch_without_any_read_is_not_marked_as_read(tmp_path) -> None:
 # ------------------------------------------------------------------ 예산 분리
 
 
-def test_content_reads_do_not_consume_the_search_budget(tmp_path) -> None:
-    """2026-08-25 실행의 실제 호출 구성. 검색 예산으로는 죽지 않아야 한다."""
-    calls = (
-        [{"name": "search_web"}] * 4
-        + [{"name": "read_url_content"}] * 3
-        + [{"name": "view_file"}] * 14
-    )
-    search_calls, content_calls = split_tool_calls(
-        calls, AGY_WEB_SEARCH.content_read_tools
-    )
-    assert (search_calls, content_calls) == (7, 14)
-    # 그날 죽은 이유가 이것이었다: 21 > 20.
-    assert len(calls) > 20
-    assert search_calls <= 20
 
 
-def test_out_of_scope_reads_still_count_as_content_reads() -> None:
-    """위반은 정책 검사에서 잡는다. 검색 예산에 얹어 두 번 벌주지 않는다."""
-    calls = [{"name": "search_web"}, {"name": "view_file", "scope_ok": False}]
-    assert split_tool_calls(calls, AGY_WEB_SEARCH.content_read_tools) == (1, 1)
 
 
 # ------------------------------------------------------------------ 정책 판정
@@ -284,61 +265,3 @@ def test_scope_does_not_open_other_tools() -> None:
             )
         )
         assert verdict.error_code == ErrorCode.TOOL_POLICY_VIOLATION, name
-
-
-def test_content_read_budget_is_reported_separately() -> None:
-    """사용자가 받아야 할 지시가 다르다: 검색이 아니라 문헌 수를 줄여야 한다."""
-    verdict = evaluate(
-        _outcome(
-            cancelled=True,
-            content_read_budget_exceeded=True,
-            tool_uses=["search_web", "view_file"],
-            tool_calls=[
-                {"name": "search_web"},
-                {"name": "view_file", "scope_ok": True},
-            ],
-        )
-    )
-    assert verdict.status == JobStatus.FAILED
-    assert verdict.error_code == ErrorCode.SEARCH_BUDGET_EXCEEDED
-    assert "본문 읽기" in verdict.errors[-1]
-
-
-
-
-
-def test_agy_context_tells_the_model_that_fetch_returns_a_path() -> None:
-    """이걸 안 알려주면 모델은 포인터를 받고 "페이지를 봤다"고 착각한다.
-
-    2026-08-25 06:34 실행이 그랬다 — 5건을 가져와 2건만 읽었고, 읽지 않은 3건에
-    쓴 대응표를 PRISM 이 통째로 버렸다.
-    """
-    from app.config import AGY_SEARCH_RUNTIME_CONTEXT as text
-
-    assert "content.md" in text
-    assert "view_file" in text
-    assert "가져오기만 하고 읽지 않은" in text
-    # Claude 도구 이름이 남아 있으면 모델이 없는 도구를 부른다.
-    assert "WebFetch" not in text
-    assert "WebSearch" not in text
-
-
-def test_agy_context_keeps_model_explanations_separate_from_quotes():
-    from app.config import AGY_SEARCH_RUNTIME_CONTEXT as text
-    assert "직접 인용을 주장하지" in text
-    assert "기술적 설명을 남길 수" in text
-
-
-def test_agy_context_does_not_demand_reading_every_candidate() -> None:
-    """모든 후보를 열라고 하면 도구 호출이 폭증하고 예산이 마른다.
-
-    열지 못한 후보를 미확인 단서로 남기는 것은 정상 동작이다.
-    """
-    from app.config import AGY_SEARCH_RUNTIME_CONTEXT as text
-
-    assert "모든 후보를 다 열어야 한다는 뜻이 아닙니다" in text
-
-
-def test_agy_context_contains_no_other_providers_native_tool_names():
-    from app.config import AGY_SEARCH_RUNTIME_CONTEXT as text
-    assert "WebSearch" not in text and "WebFetch" not in text

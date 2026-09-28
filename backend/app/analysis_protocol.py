@@ -54,7 +54,7 @@ INSTRUCTIONS = f"""# PRISM 기계 판독 블록
 
 ## 문헌 매핑 블록
 
-보고서 맨 마지막에 한 번만 출력한다. 번호를 부여한 모든 문헌에 대해 `citation_number`는 표의 번호, `attachment`는 첨부의 `ATT-02`형 자료 번호, `document_number`는 확인된 고유 문헌번호를 쓴다. UUID·해시는 쓰지 않는다. 논문처럼 고유 문헌번호를 확인하지 못한 경우 `document_number`에 `문헌번호 확인 불가`를 쓰고, 첨부 번호로 문헌을 연결한다. 문헌번호가 없다는 이유로 항목이나 블록을 생략하지 않는다. 한 줄 JSON이며 코드펜스를 쓰지 않는다.
+보고서 맨 마지막에 한 번만 출력한다. 번호를 부여한 모든 문헌에 대해 `citation_number`는 표의 번호, `attachment`는 첨부의 `ATT-02`형 자료 번호, `document_number`는 확인된 고유 문헌번호를 쓴다. UUID·해시는 쓰지 않는다. 논문처럼 고유 문헌번호를 확인하지 못한 경우 `document_number`에 `문헌번호 확인 불가`를 쓰고, 첨부 번호로 문헌을 연결한다. 문헌번호가 없다는 이유로 항목이나 블록을 생략하지 않는다. 한 줄 JSON이며 코드펜스를 쓰지 않는다. JSON 다음 줄에 아래 예시의 종료 표식까지 반드시 출력한다.
 
 {_MAPPING_OPEN}
 {{"items":[{{"citation_number":1,"attachment":"ATT-02","document_number":"KR10-1234567"}}]}}

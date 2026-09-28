@@ -23,6 +23,7 @@ EDITABLE_KEYS = frozenset(
         "max_files_per_job",
         "max_inline_chars",
         "default_timeout_seconds",
+        "search_timeout_seconds",
         "max_concurrency_per_provider",
         "runtime_context",
         "runtime_context_enabled",
@@ -48,16 +49,10 @@ EDITABLE_KEYS = frozenset(
         "kipris_integration_enabled",
         "kipris_api_key",
         "epo_consumer_secret",
-        "epo_http_budget_seconds",
         "epo_hourly_quota_bytes",
-        "epo_max_detail_fetches",
         "literature_integration_enabled",
         "literature_openalex_api_key",
         "literature_max_results_per_query",
-        "literature_http_budget_seconds",
-        "progressive_search_enabled",
-        "progressive_search_web_enabled",
-        "progressive_search_limits",
         # epo_quota_state 는 일부러 없다. PRISM 이 관측해 적는 값이라
         # 사용자가 PUT 으로 고칠 수 있으면 사용량을 0 으로 되돌릴 수 있다.
             # 근거 패키지의 페이지 확장.
@@ -130,6 +125,7 @@ def _normalize_provider_map(value: Any) -> Any:
 
 _INT_KEYS = frozenset(
     {
+        "search_timeout_seconds",
         "max_file_size_bytes",
         "max_total_upload_bytes",
         "max_files_per_job",
@@ -147,15 +143,13 @@ _INT_KEYS = frozenset(
         "delivery_scale_documents",
         "delivery_scale_pages",
         "delivery_scale_claim_elements",
-        "epo_http_budget_seconds",
         "epo_hourly_quota_bytes",
-        "epo_max_detail_fetches",
         "literature_max_results_per_query",
-        "literature_http_budget_seconds",
     }
 )
 
 _LIMITS = {
+    "search_timeout_seconds": (10, 86_400),
     "max_file_size_bytes": (1024, 500 * 1024 * 1024),
     "max_total_upload_bytes": (1024, 2 * 1024 * 1024 * 1024),
     "max_files_per_job": (1, 200),
@@ -175,16 +169,13 @@ _LIMITS = {
     "delivery_scale_claim_elements": (1, 200),
     # OPS HTTP 대기 시간의 총합. 600초를 넘겨 잡을 이유가 없다 — 그보다 오래
     # 걸리는 것은 느린 것이 아니라 고장난 것이다.
-    "epo_http_budget_seconds": (10, 600),
     # 0 = 관측만. 켤 때의 하한을 1MB 로 둔다. 그보다 작으면 첫 검색에서 바로
     # 막혀서 "설정했더니 아무것도 안 된다"가 된다.
     # 상한은 주간 계약량과 같은 값으로 맞춘다. 시간당 상한이 주간 한도보다
     # 클 수 있으면 그 설정은 아무것도 막지 못한다.
     "epo_hourly_quota_bytes": (1000 * 1000, patent_search.WEEKLY_QUOTA_BYTES),
-    "epo_max_detail_fetches": (1, 50),
     # 응답 크기와 네트워크 대기 시간의 하드 상한. 후보 선정과 무관하다.
     "literature_max_results_per_query": (1, 20),
-    "literature_http_budget_seconds": (10, 600),
 }
 
 # 인용발명 문헌 전달 방식. enums.RetrievalMode 와 같은 값이며, 여기서 import
@@ -585,27 +576,11 @@ def get(session: Session, key: str) -> Any:
 
 
 def _coerce(key: str, value: Any) -> Any:
-    if key in ('progressive_search_enabled', 'progressive_search_web_enabled', 'kipris_integration_enabled'):
+    if key in ('kipris_integration_enabled',):
         if not isinstance(value, bool):
             raise ValueError(f'{key} 는 true 또는 false여야 합니다.')
         return value
-    if key == 'progressive_search_limits':
-        from .search_engine.models import Limits
-        from dataclasses import asdict
-        if not isinstance(value, dict) or set(value) - {'fast', 'deep', 'exhaustive'}:
-            raise ValueError('검색 예산은 fast/deep/exhaustive 객체여야 합니다.')
-        normalized = {}
-        for depth, limits in value.items():
-            defaults = asdict(Limits.for_depth(depth))
-            if not isinstance(limits, dict) or set(limits) - set(defaults):
-                raise ValueError('알 수 없는 검색 예산 필드입니다.')
-            if any(type(v) is not int or v < 1 for v in limits.values()):
-                raise ValueError('검색 예산은 양의 정수여야 합니다.')
-            bounded = asdict(Limits.for_depth(depth, {key: value}))
-            if any(bounded[name] != number for name, number in limits.items()):
-                raise ValueError('검색 예산이 허용된 상한을 넘습니다.')
-            normalized[depth] = dict(limits)
-        return normalized
+
     if key in _INT_KEYS:
         if key in _UNLIMITED_KEYS and (
             value is None or (isinstance(value, str) and not value.strip())

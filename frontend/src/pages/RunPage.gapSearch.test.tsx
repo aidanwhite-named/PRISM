@@ -118,7 +118,7 @@ it('shows the fixed search allowance without a precision option', async () => {
   render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
   await screen.findByRole('textbox', { name: '검색할 청구항' });
   expect(screen.queryByRole('checkbox', { name: /정밀 검색/ })).toBeNull();
-  expect(screen.getByText('심층 검색 · 최대 80회 / 5분')).toBeTruthy();
+  expect(screen.getByText('설정한 전체 시간 안에서 자율 검색')).toBeTruthy();
   expect(screen.queryByRole('combobox', { name: '검색 전략 프롬프트' })).toBeNull();
   expect(screen.queryByRole('combobox', { name: '검색 깊이' })).toBeNull();
   expect(screen.queryByText('검색 깊이')).toBeNull();
