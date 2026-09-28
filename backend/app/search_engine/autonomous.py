@@ -28,6 +28,13 @@ cutoff가 없으면 임의의 날짜 제한을 적용하지 마십시오. 있으
 공개일 미확인 후보는 그 사실을 표시하여 보존하십시오.
 실제로 검색한 문헌의 제목·출처 URL·확인된 식별번호와 관련성 이유를 남기십시오.
 초록·검색 단서만 본 것과 청구항·본문을 읽은 것을 구분하고 미확인 원문을 만들어 인용하지 마십시오.
+후보를 깊게 읽기 전에 먼저 청구항의 핵심 구성과 결합 관계를 빠르게 선별하십시오.
+검색 결과만으로 명백히 비관련인 문헌은 triage_status="rejected"로 저장하고 원문을 조회하지 마십시오.
+핵심 구성 또는 결합 관계가 두 가지 이상 확인되는 후보만 triage_status="candidate"로 두고
+정밀 원문 조회를 우선하십시오. 판단 자료가 부족하면 triage_status="hold"로 두고 단정하지 마십시오.
+정밀 조회가 끝난 후보는 review_stage="full_text" 또는 "core_components"로 표시하고,
+triage_reason에 선별 근거를, core_matches에 확인된 핵심 구성 관계를 짧게 남기십시오.
+처음부터 후보 전부를 정밀 조회하지 말고 핵심 관계가 확인되는 순서로 조회하십시오.
 추가 조회 후에는 해당 후보의 reported_scope도 다시 저장하고 최종 설명과 일치시키십시오.
 조회 요청 종류가 아니라 실제 응답에 포함된 자료를 기준으로 확인 범위를 표시하십시오.
 유용한 문헌을 찾으면 save_findings로 수시로 저장하십시오. 종료 시 관련성 순서로
@@ -147,6 +154,9 @@ class AutonomousSearch:
                 'publication_date': date, 'family_id': '', 'date_status': search_dates.evaluate(date, self.cutoff).status,
                 'data_status': 'MODEL_REPORTED', 'reason': row.get('reason') or row.get('snippet', ''),
                 'difference': row.get('difference', ''), 'reported_scope': row.get('reported_scope', ''),
+                'triage_status': row.get('triage_status', 'unreviewed'),
+                'triage_reason': row.get('triage_reason', ''), 'core_matches': row.get('core_matches', ''),
+                'review_stage': row.get('review_stage', 'metadata'),
                 'authors': row.get('authors', ''), **candidate_observation(row, self.source_calls),
                 'evidence': [], 'acquisitions': []})
         return {'version': 2, 'mode': 'autonomous', 'phase': self.phase, 'stop_reason': self.stop_reason,

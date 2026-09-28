@@ -30,11 +30,16 @@ def finding(value):
             if number and number.replace(' ', '').upper() != url_number:
                 return None
             number = url_number
-    return {**{key: value[key] for key in ('reason', 'difference', 'reported_scope', 'publication_date', 'authors')
+    return {**{key: value[key] for key in ('reason', 'difference', 'reported_scope', 'publication_date', 'authors',
+                                           'triage_status', 'triage_reason', 'core_matches', 'review_stage')
                if isinstance(value.get(key), str)},
             'title': title.strip(), 'url': url, 'document_number': number,
             'snippet': value.get('snippet') if isinstance(value.get('snippet'), str) else '',
-            'feature': value.get('feature') if isinstance(value.get('feature'), str) else 'context'}
+            'feature': value.get('feature') if isinstance(value.get('feature'), str) else 'context',
+            'triage_status': value.get('triage_status') if value.get('triage_status') in
+                ('unreviewed', 'candidate', 'hold', 'rejected', 'detailed') else 'unreviewed',
+            'review_stage': value.get('review_stage') if value.get('review_stage') in
+                ('metadata', 'core_components', 'full_text') else 'metadata'}
 
 
 class WebProgress:

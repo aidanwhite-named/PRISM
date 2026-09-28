@@ -364,6 +364,8 @@ export interface ProgressiveSearchSnapshot {
   candidates: { id: string; document_number: string; title: string; url: string;
       reason?: string; difference?: string; reported_scope?: string; authors?: string;
       observed_scope?: string; observed_scopes?: string[];
+      triage_status?: "unreviewed" | "candidate" | "hold" | "rejected" | "detailed";
+      triage_reason?: string; core_matches?: string; review_stage?: "metadata" | "core_components" | "full_text";
       source_receipts?: { call_id: string; tool: string; scope: string; observed_scopes?: string[] }[];
       publication_date: string; family_id: string; data_status: string; date_status: string;
       document_classification?: { group: SearchGroup; reason: string; basis: string; evidence_status: string;

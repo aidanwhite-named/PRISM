@@ -12,7 +12,9 @@ STOPS = {'running': '검색 중', 'deadline': '시간 종료 · 확보한 후보
 def manifest(snapshot, *, claim, provider, model=None, prompt_id='', prompt_name='', prompt_sha256=''):
     candidates = [{'index': i, 'rank': i, 'doc_number': c['document_number'],
         'title': c['title'], 'url': c['url'], 'publication_date': c['publication_date'],
-        'note': c.get('reason', ''), 'reported_scope': c.get('reported_scope', '')}
+        'note': c.get('reason', ''), 'reported_scope': c.get('reported_scope', ''),
+        'triage_status': c.get('triage_status', 'unreviewed'), 'review_stage': c.get('review_stage', 'metadata'),
+        'triage_reason': c.get('triage_reason', ''), 'core_matches': c.get('core_matches', '')}
         for i, c in enumerate(snapshot['candidates'], 1)]
     reported = {'candidates': candidates}
     dates = search_dates.filter_candidates(reported, snapshot.get('cutoff'))
@@ -39,6 +41,12 @@ def render(snapshot):
                   cell(c.get('reason', '')), '']
         if c.get('difference'):
             lines += ['남은 차이·확인 사항: ' + cell(c['difference']), '']
+        lines += ['선별 상태: ' + cell(c.get('triage_status') or 'unreviewed') +
+                  ' · 검토 단계: ' + cell(c.get('review_stage') or 'metadata'), '']
+        if c.get('triage_reason'):
+            lines += ['선별 근거: ' + cell(c['triage_reason']), '']
+        if c.get('core_matches'):
+            lines += ['확인된 핵심 구성 관계: ' + cell(c['core_matches']), '']
         if c.get('observed_scope'):
             lines += ['프로그램이 확보한 자료: ' + cell(c['observed_scope']), '']
         lines += ['LLM이 보고한 확인 범위(작성 당시): ' + cell(c.get('reported_scope') or '미기재'), '']

@@ -22,6 +22,9 @@ export default function AutonomousResults({ data }: { data: ProgressiveSearchSna
       {safeLink(c.url) && <a href={c.url} target="_blank" rel="noreferrer">문헌 보기</a>}
       <p style={{ whiteSpace: "pre-wrap" }}>{c.reason}</p>
       {c.difference && <p>남은 차이·확인 사항: {c.difference}</p>}
+      <p>선별 상태: {c.triage_status || "unreviewed"} · 검토 단계: {c.review_stage || "metadata"}</p>
+      {c.triage_reason && <p>선별 근거: {c.triage_reason}</p>}
+      {c.core_matches && <p>확인된 핵심 구성 관계: {c.core_matches}</p>}
       {c.observed_scope && <p>프로그램이 확보한 자료: {c.observed_scope}</p>}
       <details><summary>AI가 보고한 확인 범위(작성 당시)</summary>
         <p>LLM이 보고한 확인 범위: {c.reported_scope || "미기재"}</p>

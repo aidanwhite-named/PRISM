@@ -15,9 +15,12 @@ def normalize(raw):
     row = finding(raw)
     if row is None:
         raise ValueError('A finding needs a title and a valid public HTTPS source URL matching its identifier.')
-    for key in ('reason', 'difference', 'reported_scope', 'publication_date', 'authors'):
+    for key in ('reason', 'difference', 'reported_scope', 'publication_date', 'authors',
+                'triage_status', 'triage_reason', 'core_matches', 'review_stage'):
         row[key] = raw.get(key, '') if isinstance(raw.get(key, ''), str) else ''
     row['reason'] = row['reason'] or row['snippet']
+    row['triage_status'] = row.get('triage_status') or 'unreviewed'
+    row['review_stage'] = row.get('review_stage') or 'metadata'
     return row
 
 
