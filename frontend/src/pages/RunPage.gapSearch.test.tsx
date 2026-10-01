@@ -10,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { HashRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Job, Prompt, ProviderInfo } from "../lib/types";
+import type { Job, ProviderInfo } from "../lib/types";
 
 const JOB_ID = "job-1";
 
@@ -90,7 +90,6 @@ const provider = {
 
 vi.mock("../lib/api", () => ({
   api: {
-    listPrompts: vi.fn(async () => []),
     listProviders: vi.fn(async () => [provider]),
     probeProviders: vi.fn(async () => [provider]),
     settings: vi.fn(async () => ({
@@ -131,9 +130,6 @@ it('explains a failed CLI check and enables search after rechecking without losi
   vi.mocked(api.listProviders).mockResolvedValueOnce([unavailable]);
   vi.mocked(api.probeProviders).mockResolvedValueOnce([{ ...unavailable, usable: true, notes: [] }]);
   vi.mocked(api.settings).mockResolvedValueOnce({ values: { default_provider: 'codex' } } as never);
-  vi.mocked(api.listPrompts).mockResolvedValueOnce([]).mockResolvedValueOnce([
-    { id: 'search', name: '검색 전략', enabled: true, body: '검색' } as Prompt,
-  ]);
   window.location.hash = '#/search';
   render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
   const input = await screen.findByRole('textbox', { name: '검색할 청구항' });
@@ -183,9 +179,6 @@ describe("종속항 추가 분석", () => {
     } as unknown as Job;
     vi.mocked(api.historyItem).mockResolvedValueOnce(source);
     vi.mocked(api.listProviders).mockResolvedValueOnce([{ ...provider, usable: true }]);
-    vi.mocked(api.listPrompts).mockResolvedValueOnce([
-      { id: source.prompt_id, name: source.prompt_name, enabled: true, body: "분석" } as Prompt,
-    ]);
     window.location.hash = `#/analysis?job=${JOB_ID}`;
     render(<RunSessionProvider><HashRouter><RunPage kind="patent_analysis" /></HashRouter></RunSessionProvider>);
     await userEvent.click(await screen.findByRole("button", { name: "종속항 추가 분석" }));

@@ -25,8 +25,13 @@ def main():
             zipped.extractall(base)
         assert {name.split('/')[1] for name in names} == {'설치.cmd', '실행.cmd', '제거.cmd', 'app'}
         root = base / 'PRISM/app'
+        for name in ('task_instructions', 'comparison_review', 'structured_report',
+                     'report_consistency', 'report_repair', 'report_references'):
+            assert (root / f'backend/app/{name}.py').is_file(), name
+        assert not (root / 'backend/app/api/prompts.py').exists()
+        assert not (root / 'prompt').exists()
         env = dict(os.environ, PRISM_DATA_DIR=str(base / 'user data'),
-                   PRISM_PROMPT_DIR=str(root / 'prompt'), PYTHONUTF8='1')
+                   PYTHONUTF8='1')
         log_path = base / 'setup.log'
         with log_path.open('wb') as log:
             result = subprocess.run([powershell, '-NoProfile', '-ExecutionPolicy', 'Bypass',
@@ -67,9 +72,7 @@ def main():
                 script = re.search(r'src="(/assets/[^\"]+\.js)"', html).group(1)
                 with opener.open(url + script) as response:
                     assert len(response.read()) > 1000
-                with opener.open(url + '/api/prompts') as response:
-                    assert json.load(response)
-                print('PASS: source launcher, UI assets and prompts without global Python/Node PATH', flush=True)
+                print('PASS: source launcher, UI assets without global Python/Node PATH', flush=True)
             finally:
                 if process.poll() is None:
                     subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],

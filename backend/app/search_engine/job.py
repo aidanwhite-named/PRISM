@@ -26,9 +26,14 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, values,
     inference = SearchSession(provider, job_id=job_id, model=model, reasoning_effort=reasoning_effort,
         emit=lambda kind, payload: runner._emit(job_id, kind, payload))
     specification = ''
+    from . import input_documents
+    supplied_documents = {'identifiers': [], 'titles': [], 'urls': []}
     for attachment in attachments:
         if attachment.normalized_text_path:
-            specification += Path(attachment.normalized_text_path).read_text(encoding='utf-8') + '\n'
+            text = Path(attachment.normalized_text_path).read_text(encoding='utf-8')
+            specification += text + '\n'
+            for key, items in input_documents.from_specification(text).items():
+                supplied_documents[key] = list(dict.fromkeys([*supplied_documents[key], *items]))
     import json
 
     def make_manifest(snapshot):
@@ -51,6 +56,7 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, values,
     engine = Engine(claim=claim, directory=work_dir, inference=inference, values=values,
                     cutoff=cutoff, strategy=strategy, specification=specification, focus=focus,
                     emit=publish, cancelled=cancelled)
+    engine.input_documents = supplied_documents
     resume_path = work_dir / 'resume-search.json'
     if resume_path.exists():
         checkpoint = json.loads(resume_path.read_text(encoding='utf-8'))

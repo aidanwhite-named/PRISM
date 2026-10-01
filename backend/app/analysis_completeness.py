@@ -145,7 +145,9 @@ def check(
         "missing_components": missing,
         "inferred_components": inferred,
         "scope": scope,
-        "complete": bool(comparable and not missing) and not scope.get("limited", False),
+        "report_issues": (analysis_manifest or {}).get("report", {}).get("issues", []),
+        "complete": bool(comparable and not missing) and not scope.get("limited", False)
+        and not (analysis_manifest or {}).get("report", {}).get("issues"),
     }
 
 

@@ -23,7 +23,7 @@ export default function ResultView({ text, outputMode, streaming }: Props) {
   return (
     <div>
       {outputMode === "text" ? (
-        <div className="result-raw">{text || "(결과 없음)"}</div>
+        <div className="result-raw">{text.replace(/[“”]/g, '"') || "(결과 없음)"}</div>
       ) : (
         <div
           className="result"

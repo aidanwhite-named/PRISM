@@ -36,7 +36,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 
-from . import analysis_protocol, retrieval
+from . import analysis_protocol, retrieval, report_sources
 from .citation_mapping import AliasedAttachment, assign_aliases
 from .citation_mapping import ordered_attachments as citation_ordered_attachments
 from .citation_mapping import render as render_mapping
@@ -116,6 +116,7 @@ def _attachment_block(
     alias: str = "",
     *,
     retrieval_mode: bool = False,
+    excerpt_choices: bool = False,
 ) -> str:
     role_label = {
         AttachmentRole.APPLICATION: "출원발명 문서",
@@ -168,7 +169,8 @@ def _attachment_block(
         [
             *header,
             f"--- 본문 시작: {item.original_filename} ---",
-            body,
+            report_sources.render_full_text(alias, body)
+            if excerpt_choices and item.role != AttachmentRole.APPLICATION else body,
             f"--- 본문 끝: {item.original_filename} ---",
         ]
     )
@@ -205,7 +207,7 @@ def assemble(
     # 이 경로를 지나지 않으므로 검색 프롬프트에는 붙지 않는다.
     sections: list[str] = [
         "[MASTER PROMPT]",
-        analysis_protocol.apply(master_prompt).strip(),
+        analysis_protocol.apply(master_prompt, retrieved=evidence_bundle is not None).strip(),
     ]
 
     if claim_text.strip():
@@ -308,6 +310,7 @@ def assemble(
                         item,
                         alias_by_id.get(item.attachment_id, ""),
                         retrieval_mode=retrieval_mode,
+                        excerpt_choices=not analysis_protocol.declares_blocks(master_prompt),
                     )
                 )
                 sections.append("")

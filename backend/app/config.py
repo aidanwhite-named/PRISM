@@ -15,13 +15,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def default_prompt_dir() -> Path:
-    override = os.environ.get("PRISM_PROMPT_DIR")
-    if override:
-        return Path(override)
-    return PROJECT_ROOT / "prompt"
-
-
 def default_data_dir() -> Path:
     override = os.environ.get("PRISM_DATA_DIR")
     if override:
@@ -81,7 +74,6 @@ class Paths:
 
 
 PATHS = Paths()
-PROMPT_DIR = default_prompt_dir()
 
 HOST = os.environ.get("PRISM_HOST", "127.0.0.1")
 PORT = int(os.environ.get("PRISM_PORT", "8765"))
@@ -115,15 +107,12 @@ DEFAULTS: dict[str, object] = {
     # 어느 쪽을 넘든 PRISM 은 문서를 자르거나 요약하지 않고 중단한다.
     "max_inline_chars": 0,
     "default_timeout_seconds": 900,
-    "search_timeout_seconds": 300,
+    "search_total_seconds": 360,
+    "search_timeout_seconds": 240,
+    "search_verification_seconds": 120,
     "max_concurrency_per_provider": 1,
     "runtime_context": DEFAULT_RUNTIME_CONTEXT,
     "runtime_context_enabled": True,
-    "default_prompt_id": "",
-    # 검색 화면이 처음 열릴 때 고를 검색 전략 프롬프트. 비어 있으면 배포본
-    # (prompt/search_prompt.md)을 쓴다. 분석 프롬프트 기본값과 다른 축이다 —
-    # 두 작업의 프롬프트는 종류가 다르고 서로의 계약을 만족하지 않는다.
-    "default_search_prompt_id": "",
     # 기본 Provider 를 지정하지 않는다. 제한된 안전성 Provider 가 자동으로
     # 선택되면 사용자가 위험을 확인하지 않은 채 실행하게 된다.
     "default_provider": "",

@@ -16,7 +16,6 @@ from app.config import PATHS
 from .conftest import wait_for_job
 from .fake_provider import RECEIVED, DeterministicTestProvider
 from .pdf_fixture import build_korean_pdf
-from .test_citation_mapping import capable_prompt
 
 # agy 의 실제 전송 한도. 이 숫자를 넘는 인용문헌이 이번 작업의 출발점이었다.
 AGY_BYTE_BUDGET = 180_000
@@ -54,14 +53,13 @@ def test_settings_reject_a_reserve_larger_than_a_model_override(
 
 @pytest.fixture()
 def prompt(client):
-    return client.post(
-        "/api/prompts",
-        json={
-            "name": "구성대비 테스트",
-            "body": "청구항과 인용발명을 구성별로 대비하십시오.",
-            "output_mode": "markdown",
-        },
-    ).json()
+    from app.task_instructions import ANALYSIS
+    return {"id": None, "body": ANALYSIS.body}
+
+
+@pytest.fixture()
+def capable_prompt(prompt):
+    return prompt
 
 
 @pytest.fixture()
@@ -126,7 +124,7 @@ def test_mapped_dependent_claim_passes_parent_context_to_search_and_final_analys
     ]))
     parent_claim = "청구항 1. 제1 센서와 제2 센서의 신호를 결합하여 제어하는 장치."
     parent = client.post("/api/jobs", json={
-        "prompt_id": capable_prompt["id"], "provider": "test",
+        "provider": "test",
         "claim_text": parent_claim, "batch_id": upload["batch_id"],
     }).json()
     parent = wait_for_job(client, parent["id"])
@@ -135,7 +133,7 @@ def test_mapped_dependent_claim_passes_parent_context_to_search_and_final_analys
     child_claim = "청구항 2. 제1항에 있어서, 상기 신호를 원격 전송하는 장치."
     RECEIVED.clear()
     response = client.post("/api/jobs", json={
-        "prompt_id": capable_prompt["id"], "provider": "test", "claim_text": child_claim,
+        "provider": "test", "claim_text": child_claim,
         "source_job_id": parent["id"], "relation_type": "MAPPED",
     })
     assert response.status_code == 201, response.text
@@ -177,7 +175,7 @@ def test_oversized_citation_runs_through_retrieval(
     assert citation["char_count"] > 60_000
 
     body = {
-        "prompt_id": prompt["id"],
+
         "provider": "test",
         "claim_text": "청구항 1. 제1 센서와 제2 센서, 그리고 제어부를 포함하는 장치.",
         "batch_id": upload["batch_id"],
@@ -233,7 +231,7 @@ def test_small_document_still_uses_full_inline(client, prompt, settings_guard) -
         client, build_korean_pdf(["[0001] 짧은 인용문헌 본문이다.\n- 1 -"]), "small.pdf"
     )
     body = {
-        "prompt_id": prompt["id"],
+
         "provider": "test",
         "claim_text": "청구항 1. 장치.",
         "batch_id": upload["batch_id"],
@@ -265,7 +263,7 @@ def test_retrieval_mode_can_be_forced(client, prompt, settings_guard) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 센서와 제어부.",
             "batch_id": upload["batch_id"],
@@ -320,7 +318,7 @@ def test_excluded_attachment_is_absent_from_evidence(
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 센서.",
             "batch_id": upload["batch_id"],
@@ -378,7 +376,7 @@ def test_extraction_anomaly_blocks_absent_verdict_end_to_end(
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. RETRIEVAL_NOTFOUND 없는구성.",
             "batch_id": upload["batch_id"],
@@ -414,7 +412,7 @@ def test_cancel_stops_multi_stage_retrieval(client, prompt, settings_guard) -> N
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. RETRIEVAL_SLOW 센서.",
             "batch_id": upload["batch_id"],
@@ -452,7 +450,7 @@ def test_followup_clone_keeps_independent_index(client, prompt, settings_guard) 
     parent = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 센서.",
             "batch_id": upload["batch_id"],
@@ -464,7 +462,7 @@ def test_followup_clone_keeps_independent_index(client, prompt, settings_guard) 
     child = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1과 청구항 2. 센서.",
             "source_job_id": parent["id"],
@@ -516,7 +514,7 @@ def test_retrieval_artifacts_are_readable_from_history(
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 센서.",
             "batch_id": upload["batch_id"],
@@ -554,7 +552,7 @@ def test_index_is_rebuilt_when_stored_pdf_changes(
     first = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 센서.",
             "batch_id": upload["batch_id"],

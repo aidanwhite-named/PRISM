@@ -308,6 +308,7 @@ class AgentResponse(_Base):
     """한 라운드에서 AI 가 돌려주는 것 전부."""
 
     components: list[ComponentDeclaration] = Field(default_factory=list)
+    selected_components: list[FinalizeComponent] = Field(default_factory=list)
     notes: str = ""
     actions: list[AnyAction] = Field(default_factory=list)
 

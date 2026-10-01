@@ -16,6 +16,7 @@ import ResultView from "../components/ResultView";
 import DeliverySummary from "../components/DeliverySummary";
 import RetrievalManifestView from "../components/RetrievalManifestView";
 import SearchManifestView, { SearchResults } from "../components/SearchManifestView";
+import SearchComparisonPanel from "../components/SearchComparisonPanel";
 import StatusPill, { ERROR_LABEL } from "../components/StatusPill";
 import { api } from "../lib/api";
 import {
@@ -33,7 +34,6 @@ import type {
   Job,
   JobKind,
   Preflight,
-  Prompt,
   ProviderInfo,
   RelationType,
 } from "../lib/types";
@@ -228,14 +228,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const historyJobId = searchParams.get("job");
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
   // 검색 전략 프롬프트는 분석 프롬프트와 다른 목록이다. 한 목록에 담으면
   // 어느 쪽 화면에서든 상대 작업의 프롬프트를 고를 수 있게 된다.
-  const [searchPrompts, setSearchPrompts] = useState<Prompt[]>([]);
-  const [searchPromptId, setSearchPromptId] = useState("");
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [probingProvider, setProbingProvider] = useState(false);
-  const [promptId, setPromptId] = useState("");
   // 빈 문자열 = 지정 안 함. 제한된 안전성 Provider 가 자동으로 선택되면
   // 사용자가 위험을 확인하지 않은 채 실행하게 된다.
   // 두 작업은 기본 도구를 따로 둔다. 분석 화면에서도 검색 도구가 필요하다 —
@@ -318,35 +314,13 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
   useEffect(() => {
     Promise.all([
-      api.listPrompts(),
-      api.listPrompts({ kind: "search" }),
       api.listProviders(),
       api.settings(),
     ])
-      .then(([promptList, searchPromptList, providerList, appSettings]) => {
-        setPrompts(promptList);
-        setSearchPrompts(searchPromptList);
-        // 설정에 고른 전략이 있으면 그것을, 없으면 첫 활성 전략을 쓴다.
-        // 백엔드도 같은 순서로 고르므로 화면과 실행이 어긋나지 않는다.
-        const configuredSearchPrompt = searchPromptList.find(
-          (p) => p.id === appSettings.values.default_search_prompt_id && p.enabled,
-        );
-        setSearchPromptId(
-          configuredSearchPrompt?.id ||
-            searchPromptList.find((p) => p.enabled)?.id ||
-            searchPromptList[0]?.id ||
-            "",
-        );
+      .then(([providerList, appSettings]) => {
         setProviders(providerList);
         // 0 = 제한 없음. 화면에서는 null 로 다룬다.
         setInlineCharBudget(appSettings.values.max_inline_chars || null);
-        const configuredPromptId = appSettings.values.default_prompt_id;
-        const fallbackPrompt = promptList.find((p) => p.enabled) ?? promptList[0];
-        const configuredPrompt = promptList.find(
-          (p) => p.id === configuredPromptId && p.enabled,
-        );
-        setPromptId(configuredPrompt?.id || fallbackPrompt?.id || "");
-
         // 설정에 없으면 비워 둔다. 백엔드도 자동 선택하지 않으므로
         // 화면만 고른 척하면 실행 시 400 이 난다.
         // 검색 도구가 비어 있으면 분석의 도구·모델을 그대로 쓴다(백엔드와 같은 규칙).
@@ -418,14 +392,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     };
   }, [historyJobId, kind]);
 
-  const selectedPrompt = useMemo(
-    () => prompts.find((p) => p.id === promptId) ?? null,
-    [prompts, promptId],
-  );
-  const selectedSearchPrompt = useMemo(
-    () => searchPrompts.find((p) => p.id === searchPromptId) ?? null,
-    [searchPrompts, searchPromptId],
-  );
   const searching = kind === "similarity_search";
   // 이 화면이 실행할 도구.
   const { provider: providerId, model } = searching ? searchTool : analysisTool;
@@ -472,9 +438,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         followupInstruction,
         priorClaimChars: lineage?.priorClaimChars ?? 0,
         priorReportChars: lineage?.priorReportChars ?? 0,
-        promptBodyChars: selectedPrompt?.body.length ?? 0,
+        promptBodyChars: 0,
       }),
-    [upload, included, lineage, claimText, followupInstruction, selectedPrompt],
+    [upload, included, lineage, claimText, followupInstruction],
   );
 
   // 업로드를 마쳤으면 서버가 그 응답에 실어 준 값이 가장 최신이다. 아직
@@ -513,7 +479,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         .preflight({
           job_kind: kind,
           provider: providerId,
-          prompt_id: (searching ? searchPromptId : promptId) || null,
+
           claim_text: activeClaim,
           batch_id: activeBatchId,
           selected_attachment_ids: activeSelection,
@@ -537,8 +503,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   }, [
     kind,
     providerId,
-    promptId,
-    searchPromptId,
     searching,
     activeClaim,
     activeBatchId,
@@ -657,7 +621,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         provider: providerId || null,
         model: model || null,
         // 선택란은 숨기고 설정에서 불러온 기본 검색 지침을 적용한다.
-        prompt_id: searchPromptId || null,
+
         claim_text: searchClaimText,
         batch_id: prepared?.batch_id ?? null,
         // 비워 두면 null 로 보낸다. 오늘 날짜를 대신 채우지 않는다 — 그러면
@@ -693,7 +657,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         // 분석 화면에서 시작해도 검색 작업이므로 검색 도구로 돌린다.
         provider: searchTool.provider || null,
         model: searchTool.model || null,
-        prompt_id: searchPromptId || null,
+
         source_job_id: job.id,
         search_component_ids: selectedGapIds,
         search_cutoff_date: searchCutoffDate.trim() || null,
@@ -716,7 +680,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
   const run = async () => {
     if (searching) return runSearch();
-    if (!promptId) return;
     if (!claimText.trim()) {
       setError(
         addingDependentClaims
@@ -774,7 +737,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         use_answer_library: useAnswerLibrary,
         // 화면에서 고른 값을 그대로 보낸다. 생략하면 백엔드가 설정
         // 기본값으로 되돌아가서, 화면 표시와 실제 실행이 어긋난다.
-        prompt_id: promptId || null,
+
         provider: providerId || null,
         model: model || null,
         claim_text: claimText,
@@ -1034,14 +997,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         <h2>{searching ? "검색 준비" : "분석 자료 준비"}</h2>
 
         <div className="run-config-summary">
-          {!searching && <span>
-            <strong>프롬프트</strong>{" "}
-            {searching
-              ? (selectedSearchPrompt?.name ?? "설정 필요")
-              : selectedPrompt
-                ? selectedPrompt.name
-                : "설정 필요"}
-          </span>}
           <span>
             <strong>실행 도구</strong>{" "}
             {selectedProvider?.display_name ?? (providerId || "설정 필요")}
@@ -1461,15 +1416,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           )}
         </div>
 
-        {searching && searchPrompts.length === 0 && (
-          <div className="notice danger" style={{ marginBottom: 12 }}>
-            <strong>기본 검색 지침을 불러오지 못했습니다</strong>
-            <div style={{ marginTop: 4 }}>
-              <a href="#/prompts">프롬프트 관리</a>에서 검색 지침을 확인하세요.
-            </div>
-          </div>
-        )}
-
         {!searching && !claimText.trim() && (
           <div className="notice danger" style={{ marginBottom: 12 }}>
             <strong>{addingDependentClaims ? "추가할 종속항이 필요합니다" : "출원발명 청구항이 필요합니다"}</strong>
@@ -1538,8 +1484,8 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               // 확정된 작업을 만들어 실패 목록에서 같은 문장을 다시 읽는다.
               Boolean(preflight?.blocked) ||
               (searching
-                ? !searchClaimText.trim() || !searchAvailable || !searchPromptId
-                : !promptId || !claimText.trim() || !analysisMaterialReady)
+                ? !searchClaimText.trim() || !searchAvailable
+                : !claimText.trim() || !analysisMaterialReady)
             }
           >
             {submitting
@@ -1602,6 +1548,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
       {activeTab === "result" && job && (
         <div className="card result-card">
+          <SearchComparisonPanel key={`comparison-${job.id}`} job={job} />
           <SearchContinuation key={job.id} job={job} disabled={busy || submitting}
             onContinued={continued => {
               setJob(continued);
@@ -1752,11 +1699,12 @@ export default function RunPage({ kind }: { kind: JobKind }) {
 
           {job.job_kind === "patent_analysis" && !running && job.analysis_manifest_error && (
             <div className="notice danger" role="alert" style={{ marginBottom: 14 }}>
-              <strong>구성별 분석 결과를 읽지 못했습니다.</strong>
+              <strong>{job.analysis_manifest?.report ? "일부 보고서 항목을 확인해야 합니다." : "구성별 분석 결과를 읽지 못했습니다."}</strong>
               <div>{job.analysis_manifest_error}</div>
               <div>
-                보고서 본문은 아래에서 확인할 수 있지만, 구성별 대응 정도와 미대응
-                구성 검색을 사용할 수 없습니다. 보고서를 확인한 뒤 다시 분석해 주세요.
+                {job.analysis_manifest?.report
+                  ? "확인 가능한 분석은 보존했습니다. 아래 보고서에서 누락된 번역·근거·판단 항목을 확인하세요."
+                  : "보고서 본문은 아래에서 확인할 수 있지만, 구성별 대응 정도와 미대응 구성 검색을 사용할 수 없습니다. 보고서를 확인한 뒤 다시 분석해 주세요."}
               </div>
             </div>
           )}
@@ -1765,6 +1713,8 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             !running &&
             job.analysis_manifest && (
               <>
+                {job.analysis_manifest.report && <p className="notice info">프로그램이 문헌번호·번역과 발췌 순서·보고서 서식을 조립했습니다. 대응 판단과 번역 내용은 AI 분석 결과입니다.</p>}
+                {!!job.analysis_manifest.report?.issues.length && <p className="notice warn" role="alert">확인이 필요한 보고서 항목이 {job.analysis_manifest.report.issues.length}건 있습니다. 확인 가능한 분석은 보존했으며, 상세 사유는 보고서의 항목 점검에 표시했습니다.</p>}
                 {job.analysis_manifest.evidence_review && <div className={`notice ${job.analysis_manifest.evidence_review.status === "reviewed" ? "info" : "warn"}`}>
                   {job.analysis_manifest.evidence_review.status === "reviewed"
                     ? "원문 근거로 구성대비를 수행했습니다. AI 평가이며 검토한 근거 범위에 한정됩니다."
@@ -1778,7 +1728,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             <AnswerContextView context={job.report_context} />
             {displayText && <div className="answer-actions no-print"><Link className="btn" to={`/answers?source=${job.id}`}>이 실행에 정답 보고서 등록</Link></div>}
           </>}
-          {job.job_kind === "similarity_search" && job.search_manifest?.version === 14 && job.output_mode === "markdown" ? (
+          {job.job_kind === "similarity_search" && (job.search_manifest?.version === 14 || job.search_manifest?.version === 15) && job.output_mode === "markdown" ? (
             <SearchResults data={job.search_manifest} />
           ) : (displayText || running) && (
             <ResultView

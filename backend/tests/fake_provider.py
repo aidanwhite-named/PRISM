@@ -101,7 +101,9 @@ def _mapping_block(message: str) -> list[str]:
 
 def _component_block(message: str) -> list[str]:
     """구성별 분석 계약을 선언한 프롬프트에 결정론적 결과를 붙인다."""
-    if "PRISM_COMPONENT_ANALYSIS_V1" not in message or "TEST_NOCOMPONENTS" in message:
+    # This provider intentionally exercises the legacy-response compatibility path.
+    # Structured-response execution is covered separately in test_structured_report.
+    if ("PRISM_COMPONENT_ANALYSIS_V1" not in message and "PRISM 구조화 보고서 V1" not in message) or "TEST_NOCOMPONENTS" in message:
         return []
     payload = {
         "items": [
@@ -358,6 +360,11 @@ class DeterministicTestProvider(Provider):
 
     async def execute(self, request: ExecutionRequest, emit: EmitFn) -> ExecutionOutcome:
         self._cancelled.discard(request.job_id)
+        # This provider intentionally exercises legacy report compatibility.
+        # Successful staged V5 analysis uses ScriptedProvider in its own tests.
+        if request.system_prompt.startswith('PRISM 기술적 대응 검토'):
+            return ExecutionOutcome(result_text='{"components":[]}', exit_code=0,
+                                    tool_policy=request.tool_policy)
         RECEIVED.append(request)
         message = request.user_message
         outcome = ExecutionOutcome(
@@ -478,6 +485,32 @@ class DeterministicTestProvider(Provider):
         return outcome
 
     def _compose(self, request: ExecutionRequest) -> list[str]:
+        from app import structured_report
+        if structured_report.MARKER in request.user_message:
+            aliases = list(dict.fromkeys(_ALIAS_LINE.findall(
+                request.user_message.split('[인용발명 문헌]', 1)[-1])))
+            sentence_ids = re.findall(r'\[원문 문장 ([^\]]+)\]', request.user_message)
+            source_aliases = dict(re.findall(r'--- ([\w-]+) · (ATT-\d+) · PDF', request.user_message))
+            sources = [(alias, next((sid for sid in sentence_ids if sid.startswith(alias + '-') or any(
+                        document == alias and sid.startswith(source + '-')
+                        for source, document in source_aliases.items())), None))
+                       for alias in aliases]
+            sources = [(alias, sid) for alias, sid in sources if sid]
+            evidence = [{'id': f'E{i}', 'attachment': alias, 'sentence_ids': [sid],
+                         'language': 'ko', 'translation': ''}
+                        for i, (alias, sid) in enumerate(sources, 1)]
+            data = {'version': 5, 'documents': [
+                {'attachment': alias, 'document_number': f'KR10-{1000000+i}', 'title': 'Test source'}
+                for i, alias in enumerate(aliases, 1)], 'evidence': evidence,
+                'components': [{'claim': '청구항 1', 'symbol': '(A)', 'feature': '테스트 구성',
+                    'similarity': 92 if evidence else 0, 'basis': 'direct',
+                    'evidence': [row['id'] for row in evidence],
+                    'evidence_uses': {row['id']: 'support' for row in evidence},
+                    'reference_roles': {},
+                    'reasoning': ' '.join('{{' + row['id'] + '}}의 실제 입력 원문을 전달했습니다.' for row in evidence),
+                    'difference': ''}],
+                'summary': {'main_reason': '테스트 실행 결과', 'relationships': '입력 전달 경로 확인'}}
+            return [json.dumps(data, ensure_ascii=False)]
         prompt_preview = request.user_message.strip()
         total_chars = len(request.user_message)
         head = prompt_preview[:400]

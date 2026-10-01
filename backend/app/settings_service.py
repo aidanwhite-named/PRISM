@@ -23,12 +23,12 @@ EDITABLE_KEYS = frozenset(
         "max_files_per_job",
         "max_inline_chars",
         "default_timeout_seconds",
+        "search_total_seconds",
         "search_timeout_seconds",
+        "search_verification_seconds",
         "max_concurrency_per_provider",
         "runtime_context",
         "runtime_context_enabled",
-        "default_prompt_id",
-        "default_search_prompt_id",
         "default_provider",
         "provider_paths",
         "default_models",
@@ -125,7 +125,9 @@ def _normalize_provider_map(value: Any) -> Any:
 
 _INT_KEYS = frozenset(
     {
+        "search_total_seconds",
         "search_timeout_seconds",
+        "search_verification_seconds",
         "max_file_size_bytes",
         "max_total_upload_bytes",
         "max_files_per_job",
@@ -149,7 +151,9 @@ _INT_KEYS = frozenset(
 )
 
 _LIMITS = {
-    "search_timeout_seconds": (10, 86_400),
+    "search_total_seconds": (10, 360),
+    "search_timeout_seconds": (10, 240),
+    "search_verification_seconds": (10, 120),
     "max_file_size_bytes": (1024, 500 * 1024 * 1024),
     "max_total_upload_bytes": (1024, 2 * 1024 * 1024 * 1024),
     "max_files_per_job": (1, 200),
@@ -546,12 +550,14 @@ def inline_char_budget(source: Any) -> int | None:
 
 def get_all(session: Session) -> dict[str, Any]:
     values = dict(DEFAULTS)
+    stored_keys = set()
     for row in session.query(AppSetting).all():
         # 폐기한 설정 키의 옛 행이 DB 에 남아 있을 수 있다. 지우지는 않고
         # 응답에서만 뺀다 — 사용자 데이터를 조용히 삭제하지 않는다.
         if row.key not in DEFAULTS:
             continue
         values[row.key] = row.value
+        stored_keys.add(row.key)
     # 빈 값을 특정 Provider 로 채우지 않는다. 제한된 안전성 Provider 가 자동으로
     # 선택되면 사용자가 위험을 확인하지 않은 채 실행하게 된다.
     for key in _PROVIDER_KEYS:
@@ -559,10 +565,18 @@ def get_all(session: Session) -> dict[str, Any]:
         values[key] = _normalize_provider_id(raw) if raw else ""
     for key in _PROVIDER_MAP_KEYS:
         values[key] = _normalize_provider_map(values.get(key))
+    # Older installations may still store the former five-minute whole-session limit.
+    for key, maximum in (('search_timeout_seconds', 240), ('search_verification_seconds', 120)):
+        values[key] = min(maximum, max(1, int(values[key])))
+    if 'search_total_seconds' not in stored_keys:
+        values['search_total_seconds'] = values['search_timeout_seconds'] + values['search_verification_seconds']
+    values['search_total_seconds'] = min(360, max(10, int(values['search_total_seconds'])))
     return values
 
 
 def get(session: Session, key: str) -> Any:
+    if key == 'search_total_seconds':
+        return get_all(session)[key]
     row = session.get(AppSetting, key)
     if row is None:
         return DEFAULTS.get(key)
@@ -651,8 +665,6 @@ def _coerce(key: str, value: Any) -> Any:
         return normalized
     if key == "runtime_context":
         return str(value)
-    if key == "default_prompt_id":
-        return str(value).strip()
     if key in _PROVIDER_KEYS:
         text = str(value).strip()
         if not text:
@@ -679,10 +691,18 @@ def _coerce(key: str, value: Any) -> Any:
             # 없는 상태로 저장된다. 남은 값은 아는 레벨이어야 한다. 모르는 문자열을
             # 그대로 CLI 에 넘기면 실행이 통째로 실패한다.
             for provider_id, level in cleaned.items():
-                if level not in REASONING_EFFORTS:
+                allowed_efforts = list(REASONING_EFFORTS)
+                if provider_id == "codex":
+                    from .providers.registry import cached
+
+                    snapshot = cached(provider_id)
+                    advertised = snapshot.capabilities.get("reasoning_efforts", []) if snapshot else []
+                    if isinstance(advertised, list):
+                        allowed_efforts.extend(effort for effort in advertised if isinstance(effort, str))
+                if level not in allowed_efforts:
                     raise ValueError(
                         f"{provider_id} 의 추론강도는 "
-                        + ", ".join(REASONING_EFFORTS)
+                        + ", ".join(dict.fromkeys(allowed_efforts))
                         + " 중 하나이거나 비어 있어야 합니다(비우면 모델 기본값)."
                     )
         return cleaned

@@ -7,6 +7,7 @@ import json
 import uuid
 from dataclasses import replace
 from pathlib import Path
+from weakref import WeakValueDictionary
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import PlainTextResponse, StreamingResponse
@@ -48,66 +49,23 @@ from ..models import Attachment, ExecutionJob, ResultArtifact
 from ..answer_models import ReportContextSnapshot
 from .. import answer_library
 from ..prompt_assembly import InputTooLarge
-from ..prompt_store import PROMPT_STORE, InvalidPromptFile, PromptNotFound
+from ..task_instructions import ANALYSIS, SEARCH
 from ..providers.registry import build_provider, probe_one
 from ..schemas import (
     AttachmentAnalysis,
     JobCreate,
+    SearchComparisonCreate,
     JobOut,
     PreflightLane,
     PreflightOut,
     UploadResponse,
 )
-from ..prompt_store import DEFAULT_SEARCH_PROMPT_ID, KIND_ANALYSIS, KIND_SEARCH
 from ..search_prompt import (
     SEARCH_PROMPT_ID,
     SearchPromptError,
 )
 from ..search_engine.autonomous import validate_strategy as validate_search_strategy
 
-
-def _resolve_search_prompt(payload_prompt_id: str | None, values: dict):
-    """이 실행이 쓸 검색 전략 프롬프트를 고른다.
-
-    우선순위는 요청 > 설정 기본값 > 배포본이다. 요청이 잘못된 id 면 조용히
-    다른 프롬프트로 넘어가지 않는다 — 사용자가 고른 전략과 다른 전략으로 도는
-    것은 "검색 결과가 왜 이런가"에 답할 수 없게 만든다.
-
-    설정 기본값이 사라진 경우(파일을 지웠다)에만 배포본으로 되돌아간다.
-    """
-    requested = str(payload_prompt_id or "").strip()
-    if requested:
-        try:
-            return PROMPT_STORE.get_for_kind(requested, KIND_SEARCH)
-        except PromptNotFound as exc:
-            raise HTTPException(
-                404,
-                f"검색 전략 프롬프트를 찾을 수 없습니다: {requested}. "
-                "유사 문헌 검색에는 검색 종류의 프롬프트만 쓸 수 있습니다.",
-            ) from exc
-        except InvalidPromptFile as exc:
-            raise HTTPException(422, str(exc)) from exc
-
-    configured = str(values.get("default_search_prompt_id") or "").strip()
-    for candidate in (configured, DEFAULT_SEARCH_PROMPT_ID):
-        if not candidate:
-            continue
-        try:
-            return PROMPT_STORE.get_for_kind(candidate, KIND_SEARCH)
-        except PromptNotFound:
-            continue
-        except InvalidPromptFile as exc:
-            raise HTTPException(422, str(exc)) from exc
-
-    # 배포본까지 없는 설치. 남아 있는 검색 프롬프트 중 활성인 것을 쓴다.
-    try:
-        rows = PROMPT_STORE.list(kind=KIND_SEARCH, include_reserved=True)
-    except InvalidPromptFile as exc:
-        raise HTTPException(422, str(exc)) from exc
-    found = next((item for item in rows if item.enabled), None)
-    if found is None:
-        raise HTTPException(404, "검색 전략 프롬프트가 없습니다.")
-    return found
 
 router = APIRouter(prefix="/api", tags=["jobs"])
 
@@ -298,7 +256,15 @@ def _job_out(job: ExecutionJob) -> JobOut:
         if manifest['engine'].get('mode') == 'autonomous':
             from ..search_engine.report import render
             from ..search_engine.source_observations import with_observations
-            manifest = {**manifest, 'engine': with_observations(manifest['engine'])}
+            from ..search_engine.search_review import summary_counts, summary_text
+            engine_data = with_observations(manifest['engine'])
+            visible = [c for c in engine_data.get('candidates', []) if c.get('date_status') != 'after_cutoff']
+            review_summary = summary_counts(visible)
+            engine_data = {**engine_data, 'model_summary': engine_data.get('model_summary', engine_data.get('summary', '')),
+                           'summary': summary_text(visible), 'review_summary': review_summary}
+            manifest = {**manifest, 'engine': engine_data, 'review_summary': review_summary}
+            if manifest.get('status') == 'complete' and review_summary['pending']:
+                manifest['status'] = 'verification_incomplete'
         else:
             from ..search_history.snapshot import render
         result_text = render(manifest['engine'])
@@ -652,7 +618,7 @@ async def _create_search_job(
         raise HTTPException(
             400, "유사 문헌 검색에는 후속 분석 relation_type 을 사용할 수 없습니다."
         )
-    prompt = _resolve_search_prompt(payload.prompt_id, values)
+    prompt = SEARCH
     try:
         # 스냅샷할 본문이 조립 계약을 만족하는지 지금 확인한다. 큐에서 기다린
         # 뒤 실행 시점에 처음 알게 되면 사용자는 이유 없이 실패한 실행을 본다.
@@ -739,40 +705,11 @@ async def create_job(payload: JobCreate, session: Session = Depends(get_db)) -> 
     if JobKind(payload.job_kind) is JobKind.SIMILARITY_SEARCH:
         return await _create_search_job(payload, session, values)
 
-    configured_prompt_id = str(values.get("default_prompt_id") or "")
-    prompt_id = payload.prompt_id or configured_prompt_id
-    prompt = None
-    if prompt_id:
-        try:
-            # 종류를 건 조회다. 검색 전략 프롬프트가 분석 실행의 분석 기준으로
-            # 들어오는 경로를 만들지 않는다 — 두 본문은 계약이 다르다.
-            prompt = PROMPT_STORE.get_for_kind(prompt_id, KIND_ANALYSIS)
-        except PromptNotFound:
-            # An explicit API override must be valid. A stale configured default
-            # (for example an old database UUID) falls back to the prompt folder.
-            if payload.prompt_id:
-                raise HTTPException(404, "프롬프트를 찾을 수 없습니다.")
-        except InvalidPromptFile as exc:
-            raise HTTPException(422, str(exc)) from exc
-    if prompt is None:
-        try:
-            # 분석 실행의 폴백은 **분석 프롬프트**에서만 고른다. 종류를 걸지
-            # 않으면 사용자가 만든 검색 전략이 분석 기준으로 뽑힐 수 있고,
-            # 그 본문은 첨부 분석 계약을 만족하지 않는다.
-            prompt = next(
-                (
-                    item
-                    for item in PROMPT_STORE.list(kind=KIND_ANALYSIS)
-                    if item.enabled
-                ),
-                None,
-            )
-        except InvalidPromptFile as exc:
-            raise HTTPException(422, str(exc)) from exc
-    if prompt is None:
-        raise HTTPException(404, "프롬프트를 찾을 수 없습니다.")
-    if not prompt.enabled:
-        raise HTTPException(400, "비활성화된 프롬프트입니다.")
+    return await _create_analysis_job(payload, session, values)
+
+
+async def _create_analysis_job(payload, session, values, *, submit=True):
+    prompt = ANALYSIS
     provider_id, selected_model = await _resolve_provider(payload, values)
 
     # --- 후속 분석 계보 -------------------------------------------------
@@ -948,11 +885,106 @@ async def create_job(payload: JobCreate, session: Session = Depends(get_db)) -> 
                     409, f"문헌 매핑을 이 실행의 자료에 묶지 못했습니다: {exc}"
                 ) from exc
 
-    session.commit()
+    # Source linkage and job creation share a transaction in the search pipeline.
+    if submit:
+        session.commit()
+    else:
+        session.flush()
     session.refresh(job)
 
-    await RUNNER.submit(job.id)
+    if submit:
+        await RUNNER.submit(job.id)
     return _job_out(job)
+
+
+# A repeated click must never start a second paid analysis for the same selection.
+# The desktop server runs in one process; weak entries disappear after use.
+_comparison_locks = WeakValueDictionary()
+
+
+def _search_parent(session, job_id):
+    parent = session.get(ExecutionJob, job_id)
+    if parent is None:
+        raise HTTPException(404, '검색 작업을 찾을 수 없습니다.')
+    if parent.job_kind != JobKind.SIMILARITY_SEARCH:
+        raise HTTPException(400, '유사문헌 검색 결과에서만 시작할 수 있습니다.')
+    return parent
+
+
+def _comparison_records(parent, session):
+    records = []
+    for saved in (parent.search_manifest or {}).get('comparisons', []):
+        child = session.get(ExecutionJob, saved['job_id']) if saved.get('job_id') else None
+        records.append({**saved, 'status': child.status if child else ('unavailable' if saved.get('job_id') else 'held'),
+                        'errors': child.errors if child else [],
+                        'analysis_completeness': _job_out(child).analysis_completeness if child else None})
+    return records
+
+
+@router.get('/jobs/{job_id}/comparisons')
+def search_comparisons(job_id: str, session: Session = Depends(get_db)):
+    return _comparison_records(_search_parent(session, job_id), session)
+
+
+@router.post('/jobs/{job_id}/comparisons', status_code=201)
+async def compare_search_candidates(job_id: str, payload: SearchComparisonCreate,
+                                    session: Session = Depends(get_db)):
+    from ..search_engine.comparison_sources import acquire
+    from ..search_engine.storage import write_json
+    from ..patent_search import retention
+    lock = _comparison_locks.setdefault(job_id, asyncio.Lock())
+    async with lock:
+        session.expire_all()
+        parent = _search_parent(session, job_id)
+        if parent.status not in (JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED):
+            raise HTTPException(409, '검색이 끝난 뒤 비교할 문헌을 선택하십시오.')
+        ids = list(dict.fromkeys(payload.candidate_ids))
+        manifest = parent.search_manifest or {}
+        candidates = {row['id']: row for row in manifest.get('engine', {}).get('candidates', [])}
+        if any(key not in candidates or candidates[key].get('date_status') == 'after_cutoff' for key in ids):
+            raise HTTPException(400, '검색 결과에 없거나 기준일 이후인 문헌입니다.')
+        for record in _comparison_records(parent, session):
+            if set(record['candidate_ids']) == set(ids) and record.get('job_id') and record['status'] != 'unavailable':
+                return record
+        batch_id = str(uuid.uuid4())
+        work_dir = PATHS.run_dir(batch_id)
+        work_dir.mkdir(parents=True, exist_ok=True)
+        semaphore = asyncio.Semaphore(2)
+        async def prepare(key):
+            async with semaphore:
+                return await asyncio.to_thread(acquire, candidates[key], Path(parent.work_dir), work_dir)
+        prepared = await asyncio.gather(*(prepare(key) for key in ids))
+        selected = []
+        for item, evidence in prepared:
+            if item:
+                selected.append(item['attachment_id'])
+                fields = {key: value for key, value in item.items() if key != 'attachment_id'}
+                session.add(Attachment(id=item['attachment_id'], upload_batch=batch_id, **fields))
+        record = {'candidate_ids': ids, 'sources': [evidence for _, evidence in prepared], 'job_id': None}
+        if selected:
+            # Preserve application context, but never pass search snippets as citation evidence.
+            selected.extend(row.id for row in parent.attachments if row.role == AttachmentRole.APPLICATION and row.included)
+            session.flush()
+            child = await _create_analysis_job(JobCreate(
+                claim_text=parent.claim_text, batch_id=batch_id, source_job_id=parent.id,
+                relation_type=RelationType.REANALYZED, selected_attachment_ids=selected,
+                followup_instruction='검색 후보의 실제 본문을 청구항과 구성대비하십시오. '
+                '아래는 파일과 검색 문헌의 출처 연결 기록입니다. 문헌의 제목·식별자가 본문과 일치하는지 먼저 확인하고 '
+                '다른 문헌이면 대비에서 제외하십시오. 검색 순위나 선별 의견은 대응 근거가 아닙니다. '
+                '확인한 본문에서 근거와 위치를 제시하고, 읽지 못한 범위는 미확인으로 구분하십시오.\n'
+                + json.dumps(record['sources'], ensure_ascii=False)),
+                session, settings_service.get_all(session), submit=False)
+            record['job_id'] = child.id
+            write_json(work_dir / 'search-comparison-sources.json', record)
+            for _, evidence in prepared:
+                if evidence.get('artifact_id'):
+                    retention.reference(session, child.id, evidence['artifact_id'])
+        # Keep acquisition failures visible even when no model job can be started.
+        parent.search_manifest = {**manifest, 'comparisons': [*manifest.get('comparisons', []), record]}
+        session.commit()
+        if record['job_id']:
+            await RUNNER.submit(record['job_id'])
+        return _comparison_records(parent, session)[-1]
 
 
 @router.post("/jobs/preflight", response_model=PreflightOut)
@@ -979,7 +1011,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
     if job_kind is JobKind.SIMILARITY_SEARCH:
         # 실행과 **같은 선택 규칙**을 쓴다. 준비 화면이 배포본 크기를 안내하고
         # 실행은 사용자가 고른 전략으로 돌면, 안내한 크기와 나가는 크기가 다르다.
-        search_prompt = _resolve_search_prompt(payload.prompt_id, values)
+        search_prompt = SEARCH
         try:
             validate_search_strategy(search_prompt.body, prompt_id=search_prompt.id)
         except SearchPromptError as exc:
@@ -987,30 +1019,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
         prompt_body = search_prompt.body
         search_prompt_id = search_prompt.id
     else:
-        prompt_id = payload.prompt_id or str(values.get("default_prompt_id") or "")
-        prompt = None
-        if prompt_id:
-            try:
-                prompt = PROMPT_STORE.get_for_kind(prompt_id, KIND_ANALYSIS)
-            except (PromptNotFound, InvalidPromptFile):
-                prompt = None
-        if prompt is None:
-            try:
-                # 분석 실행의 폴백은 **분석 프롬프트**에서만 고른다. 종류를
-                # 걸지 않으면 사용자가 만든 검색 전략이 분석 기준으로 뽑힐 수
-                # 있고, 그 본문은 첨부 분석 계약을 만족하지 않는다.
-                prompt = next(
-                    (
-                        item
-                        for item in PROMPT_STORE.list(kind=KIND_ANALYSIS)
-                        if item.enabled
-                    ),
-                    None,
-                )
-            except InvalidPromptFile as exc:
-                raise HTTPException(422, str(exc)) from exc
-        if prompt is None:
-            raise HTTPException(404, "프롬프트를 찾을 수 없습니다.")
+        prompt = ANALYSIS
         prompt_body = prompt.body
 
     # --- 이 실행에 들어갈 자료 -------------------------------------------
@@ -1059,16 +1068,22 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
     byte_budget = getattr(provider, "max_input_bytes", None)
     if job_kind is JobKind.SIMILARITY_SEARCH:
         from ..search_engine.autonomous import system_text, input_text, time_limit
+        from ..search_engine import input_documents
         specification = ""
+        supplied_documents = {'identifiers': [], 'titles': [], 'urls': []}
         for attachment in attachments:
             if not attachment.read_ok or not attachment.normalized_text_path:
                 return PreflightOut(job_kind=job_kind.value, provider=provider_id, lanes=[], chars=0,
                     bytes=0, blocked=True, error="명세서 본문을 읽지 못했습니다.")
-            specification += Path(attachment.normalized_text_path).read_text(encoding="utf-8") + "\n"
+            text = Path(attachment.normalized_text_path).read_text(encoding="utf-8")
+            specification += text + "\n"
+            for key, items in input_documents.from_specification(text).items():
+                supplied_documents[key] = list(dict.fromkeys([*supplied_documents[key], *items]))
         claim, focus = _search_target(payload, session)
-        payload_text = input_text(claim, prompt_body, specification, focus=focus, cutoff=payload.search_cutoff_date or '')
+        payload_text = input_text(claim, prompt_body, specification, focus=focus,
+                                  cutoff=payload.search_cutoff_date or '', excluded_inputs=supplied_documents)
         seconds = time_limit(values)
-        system = system_text(seconds)
+        system = system_text(seconds, focus)
         size = (provider.payload_bytes(system, payload_text) if provider else
                 len((system + payload_text).encode("utf-8")))
         chars = len(system) + len(payload_text)
@@ -1078,7 +1093,8 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
             lanes=[PreflightLane(id="autonomous_search", chars=chars, bytes=size)], chars=chars, bytes=size,
             char_budget=max_chars, byte_budget=byte_budget, over_bytes=over_bytes, over_chars=over_chars,
             blocked=over_bytes or over_chars, delivery_plan="autonomous_search",
-            message=f"최대 {seconds}초 · 검색 순서와 문헌 확인은 AI가 결정합니다. 분류·후보 수·호출 횟수 제한 없이 출처와 결과를 보존합니다.")
+            message=f"전체 검색 최대 {seconds}초. 검색·원문 확인·저장·재검색을 자유롭게 진행하고 충분하면 일찍 종료합니다. "
+                + ("선택한 미대응 구성별로 대응 정도와 근거를 표시합니다." if focus else "X/Y/Z는 결과 분류 기준입니다."))
     tool_policy = getattr(provider, "search_tool_policy", None)
     tool_policy_name = getattr(tool_policy, "name", "") or ""
     # 예산은 runner 가 쓰는 것과 **같은 함수**로 만든다. 로컬 검색의 크기는

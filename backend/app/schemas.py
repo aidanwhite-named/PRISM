@@ -5,78 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .enums import AttachmentRole, JobKind, PromptKind, RelationType
-
-
-class PromptBase(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    description: str = ""
-    body: str = Field(min_length=1)
-    accepted_file_types: list[str] = Field(default_factory=list)
-
-
-class PromptCreate(PromptBase):
-    # 만들 프롬프트의 종류. 생략하면 분석 프롬프트다 — 이 필드를 모르는 기존
-    # 클라이언트의 동작이 바뀌지 않아야 한다.
-    kind: str = PromptKind.ANALYSIS
-
-    @field_validator("kind")
-    @classmethod
-    def _check_kind(cls, value: str) -> str:
-        allowed = {item.value for item in PromptKind}
-        if value not in allowed:
-            raise ValueError(f"kind 는 {sorted(allowed)} 중 하나여야 합니다.")
-        return value
-
-
-class PromptUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = None
-    body: str | None = Field(default=None, min_length=1)
-    accepted_file_types: list[str] | None = None
-    enabled: bool | None = None
-
-
-class PromptOut(PromptBase):
-    id: str
-    enabled: bool
-    # 어느 작업의 프롬프트인가. 파일 메타데이터가 정하며 API 로 바꿀 수 없다 —
-    # 종류와 본문 계약이 함께 움직여야 한다.
-    kind: str = PromptKind.ANALYSIS
-    # 프롬프트 파일 메타데이터에서만 정한다. 본문과 출력 계약이 함께 움직여야
-    # 해서 API 로는 바꿀 수 없다.
-    capabilities: list[str] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class PromptCatalogOut(PromptOut):
-    """프롬프트 관리 화면에 표시하는 작업별 카탈로그 항목."""
-
-    editable: bool = True
-    deletable: bool = True
-
-
-class PromptImportItem(PromptBase):
-    # 내보내기가 적어 준 종류. 없으면 분석이다(옛 내보내기 파일 호환).
-    kind: str = PromptKind.ANALYSIS
-
-    @field_validator("kind")
-    @classmethod
-    def _check_kind(cls, value: str) -> str:
-        allowed = {item.value for item in PromptKind}
-        if value not in allowed:
-            raise ValueError(f"kind 는 {sorted(allowed)} 중 하나여야 합니다.")
-        return value
-
-
-class PromptImportRequest(BaseModel):
-    prompts: list[PromptImportItem]
-    replace_existing: bool = False
+from .enums import AttachmentRole, JobKind, RelationType
 
 
 class AttachmentAnalysis(BaseModel):
@@ -107,14 +38,22 @@ class UploadResponse(BaseModel):
     max_inline_chars: int | None = None
 
 
+class SearchComparisonCreate(BaseModel):
+    candidate_ids: list[str] = Field(min_length=1, max_length=5)
+
+
 class JobCreate(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def reject_prompt_override(cls, value):
+        if isinstance(value, dict) and value.get("prompt_id"):
+            raise ValueError("프롬프트 교체는 지원하지 않습니다. 내장 분석·검색 지침을 사용합니다.")
+        return value
+
     use_answer_library: bool = True
     # 작업 종류. 생략하면 기존 PDF 구성대비 분석이다. 기존 API 클라이언트가
     # 이 필드를 모르고 보내도 동작이 바뀌지 않아야 한다.
     job_kind: str = JobKind.PATENT_ANALYSIS
-    # 실행 화면은 이 값을 보내지 않고 Settings 의 기본값을 사용한다.
-    # 선택적 override 는 기존 API 클라이언트와 테스트 호환을 위해 유지한다.
-    prompt_id: str | None = None
     provider: str | None = None
     model: str | None = None
     claim_text: str = ""

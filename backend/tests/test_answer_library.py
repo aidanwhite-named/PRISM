@@ -149,9 +149,8 @@ def test_same_case_replay_excluded_and_stale_review_rejected(client):
 
 def test_job_preflight_and_execution_use_identical_snapshot(client):
     case = approve(client, review(client, register(client)))
-    prompt = client.post("/api/prompts", json={"name": "Report with answers", "body": "Compare the provided evidence."}).json()
     batch = client.post("/api/uploads", files=[("files", ("current.txt", b"A current motor controller and sensor"))]).json()
-    payload = {"provider": "test", "prompt_id": prompt["id"], "claim_text": "C1 motor with sensor feedback control",
+    payload = {"provider": "test", "claim_text": "C1 motor with sensor feedback control",
                "batch_id": batch["batch_id"], "use_answer_library": True}
     preflight = client.post("/api/jobs/preflight", json=payload)
     assert preflight.status_code == 200, preflight.text
@@ -170,9 +169,8 @@ def test_job_preflight_and_execution_use_identical_snapshot(client):
 
 
 def test_linked_inputs_survive_history_deletion(client):
-    prompt = client.post("/api/prompts", json={"name": "Library source", "body": "Compare."}).json()
     batch = client.post("/api/uploads", files=[("files", ("source.txt", SOURCE.encode()))]).json()
-    response = client.post("/api/jobs", json={"provider": "test", "prompt_id": prompt["id"], "claim_text": "sensor", "batch_id": batch["batch_id"]})
+    response = client.post("/api/jobs", json={"provider": "test", "claim_text": "sensor", "batch_id": batch["batch_id"]})
     job = wait_for_job(client, response.json()["id"])
     response = client.post("/api/answers", data={"title": "Keep source", "source_job_id": job["id"]},
         files={"report": ("answer.md", REPORT.encode())})

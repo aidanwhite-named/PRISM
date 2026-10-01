@@ -426,9 +426,6 @@ def test_unknown_job_kind_is_rejected(client) -> None:
 
 
 def test_analysis_job_is_unchanged_and_uses_no_tools(client) -> None:
-    prompt = client.post(
-        "/api/prompts", json={"name": "회귀 확인용", "body": "분석하십시오."}
-    ).json()
     upload = client.post(
         "/api/uploads",
         files=[("files", ("citation.txt", b"citation document", "text/plain"))],
@@ -436,7 +433,7 @@ def test_analysis_job_is_unchanged_and_uses_no_tools(client) -> None:
     created = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1.",
             "batch_id": upload["batch_id"],

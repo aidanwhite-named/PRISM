@@ -7,7 +7,6 @@ import { isLogoutSession } from "../lib/types";
 import type {
   AppSettings,
   CredentialCheck,
-  Prompt,
   ProviderInfo,
   ProviderLoginSession,
 } from "../lib/types";
@@ -101,9 +100,8 @@ function ToolFields({
   const modelOptions = Array.isArray(selectedProvider?.capabilities.models)
     ? (selectedProvider.capabilities.models as string[])
     : [];
-  const selectedModel = modelOptions.includes(models[provider])
-    ? models[provider]
-    : "";
+  const selectedModel = models[provider] ?? "";
+  const savedModelMissing = Boolean(selectedModel) && !modelOptions.includes(selectedModel);
   const providerEffortOptions = Array.isArray(
     selectedProvider?.capabilities.reasoning_efforts,
   )
@@ -126,13 +124,13 @@ function ToolFields({
       ? (defaultsByModelValue as Record<string, string>)
       : {};
   const effortOptionsForModel = (model: string) => {
-    const options = effortsByModel[model];
+    const defaultModel = selectedProvider?.capabilities.default_model;
+    const options = effortsByModel[model || (typeof defaultModel === "string" ? defaultModel : "")];
     return Array.isArray(options) ? options : providerEffortOptions;
   };
   const effortOptions = effortOptionsForModel(selectedModel);
-  const selectedEffort = effortOptions.includes(efforts[provider])
-    ? efforts[provider]
-    : "";
+  const selectedEffort = efforts[provider] ?? "";
+  const savedEffortMissing = Boolean(selectedEffort) && !effortOptions.includes(selectedEffort);
   const modelDefaultEffort = defaultsByModel[selectedModel] ?? "";
   const searchTool =
     searchProvider !== undefined
@@ -206,6 +204,9 @@ function ToolFields({
             }}
           >
             <option value="">CLI 기본 모델</option>
+            {savedModelMissing && (
+              <option value={selectedModel}>{selectedModel} (저장된 선택 · 현재 목록에서 확인 안 됨)</option>
+            )}
             {modelOptions.map((model) => (
               <option key={model} value={model}>{model}</option>
             ))}
@@ -215,9 +216,16 @@ function ToolFields({
               ? `${modelOptions.length}개 모델을 선택할 수 있습니다.`
               : "모델 목록을 확인할 수 없습니다."}
           </span>
+          {provider === "codex" && (
+            <span className="hint">
+              모델과 추론강도 목록은 자동으로 갱신됩니다. ‘다시 검사’로 즉시 갱신할 수도 있습니다.
+              {selectedProvider?.capabilities.model_catalog_source === "cache" && " 현재는 Codex에 저장된 목록을 표시합니다."}
+              {selectedProvider?.capabilities.model_catalog_source === "previous" && " 갱신에 실패하여 마지막으로 확인한 목록을 표시합니다."}
+            </span>
+          )}
         </div>
       )}
-      {!inherits && effortOptions.length > 0 && (
+      {!inherits && (effortOptions.length > 0 || selectedEffort) && (
         <div className="field">
           <label htmlFor={`${idPrefix}-effort`}>추론강도</label>
           <select
@@ -234,6 +242,9 @@ function ToolFields({
             }
           >
             <option value="">모델 기본값</option>
+            {savedEffortMissing && (
+              <option value={selectedEffort}>{selectedEffort} (저장된 선택 · 현재 목록에서 확인 안 됨)</option>
+            )}
             {effortOptions.map((level) => (
               <option key={level} value={level}>{level}</option>
             ))}
@@ -249,7 +260,6 @@ function ToolFields({
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [probing, setProbing] = useState(false);
   const [smoke, setSmoke] = useState<Record<string, unknown> | null>(null);
@@ -257,10 +267,6 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [paths, setPaths] = useState<Record<string, string>>({});
-  const [defaultPromptId, setDefaultPromptId] = useState("");
-  // 검색 전략 프롬프트의 기본값. 분석 프롬프트와 다른 목록이고 다른 계약이다.
-  const [searchPrompts, setSearchPrompts] = useState<Prompt[]>([]);
-  const [defaultSearchPromptId, setDefaultSearchPromptId] = useState("");
   const [defaultProvider, setDefaultProvider] = useState("agy");
   const [defaultModels, setDefaultModels] = useState<Record<string, string>>({});
   // 빈 값 = 모델 기본값. 그때 PRISM 은 CLI 에 추론강도를 넘기지 않는다.
@@ -304,23 +310,12 @@ export default function SettingsPage() {
   useEffect(() => {
     Promise.all([
       api.settings(),
-      api.listPrompts(),
-      api.listPrompts({ kind: "search" }),
       api.listProviders(),
     ])
-      .then(([s, promptList, searchPromptList, providerList]) => {
+      .then(([s, providerList]) => {
         setSettings(s);
-        setPrompts(promptList);
-        setSearchPrompts(searchPromptList);
         setProviders(providerList);
         setPaths(s.values.provider_paths ?? {});
-        const configuredPromptId = s.values.default_prompt_id ?? "";
-        const configuredPrompt = promptList.find(
-          (prompt) => prompt.id === configuredPromptId && prompt.enabled,
-        );
-        const fallbackPrompt = promptList.find((prompt) => prompt.enabled);
-        setDefaultPromptId(configuredPrompt?.id ?? fallbackPrompt?.id ?? "");
-        setDefaultSearchPromptId(s.values.default_search_prompt_id ?? "");
         setDefaultProvider(s.values.default_provider ?? "agy");
         setDefaultModels(s.values.default_models ?? {});
         setReasoningEffort(s.values.reasoning_effort ?? {});
@@ -482,21 +477,6 @@ export default function SettingsPage() {
       setError((e as Error).message);
     } finally {
       setEpoChecking(false);
-    }
-  };
-
-  // 프롬프트와 실행 도구는 카드가 따로라 저장도 따로 한다. 한쪽 카드의 저장
-  // 버튼이 다른 카드에서 고치다 만 값을 함께 보내면 안 된다.
-  const savePromptDefaults = async () => {
-    try {
-      const updated = await api.updateSettings({
-        default_prompt_id: defaultPromptId,
-        default_search_prompt_id: defaultSearchPromptId,
-      });
-      setSettings(updated);
-      notify("기본 프롬프트를 저장했습니다.");
-    } catch (e) {
-      setError((e as Error).message);
     }
   };
 
@@ -734,20 +714,6 @@ export default function SettingsPage() {
               작업별 실행 도구·모델·추론강도를 설정합니다.
             </p>
             <div className="settings-tools-grid">
-              <section className="settings-tool-panel settings-tool-analysis" aria-labelledby="analysis-tool-title">
-                <h3 id="analysis-tool-title">구성대비 분석</h3>
-                <ToolFields
-                  idPrefix="analysis"
-                  title="구성대비 분석"
-                  providers={providers}
-                  provider={defaultProvider}
-                  onProviderChange={setDefaultProvider}
-                  models={defaultModels}
-                  setModels={setDefaultModels}
-                  efforts={reasoningEffort}
-                  setEfforts={setReasoningEffort}
-                />
-              </section>
               <section className="settings-tool-panel settings-tool-search" aria-labelledby="search-tool-title">
                 <h3 id="search-tool-title">유사문헌 검색</h3>
                 <ToolFields
@@ -764,6 +730,20 @@ export default function SettingsPage() {
                   searchProvider={searchProvider || defaultProvider}
                 />
               </section>
+              <section className="settings-tool-panel settings-tool-analysis" aria-labelledby="analysis-tool-title">
+                <h3 id="analysis-tool-title">구성대비 분석</h3>
+                <ToolFields
+                  idPrefix="analysis"
+                  title="구성대비 분석"
+                  providers={providers}
+                  provider={defaultProvider}
+                  onProviderChange={setDefaultProvider}
+                  models={defaultModels}
+                  setModels={setDefaultModels}
+                  efforts={reasoningEffort}
+                  setEfforts={setReasoningEffort}
+                />
+              </section>
             </div>
             <button className="btn primary" onClick={saveExecutionDefaults}>
               실행 도구 저장
@@ -771,51 +751,6 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="settings-stack">
-          <div className="card settings-prompt-defaults">
-            <div className="split" style={{ marginBottom: 12 }}>
-              <h2 style={{ margin: 0 }}>기본 프롬프트</h2>
-              <button className="btn primary small" onClick={savePromptDefaults}>
-                기본 프롬프트 저장
-              </button>
-            </div>
-            <p className="faint" style={{ marginTop: -6 }}>
-              실행 화면이 처음 고르는 프롬프트입니다.
-            </p>
-            <div className="field">
-              <label htmlFor="default-prompt">기본 분석 프롬프트</label>
-              <select
-                id="default-prompt"
-                value={defaultPromptId}
-                onChange={(e) => setDefaultPromptId(e.target.value)}
-              >
-                <option value="">최근 활성 분석 프롬프트 자동 선택</option>
-                {prompts.map((prompt) => (
-                  <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
-                    {prompt.name}{prompt.enabled ? "" : " · 비활성"}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="default-search-prompt">기본 검색 전략 프롬프트</label>
-              <select
-                id="default-search-prompt"
-                value={defaultSearchPromptId}
-                onChange={(e) => setDefaultSearchPromptId(e.target.value)}
-              >
-                <option value="">기본 제공 검색 전략 사용</option>
-                {searchPrompts.map((prompt) => (
-                  <option key={prompt.id} value={prompt.id} disabled={!prompt.enabled}>
-                    {prompt.name}
-                    {prompt.enabled ? "" : " · 비활성"}
-                  </option>
-                ))}
-              </select>
-              <span className="hint">
-                실행 화면에서 변경할 수 있습니다.
-              </span>
-            </div>
-          </div>
           <div className="card settings-literature">
             <h2>비특허문헌 검색 연동 (Crossref · Europe PMC · OpenAlex)</h2>
             <label className="checkbox">
@@ -1378,9 +1313,9 @@ export default function SettingsPage() {
                 <p className="hint">구성대비 분석과 유사문헌 검색의 제한시간을 각각 정합니다.</p>
                 <NumberField label="실행 제한시간 (초)" value={v.default_timeout_seconds}
                   onSave={(n) => saveValue("default_timeout_seconds", n)} />
-                <NumberField label="유사문헌 검색 제한시간 (초)" value={v.search_timeout_seconds ?? 300}
-                  hint="검색 순서·문헌 확인·후보 선택은 AI가 결정합니다. 분류와 호출 횟수 제한은 없습니다."
-                  onSave={(n) => saveValue("search_timeout_seconds", n)} />
+                <NumberField label="유사문헌 검색 전체 제한시간 (초)" value={v.search_total_seconds ?? Math.min(v.search_timeout_seconds ?? 240, 240) + Math.min(v.search_verification_seconds ?? 120, 120)}
+                  hint="최대 360초. 검색·원문 확인·분류를 자유롭게 진행하며 충분한 근거가 확보되면 일찍 종료합니다."
+                  onSave={(n) => saveValue("search_total_seconds", n)} />
               </section>
             </div>
           </div>

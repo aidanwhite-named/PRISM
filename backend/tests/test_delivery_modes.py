@@ -372,7 +372,12 @@ def _attachment(tmp_path, name="citation.pdf", pages=None, role=AttachmentRole.C
     data = build_korean_pdf(pages)
     target = tmp_path / "input" / name
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(data)
+    # Retrieval opens a memory-mapped PDF on Windows. A second assembly must
+    # reuse the same fixture rather than overwrite its open source file.
+    if target.exists():
+        assert target.read_bytes() == data
+    else:
+        target.write_bytes(data)
     normalized = target.with_suffix(".txt")
     normalized.write_text("\n".join(pages), encoding="utf-8")
     return IngestedFile(
@@ -558,6 +563,9 @@ class _FakeIndex:
     def __init__(self, pages: dict[int, str]) -> None:
         self._pages = pages
         self.page_count = max(pages) if pages else 0
+
+    def page_text(self, page_number: int):
+        return self._pages.get(page_number, "")
 
     def page_rows(self, page_number: int):
         text = self._pages.get(page_number, "")

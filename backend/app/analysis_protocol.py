@@ -10,8 +10,9 @@ PRISM 은 구성별 결과와 문헌 매핑을 사람이 읽는 Markdown 이 아
 계약의 두 짝을 같은 곳에 둔다. 규칙을 여기로 옮기고, 분석 조립이 선택된
 프롬프트 뒤에 이 절을 붙인다.
 
-구성·매핑 블록은 출력 형식 계약이다. 모델의 최종 보고서를 보존하며 별도의
-AI 재검토나 보고서 재조립은 수행하지 않는다.
+새 분석은 structured_report의 단일 결과 계약을 사용하고 프로그램이 보고서를
+조립한다. 아래 두 블록 규칙은 명시적으로 이전 계약을 가진 사용자 프롬프트의
+호환용으로 남긴다. 새 보고서의 잘못된 문장 선택은 제한된 복구 호출로 재검증한다.
 
 검색 실행에는 붙이지 않는다. 검색은 자기 출력 계약(search_manifest)이 따로
 있고, 조립 경로도 다르다 — prompt_assembly.assemble_search 는 이 모듈을 부르지
@@ -67,7 +68,7 @@ def declares_blocks(master_prompt: str) -> bool:
     return _COMPONENT_OPEN in master_prompt or _MAPPING_OPEN in master_prompt
 
 
-def apply(master_prompt: str) -> str:
+def apply(master_prompt: str, *, retrieved: bool = False) -> str:
     """분석 프롬프트 뒤에 출력 규칙을 붙인다.
 
     이미 갖고 있으면 그대로 둔다. 규칙이 두 벌 들어가면 모델이 블록을 두 번
@@ -75,11 +76,14 @@ def apply(master_prompt: str) -> str:
     따르는 프롬프트일수록 깨지는 셈이다. 옛 프롬프트 파일과 사용자가 직접 적어
     둔 프롬프트가 여기에 해당한다.
     """
+    # Explicit old protocols remain supported for custom historical prompts.
+    # All other analysis prompts use a single payload; the app renders the report.
+    if not declares_blocks(master_prompt):
+        from .structured_report import instructions
+        return master_prompt.rstrip() + '\n\n' + instructions(retrieved=retrieved)
     report_only = ('\n\n이번 실행에서는 최종 보고서와 구성별 분석·문헌 매핑 블록만 작성한다. '
                    '별도 근거 후보 비교 블록이나 후속 AI 재검토를 전제로 한 출력 규칙은 적용하지 않는다. '
                    '탈락 후보의 설명·번역·제외 이유는 작성하지 않는다.')
-    if not declares_blocks(master_prompt):
-        return master_prompt.rstrip() + "\n\n" + INSTRUCTIONS + report_only
     component, mapping = INSTRUCTIONS.split("## 문헌 매핑 블록", 1)
     result = master_prompt.rstrip()
     if _COMPONENT_OPEN not in master_prompt:

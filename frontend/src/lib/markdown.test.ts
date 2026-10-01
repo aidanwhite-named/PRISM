@@ -9,6 +9,21 @@ function fragment(html: string) {
 }
 
 describe("보고서 가독성", () => {
+  it("차이점 구분선과 인용발명별 문단을 유지한다", () => {
+    const source = [
+      "**(A) 일부 차이 🟡 (70%)**", '"주 문헌의 발췌" (단락 [0010])',
+      "---", "#### [차이점]", "구성 (A)에 대해",
+      "**인용발명 1** (US1)에는 추가 조건이 부족합니다.",
+      '**인용발명 2** (US2)에는 "번역문." (PDF 페이지 2; "Original sentence.")라는 기재가 있으며, 이는 해당 조건에 대응합니다.',
+      '**인용발명 3** (KR3)에는 "한글 발췌." (단락 [0020])라는 기재가 있으며, 이는 다른 조건에 대응합니다.',
+    ].join("\n\n");
+    const result = fragment(renderReportMarkdown(source));
+    expect(result.querySelector("hr")?.nextElementSibling?.textContent).toBe("[차이점]");
+    const paragraphs = [...result.querySelectorAll("p")].filter((node) => node.querySelector(".report-citation"));
+    expect(paragraphs).toHaveLength(3);
+    expect(paragraphs[1].textContent).toContain('"Original sentence.")라는 기재가 있으며, 이는 해당 조건에 대응합니다.');
+  });
+
   it("문장 전체의 코드 서식을 제목과 항목으로 바꾸되 원문을 보존한다", () => {
     const source = [
       "### 청구항 13", "`(A) 공간 서술 세그먼트를 생성하는 것`",

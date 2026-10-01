@@ -16,7 +16,9 @@ import json
 
 import pytest
 
-from app.config import PROMPT_DIR
+from .conftest import _TEST_PROMPT_DIR
+from pathlib import Path
+PROMPT_DIR = Path(_TEST_PROMPT_DIR)
 
 from .conftest import wait_for_job
 from .fake_provider import RECEIVED
@@ -36,13 +38,16 @@ CAPABLE_PROMPT = """<!-- PRISM_PROMPT_METADATA
 
 
 @pytest.fixture()
-def prompt(client):
-    """문헌 매핑을 선언한 프롬프트. 매핑 대상까지 함께 검증한다."""
-    path = PROMPT_DIR / "inclusion-test.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(CAPABLE_PROMPT, encoding="utf-8")
-    yield client.get(f"/api/prompts/{path.name}").json()
-    path.unlink(missing_ok=True)
+def prompt(client, monkeypatch):
+    # Isolate legacy response/numbering compatibility from staged V5 comparison.
+    # V5 rendering, persistence and semantic review are tested separately.
+    from dataclasses import asdict, replace
+    from app.task_instructions import ANALYSIS
+    from app.analysis_protocol import INSTRUCTIONS
+    from app.api import jobs
+    legacy = replace(ANALYSIS, body='청구항과 인용발명을 대비하십시오.\n' + INSTRUCTIONS)
+    monkeypatch.setattr(jobs, 'ANALYSIS', legacy)
+    return asdict(legacy)
 
 
 def upload_two(client) -> dict:
@@ -115,7 +120,7 @@ def attachment_manifest(job_id: str) -> list[dict]:
 def preflight(client, prompt, batch_id, selected):
     body = {
         "job_kind": "patent_analysis",
-        "prompt_id": prompt["id"],
+
         "provider": "test",
         "claim_text": CLAIM,
         "batch_id": batch_id,
@@ -129,7 +134,7 @@ def preflight(client, prompt, batch_id, selected):
 
 def create(client, prompt, batch_id, selected):
     body = {
-        "prompt_id": prompt["id"],
+
         "provider": "test",
         "claim_text": CLAIM,
         "batch_id": batch_id,
@@ -353,7 +358,7 @@ def test_follow_up_does_not_resurrect_an_excluded_document(client, prompt) -> No
     child_created = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": CLAIM,
             "source_job_id": parent["id"],
@@ -385,7 +390,7 @@ def test_follow_up_without_a_selection_keeps_the_parent_decision(client, prompt)
     child_created = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": CLAIM,
             "source_job_id": parent["id"],

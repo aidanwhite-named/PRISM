@@ -58,7 +58,7 @@ def _settings(client, values: dict) -> dict:
 
 def _run(client, prompt, batch_id, claim_text):
     body = {
-        "prompt_id": prompt["id"],
+
         "provider": "test",
         "claim_text": claim_text,
         "batch_id": batch_id,

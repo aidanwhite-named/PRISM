@@ -12,7 +12,6 @@ import App from "./App";
 import { RunSessionProvider, useRunSession } from "./lib/runSession";
 import { workspacePath } from "./lib/workspaces";
 import HistoryPage from "./pages/HistoryPage";
-import PromptsPage from "./pages/PromptsPage";
 import RunPage from "./pages/RunPage";
 import SettingsPage from "./pages/SettingsPage";
 import AnswersPage from "./pages/AnswersPage";
@@ -52,7 +51,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               path="search"
               element={<RunPage kind="similarity_search" />}
             />
-            <Route path="prompts" element={<PromptsPage />} />
             <Route path="answers" element={<AnswersPage />} />
             <Route path="history" element={<HistoryPage />} />
             <Route path="settings" element={<SettingsPage />} />

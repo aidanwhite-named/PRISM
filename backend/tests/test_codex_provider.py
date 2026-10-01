@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import pytest
 from dataclasses import replace
 from pathlib import Path
 
@@ -22,8 +23,6 @@ from types import SimpleNamespace
 
 from app.providers.base import CODEX_WEB_SEARCH, NO_TOOLS, ExecutionRequest
 from app.providers.codex_cli import (
-    MODEL_DEFAULT_REASONING_EFFORTS,
-    MODEL_REASONING_EFFORTS,
     CodexCliProvider,
 )
 from app.providers.codex_stream import (
@@ -68,6 +67,31 @@ def test_search_run_turns_web_search_on(tmp_path: Path) -> None:
 def test_no_tools_policy_does_not_enable_search(tmp_path: Path) -> None:
     args = CodexCliProvider().build_args(_request(tmp_path, tool_policy=NO_TOOLS))
     assert "tools.web_search=false" in args
+
+
+def test_native_response_schema_is_written_and_passed_to_cli(tmp_path, monkeypatch):
+    from app.providers import codex_cli
+    from app.providers.resolver import ResolvedExecutable
+    provider = CodexCliProvider()
+    provider._resolved = ResolvedExecutable('mock-codex', 'native_exe')
+    schema = {'type': 'object', 'properties': {'reason': {'type': 'string'}},
+              'required': ['reason'], 'additionalProperties': False}
+    async def capture(*args, **kwargs):
+        return SimpleNamespace(exit_code=0, stdout='codex mock')
+    async def streaming(**kwargs):
+        argv = kwargs['argv']
+        schema_path = Path(argv[argv.index('--output-schema') + 1])
+        assert json.loads(schema_path.read_text(encoding='utf-8')) == schema
+        assert schema_path.parent == tmp_path and argv[-1] == '-'
+        Path(argv[argv.index('-o') + 1]).write_text('{"reason":"확인"}', encoding='utf-8')
+        await kwargs['on_stdout_line'](json.dumps({'type': 'turn.completed', 'usage': {}}))
+        return SimpleNamespace(stdout='', stderr='', exit_code=0, timed_out=False, cancelled=False, launch_error=None)
+    monkeypatch.setattr(codex_cli.proc, 'run_capture', capture)
+    monkeypatch.setattr(codex_cli.proc, 'run_streaming', streaming)
+    async def emit(*args):
+        pass
+    outcome = asyncio.run(provider.execute(_request(tmp_path, response_schema=schema), emit))
+    assert json.loads(outcome.result_text) == {'reason': '확인'}
 
 
 def test_only_enabled_job_checkpoint_tool_is_preapproved(tmp_path):
@@ -321,6 +345,30 @@ def test_turn_failed_is_an_error() -> None:
     assert parser.state.is_error is True
     assert parser.state.rate_limited is True
     assert "usage_limit_reached" in parser.state.error_message
+
+
+@pytest.mark.parametrize('message', ['Authentication and transmission of encrypted keys use public key encryption.',
+                                   'Unauthorized access is prevented.', 'The quota and usage limit are stored.'])
+def test_normal_report_text_is_not_a_login_or_usage_error(message) -> None:
+    parser = CodexStreamParser()
+    _feed(parser, {'type': 'item.completed', 'item': {'type': 'agent_message', 'text': message}})
+    _feed(parser, {'type': 'turn.completed', 'usage': {}})
+    assert not parser.state.auth_required
+    assert not parser.state.rate_limited
+
+
+@pytest.mark.parametrize('message', ['Not logged in', 'Authentication failed: invalid credentials', 'unauthorized'])
+def test_actual_cli_auth_errors_still_require_login(message) -> None:
+    parser = CodexStreamParser()
+    _feed(parser, {'type': 'turn.failed', 'error': {'message': message}})
+    assert parser.state.auth_required
+
+
+def test_recovered_error_does_not_override_completed_turn() -> None:
+    parser = CodexStreamParser()
+    _feed(parser, {'type': 'error', 'message': 'authentication temporary failure'})
+    _feed(parser, {'type': 'turn.completed', 'usage': {}})
+    assert not parser.state.auth_required
 
 
 def test_plain_log_lines_are_passed_through_not_dropped() -> None:
@@ -609,13 +657,14 @@ def test_reasoning_effort_is_passed_only_when_chosen(tmp_path: Path) -> None:
 
 
 def test_reasoning_effort_catalog_is_model_specific() -> None:
-    assert MODEL_DEFAULT_REASONING_EFFORTS["gpt-5.6-sol"] == "low"
-    assert MODEL_DEFAULT_REASONING_EFFORTS["gpt-5.6-luna"] == "medium"
-    assert "ultra" in MODEL_REASONING_EFFORTS["gpt-5.6-sol"]
-    assert "ultra" not in MODEL_REASONING_EFFORTS["gpt-5.6-luna"]
-    assert MODEL_REASONING_EFFORTS["gpt-5.5"] == (
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-    )
+    from app.providers.codex_models import capabilities
+
+    catalog = capabilities([
+        {"model": "future-sol", "defaultReasoningEffort": "low",
+         "supportedReasoningEfforts": [{"reasoningEffort": "low"}, {"reasoningEffort": "ultra"}]},
+        {"model": "future-luna", "defaultReasoningEffort": "medium",
+         "supportedReasoningEfforts": [{"reasoningEffort": "medium"}]},
+    ])
+    assert catalog["reasoning_defaults_by_model"]["future-sol"] == "low"
+    assert "ultra" in catalog["reasoning_efforts_by_model"]["future-sol"]
+    assert "ultra" not in catalog["reasoning_efforts_by_model"]["future-luna"]

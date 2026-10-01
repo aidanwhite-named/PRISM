@@ -85,7 +85,7 @@ const COMPONENT_TITLE = /^\((?:[A-Z](?:-?\d+)?|전제부)\)\s+\S/;
 const REPORT_LABEL = /^(?:→\s*)?(?:대응 정도|유사도 기준 문헌|근거|대응|차이점|도출 용이성|보완|결합 동기 및 가능성|결합 결과|결합 후 남는 차이점|결합 후 도출 용이성|대응 결론)\s*[:：]/;
 
 // `인용발명 3` 형태의 표식. 줄바꿈은 건너뛰어 문단 사이를 묶지 않는다.
-const CITATION = /인용발명[ \t]?\d{1,2}/g;
+const CITATION = /인용발명[ \t]?\d+/g;
 
 /** 「인용발명 N」에 표시용 표식을 단다.
  *
@@ -111,6 +111,9 @@ function markCitations(root: DocumentFragment): void {
       if (start > cursor) parts.append(text.data.slice(cursor, start));
       const tag = document.createElement("span");
       tag.className = "report-citation";
+      // Number-based palette keeps the same reference consistent across sections.
+      const number = Number(match[0].match(/\d+$/)?.[0]);
+      tag.dataset.citationColor = String((number - 1) % 8 + 1);
       tag.textContent = match[0];
       parts.append(tag);
       cursor = start + match[0].length;
@@ -159,6 +162,13 @@ export function renderReportMarkdown(source: string): string {
   // 문단 정리가 끝난 뒤에 붙인다. 코드 서식을 벗기는 위 단계가 문단의 자식을
   // 통째로 갈아 끼우므로, 먼저 달면 그 표식이 사라진다.
   markCitations(template.content);
+  // Normalize visible prose after sanitizing; attributes and code remain untouched.
+  const prose = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT);
+  for (let node = prose.nextNode(); node; node = prose.nextNode()) {
+    if (!node.parentElement?.closest("code, pre")) {
+      node.textContent = node.textContent?.replace(/[“”]/g, '"') ?? "";
+    }
+  }
   return template.innerHTML;
 }
 

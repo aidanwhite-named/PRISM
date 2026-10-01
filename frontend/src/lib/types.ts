@@ -267,6 +267,7 @@ export interface AnalysisComponent {
 }
 
 export interface AnalysisManifest {
+  report?: { version: number; issues: string[] };
   evidence_review?: { status: string; issues: string[]; calls: number };
   version: number;
   threshold: number;
@@ -312,7 +313,17 @@ export interface SearchCandidate {
 export interface SearchReview {
   stop_reason?: string; expansion_summary?: string; sampling_review?: string; remaining_gaps?: string[];
 }
+export interface SearchComparison {
+  candidate_ids: string[];
+  job_id: string | null;
+  status: string;
+  errors: string[];
+  analysis_completeness?: AnalysisCompleteness | null;
+  sources: { candidate_id: string; title: string; status: "ready" | "hold"; reason: string; scope?: string }[];
+}
+
 export interface SearchManifestV14 {
+  comparisons?: SearchComparison[];
   time_budget?: { total_seconds: number; search_seconds: number; classification_reserve_seconds: number; save_reserve_seconds: number };
   deadline_classification?: { attempted: boolean; completed: boolean; reason: string; candidate_count?: number } | null;
   engine?: ProgressiveSearchSnapshot;
@@ -352,11 +363,14 @@ export interface LegacySearchManifest {
 export type SearchManifest = SearchManifestV14 | LegacySearchManifest;
 
 export interface ProgressiveSearchSnapshot {
+  search_focus?: GapSearchFocus | null;
+  excluded_input_documents?: { title: string; url: string; document_number: string; reason: string }[];
   mode?: "autonomous";
   summary?: string;
   classification?: { status: "complete" | "incomplete" | "not_applicable"; target_count: number; reviewed_count: number; unreviewed_count: number };
   verified_match?: boolean;
   can_continue?: boolean;
+  limits?: { seconds: number; search_seconds?: number; verification_seconds?: number };
   version: number; phase: string; stop_reason: string; depth: string;
   elapsed_seconds: number; first_candidate_seconds: number | null;
   route?: { lane: string; outcome?: string; reason?: string; seconds?: number }[];
@@ -364,8 +378,19 @@ export interface ProgressiveSearchSnapshot {
   candidates: { id: string; document_number: string; title: string; url: string;
       reason?: string; difference?: string; reported_scope?: string; authors?: string;
       observed_scope?: string; observed_scopes?: string[];
+      source_urls?: string[]; review_pending_reason?: string;
       triage_status?: "unreviewed" | "candidate" | "hold" | "rejected" | "detailed";
       triage_reason?: string; core_matches?: string; review_stage?: "metadata" | "core_components" | "full_text";
+      search_review?: { status: string; verdict?: "strong" | "partial" | "mismatch" | "unavailable";
+        group?: "X" | "Y" | "Z";
+        reason?: string; gaps?: string; issues?: string[];
+        component_matches?: { component_id: string; symbol: string; feature: string;
+          status: string; verdict?: "strong" | "partial" | "mismatch" | "unavailable";
+          reason?: string; gaps?: string; issues?: string[];
+          passages?: { feature: string; relation: string; quote: string; translation: string;
+            url: string; scope: string; start: number; end: number; pages: number[] }[] }[];
+        passages?: { feature: string; relation: string; quote: string; translation: string;
+          url: string; scope: string; start: number; end: number; pages: number[] }[] } | null;
       source_receipts?: { call_id: string; tool: string; scope: string; observed_scopes?: string[] }[];
       publication_date: string; family_id: string; data_status: string; date_status: string;
       document_classification?: { group: SearchGroup; reason: string; basis: string; evidence_status: string;
@@ -394,31 +419,6 @@ export interface CitationMappingItem {
 export interface CitationMapping {
   version: number;
   items: CitationMappingItem[];
-}
-
-export type PromptKind = "analysis" | "search";
-
-export interface Prompt {
-  id: string;
-  name: string;
-  description: string;
-  body: string;
-  enabled: boolean;
-  accepted_file_types: string[];
-  /** 프롬프트 파일 메타데이터에서만 정하는 PRISM 확장 선언. */
-  capabilities: string[];
-  /**
-   * 어느 작업의 프롬프트인가. 분석 프롬프트와 검색 전략 프롬프트는 계약이
-   * 다르므로 목록도 선택도 섞지 않는다. 파일이 정하며 화면에서 바꿀 수 없다.
-   */
-  kind: PromptKind;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PromptCatalogItem extends Prompt {
-  editable: boolean;
-  deletable: boolean;
 }
 
 export interface ProviderInfo {
@@ -656,13 +656,13 @@ export interface AppSettings {
     /** 0 = 제한 없음(기본값). */
     max_inline_chars: number;
     default_timeout_seconds: number;
+    search_total_seconds?: number;
     search_timeout_seconds?: number;
+    search_verification_seconds?: number;
     max_concurrency_per_provider: number;
     runtime_context: string;
     runtime_context_enabled: boolean;
-    default_prompt_id: string;
     /** 검색 화면이 처음 고르는 검색 전략 프롬프트. 비어 있으면 배포본. */
-    default_search_prompt_id: string;
     default_provider: string;
     provider_paths: Record<string, string>;
     default_models: Record<string, string>;

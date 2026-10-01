@@ -22,7 +22,6 @@ const settingsResponse = {
     max_concurrency_per_provider: 1,
     runtime_context: "런타임",
     runtime_context_enabled: true,
-    default_prompt_id: "",
     default_provider: "agy",
     provider_paths: {},
     default_models: {},
@@ -110,7 +109,6 @@ const providersResponse = [
 vi.mock("../lib/api", () => ({
   api: {
     settings: vi.fn(async () => settingsResponse),
-    listPrompts: vi.fn(async () => []),
     listProviders: vi.fn(async () => providersResponse),
     updateSettings: vi.fn(async () => settingsResponse),
     probeProviders: vi.fn(async () => []),
@@ -270,23 +268,10 @@ describe("대용량 인용발명 전달 방식", () => {
     expect(sent).not.toHaveProperty("default_search_prompt_id");
   });
 
-  it("기본 프롬프트는 별도 카드에서 프롬프트 값만 저장한다", async () => {
-    const { api } = await import("../lib/api");
+  it("프롬프트 선택과 저장 기능을 제공하지 않는다", async () => {
     const { container } = await renderPage();
-    const card = container.querySelector(".settings-prompt-defaults") as HTMLElement;
-    expect(card).toBeTruthy();
-    // 실행 도구 선택은 이 카드에 없다.
-    expect(within(card).queryByLabelText("구성대비 분석 실행 도구")).toBeNull();
-
-    fireEvent.click(within(card).getByRole("button", { name: "기본 프롬프트 저장" }));
-    // 앞선 테스트의 호출이 mock 에 남아 있으므로 마지막 호출이 바뀔 때까지 기다린다.
-    await waitFor(() => {
-      const sent = vi.mocked(api.updateSettings).mock.calls.at(-1)?.[0] ?? {};
-      expect(Object.keys(sent).sort()).toEqual([
-        "default_prompt_id",
-        "default_search_prompt_id",
-      ]);
-    });
+    expect(container.querySelector(".settings-prompt-defaults")).toBeNull();
+    expect(screen.queryByRole("button", { name: "기본 프롬프트 저장" })).toBeNull();
   });
 
   it("Codex 모델별 추론강도를 드롭다운으로 표시한다", async () => {
@@ -317,6 +302,49 @@ describe("대용량 인용발명 전달 방식", () => {
       expect([...effort.options].map((option) => option.value)).toContain("ultra");
     });
     expect(screen.getByText(/모델 기본값\(low\)/)).toBeTruthy();
+  });
+
+  it("다시 검사하면 새 모델과 해당 모델의 추론강도를 반영한다", async () => {
+    const { api } = await import("../lib/api");
+    const updated = (await api.listProviders()).map((p) => p.provider === "codex" ? {
+      ...p, capabilities: {
+        models: ["future-sol"], reasoning_efforts: ["low", "ultra"],
+        reasoning_efforts_by_model: { "future-sol": ["low", "ultra"] },
+        reasoning_defaults_by_model: { "future-sol": "low" },
+        model_catalog_source: "codex",
+      },
+    } : p);
+    vi.mocked(api.probeProviders).mockResolvedValueOnce(updated);
+    await renderPage();
+    fireEvent.change(screen.getByLabelText("구성대비 분석 실행 도구"), {
+      target: { value: "codex" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "다시 검사" }));
+    await waitFor(() => expect(screen.getAllByRole("option", { name: "future-sol" })).toHaveLength(1));
+    fireEvent.change(screen.getByLabelText("구성대비 분석 모델"), { target: { value: "future-sol" } });
+    const effort = screen.getByLabelText("구성대비 분석 추론강도") as HTMLSelectElement;
+    expect([...effort.options].map((o) => o.value)).toEqual(["", "low", "ultra"]);
+  });
+
+  it("목록 조회가 실패해도 저장된 모델과 추론강도를 유지한다", async () => {
+    const { api } = await import("../lib/api");
+    const currentSettings = await api.settings();
+    const currentProviders = await api.listProviders();
+    vi.mocked(api.settings).mockResolvedValueOnce({
+      ...currentSettings, values: { ...currentSettings.values,
+        default_provider: "codex", default_models: { codex: "saved-model" },
+        reasoning_effort: { codex: "ultra" },
+      },
+    });
+    vi.mocked(api.listProviders).mockResolvedValueOnce(currentProviders.map((p) =>
+      p.provider === "codex" ? { ...p, capabilities: { models: [], reasoning_efforts: [] } } : p));
+    await renderPage();
+    expect((screen.getByLabelText("구성대비 분석 모델") as HTMLSelectElement).value).toBe("saved-model");
+    expect((screen.getByLabelText("구성대비 분석 추론강도") as HTMLSelectElement).value).toBe("ultra");
+    fireEvent.click(screen.getByRole("button", { name: "실행 도구 저장" }));
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      default_models: { codex: "saved-model" }, reasoning_effort: { codex: "ultra" },
+    })));
   });
 
   it("선택지가 auto / full / retrieval 셋뿐이다", async () => {

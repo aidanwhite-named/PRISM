@@ -431,6 +431,7 @@ async def run_retrieval(
         "action_errors": list(run.action_errors),
         "deferred_actions": list(run.deferred_actions),
         "deferred_pending": list(run.deferred_pending),
+        "component_selection_events": list(run.selection_events),
         "deferred_executed": run.deferred_executed,
         "notes": list(run.notes),
         "budget_exhausted": run.budget_exhausted or bool((bundle or {}).get("budget_exhausted")),

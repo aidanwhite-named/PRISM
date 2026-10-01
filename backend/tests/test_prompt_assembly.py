@@ -237,8 +237,9 @@ def test_output_rules_are_attached_to_a_prompt_that_never_mentions_them() -> Non
     """
     result = assemble("청구항을 구성별로 대비하라.", [], RULES, True, 100_000)
     assert "청구항을 구성별로 대비하라." in result.user_message
-    assert "[PRISM_COMPONENT_ANALYSIS_V1]" in result.user_message
-    assert "[PRISM_CITATION_MAPPING_V1]" in result.user_message
+    assert "# PRISM 구조화 보고서 V5" in result.user_message
+    assert "[PRISM_COMPONENT_ANALYSIS_V1]" not in result.user_message
+    assert "[PRISM_CITATION_MAPPING_V1]" not in result.user_message
 
 
 def test_output_rules_are_not_attached_twice() -> None:

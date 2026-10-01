@@ -149,6 +149,8 @@ body {
   letter-spacing: -0.018em;
 }
 
+.comparison-selection { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 14px 0; min-width: 0; overflow-wrap: anywhere; }
+.comparison-selection input { margin-right: 8px; accent-color: var(--accent); }
 button, input, select, textarea { font: inherit; color: inherit; letter-spacing: -0.01em; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 
@@ -1350,6 +1352,7 @@ tbody tr:hover { background: rgba(230, 237, 238, 0.43); }
 .result h1 { margin-top: 0; font-family: Georgia, "Noto Serif KR", serif; font-size: 24px; font-weight: 500; }
 .result h2 { margin-top: 24px; border-bottom: 1px solid var(--border); padding-bottom: 5px; font-size: 17px; border-bottom-color: rgba(83, 104, 101, 0.13); }
 .result h3 { margin-top: 18px; font-size: 15px; }
+.result hr { margin: 30px 0 18px; border: 0; border-top: 1px solid var(--border); }
 .result .report-component-title {
   margin: 30px 0 14px;
   padding-top: 18px;
@@ -1371,12 +1374,26 @@ tbody tr:hover { background: rgba(230, 237, 238, 0.43); }
    padding 을 주면 조사가 밀려나 「인용발명 1 의」로 읽힌다. 글자 폭을 그대로
    두고 형광펜처럼 밑에 깔기만 한다. */
 .result .report-citation {
+  --citation-hue: 210;
   padding: 1px 0;
   border-radius: 2px;
-  background: var(--citation-tint);
-  color: var(--accent-strong);
+  background: hsl(var(--citation-hue) 65% 93%);
+  color: hsl(var(--citation-hue) 65% 29%);
   font-weight: 600;
   white-space: nowrap;
+}
+.result .report-citation[data-citation-color="2"] { --citation-hue: 145; }
+.result .report-citation[data-citation-color="3"] { --citation-hue: 275; }
+.result .report-citation[data-citation-color="4"] { --citation-hue: 35; }
+.result .report-citation[data-citation-color="5"] { --citation-hue: 345; }
+.result .report-citation[data-citation-color="6"] { --citation-hue: 185; }
+.result .report-citation[data-citation-color="7"] { --citation-hue: 75; }
+.result .report-citation[data-citation-color="8"] { --citation-hue: 15; }
+@media (prefers-color-scheme: dark) {
+  .result .report-citation {
+    background: hsl(var(--citation-hue) 35% 23%);
+    color: hsl(var(--citation-hue) 75% 83%);
+  }
 }
 .result p, .result li { line-height: 1.78; }
 .result pre, .result code { background: #eceeea; }

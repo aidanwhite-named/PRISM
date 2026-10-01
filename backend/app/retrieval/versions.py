@@ -17,7 +17,7 @@ import sys
 import pypdf
 
 # 인덱스 스키마와 청킹 규칙의 버전.
-INDEX_VERSION = 1
+INDEX_VERSION = 2
 
 # 추출기 신원. pypdf 버전을 그대로 싣는다 — requirements 를 올리면 자동으로
 # 달라지므로, 의존성만 바꾸고 인덱스를 그대로 쓰는 실수가 생기지 않는다.

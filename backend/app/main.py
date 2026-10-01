@@ -18,11 +18,10 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm.exc import StaleDataError
 
 from . import __version__
-from .api import answers, history, jobs, prompts, providers, settings
+from .api import answers, history, jobs, providers, settings
 from . import answer_extraction
 from .config import HOST, PATHS, PORT
 from .db import init_engine
-from .prompt_store import PROMPT_STORE
 
 # Windows 에서 asyncio 서브프로세스는 Proactor 이벤트 루프에서만 동작한다.
 # Selector 루프면 create_subprocess_exec 이 NotImplementedError 를 던진다.
@@ -39,7 +38,6 @@ CLIENT_HEADER_VALUE = "1"
 async def lifespan(app: FastAPI):
     del app
     PATHS.ensure()
-    PROMPT_STORE.ensure()
     init_engine()
     answer_extraction.recover()
     try:
@@ -111,7 +109,6 @@ async def csrf_guard(request: Request, call_next):
             )
     return await call_next(request)
 
-app.include_router(prompts.router)
 app.include_router(providers.router)
 app.include_router(jobs.router)
 app.include_router(history.router)
