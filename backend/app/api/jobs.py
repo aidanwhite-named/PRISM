@@ -52,6 +52,7 @@ from ..prompt_assembly import InputTooLarge
 from ..task_instructions import ANALYSIS, SEARCH
 from ..providers.registry import build_provider, probe_one
 from ..schemas import (
+    DependentSearchDraft,
     AttachmentAnalysis,
     JobCreate,
     SearchComparisonCreate,
@@ -538,6 +539,24 @@ def _search_target(payload: JobCreate, session: Session):
     requested_ids = list(dict.fromkeys(payload.search_component_ids or []))
     search_focus: dict | None = None
     claim_text = (payload.claim_text or "").strip()
+    if payload.search_mode == "dependent":
+        if payload.source_job_id or requested_ids or payload.relation_type:
+            raise HTTPException(400, "종속항만 따로 검색은 미대응 구성 검색·후속 분석과 함께 지정할 수 없습니다.")
+        dependent = payload.dependent_claim_text.strip()
+        feature = payload.search_feature_text.strip()
+        if not dependent:
+            raise HTTPException(400, "검색할 종속항을 입력하십시오.")
+        return claim_text or dependent, {
+            "version": 1, "mode": "gap", "origin": "dependent_claims",
+            "source_job_id": "", "source_job_label": "", "threshold": 0,
+            "dependent_claim_text": dependent,
+            "target_source": "user_feature" if feature else "dependent_claim",
+            "components": [{"id": "DEP-01", "claim": "선택한 종속항", "symbol": "추가 특징" if feature else "검색할 종속항",
+                "feature": feature or dependent, "difference": "", "similarity": None,
+                "status": "not_found", "search_eligible": True}],
+        }
+    if payload.dependent_claim_text.strip() or payload.search_feature_text.strip():
+        raise HTTPException(400, "종속항 검색 입력에는 search_mode=dependent를 지정하십시오.")
     if bool(payload.source_job_id) != bool(requested_ids):
         raise HTTPException(
             400,
@@ -897,7 +916,7 @@ async def _create_analysis_job(payload, session, values, *, submit=True):
     return _job_out(job)
 
 
-# A repeated click must never start a second paid analysis for the same selection.
+# A repeated click reuses active/completed analysis; failed/cancelled jobs can be retried.
 # The desktop server runs in one process; weak entries disappear after use.
 _comparison_locks = WeakValueDictionary()
 
@@ -944,7 +963,8 @@ async def compare_search_candidates(job_id: str, payload: SearchComparisonCreate
         if any(key not in candidates or candidates[key].get('date_status') == 'after_cutoff' for key in ids):
             raise HTTPException(400, '검색 결과에 없거나 기준일 이후인 문헌입니다.')
         for record in _comparison_records(parent, session):
-            if set(record['candidate_ids']) == set(ids) and record.get('job_id') and record['status'] != 'unavailable':
+            if (set(record['candidate_ids']) == set(ids) and record.get('job_id')
+                    and record['status'] in (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.SUCCEEDED)):
                 return record
         batch_id = str(uuid.uuid4())
         work_dir = PATHS.run_dir(batch_id)
@@ -965,8 +985,14 @@ async def compare_search_candidates(job_id: str, payload: SearchComparisonCreate
             # Preserve application context, but never pass search snippets as citation evidence.
             selected.extend(row.id for row in parent.attachments if row.role == AttachmentRole.APPLICATION and row.included)
             session.flush()
+            comparison_claim = parent.claim_text or ''
+            focus = parent.search_focus or {}
+            if focus.get('origin') == 'dependent_claims':
+                dependent = str(focus.get('dependent_claim_text') or '').strip()
+                if dependent and dependent not in comparison_claim:
+                    comparison_claim = '\n\n'.join(part for part in (comparison_claim, dependent) if part)
             child = await _create_analysis_job(JobCreate(
-                claim_text=parent.claim_text, batch_id=batch_id, source_job_id=parent.id,
+                claim_text=comparison_claim, batch_id=batch_id, source_job_id=parent.id,
                 relation_type=RelationType.REANALYZED, selected_attachment_ids=selected,
                 followup_instruction='검색 후보의 실제 본문을 청구항과 구성대비하십시오. '
                 '아래는 파일과 검색 문헌의 출처 연결 기록입니다. 문헌의 제목·식별자가 본문과 일치하는지 먼저 확인하고 '
@@ -985,6 +1011,24 @@ async def compare_search_candidates(job_id: str, payload: SearchComparisonCreate
         if record['job_id']:
             await RUNNER.submit(record['job_id'])
         return _comparison_records(parent, session)[-1]
+
+
+@router.post("/jobs/dependent-search-draft")
+async def dependent_search_draft(payload: DependentSearchDraft, session: Session = Depends(get_db)):
+    from ..dependent_search import prepare_draft
+
+    if not payload.dependent_claim_text.strip():
+        raise HTTPException(400, "검색할 종속항을 입력하십시오.")
+    values = settings_service.get_all(session)
+    provider_id, model = await _resolve_provider(JobCreate(
+        job_kind=JobKind.SIMILARITY_SEARCH, provider=payload.provider, model=payload.model), values)
+    provider = build_provider(provider_id, values.get("provider_paths") or {})
+    try:
+        return await prepare_draft(provider, values, model, payload.claim_text, payload.dependent_claim_text)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(504, "검색 대상 정리 시간이 초과되었습니다. 직접 작성하거나 다시 시도하십시오.") from exc
 
 
 @router.post("/jobs/preflight", response_model=PreflightOut)

@@ -86,6 +86,9 @@ def test_claim_and_attachment_roles_have_dedicated_sections(work_dir) -> None:
     assert "[인용발명 문헌]" in result.user_message
     assert result.manifest[0]["role"] == AttachmentRole.APPLICATION
     assert result.manifest[1]["role"] == AttachmentRole.CITATION
+    assert "인용문헌으로 사용할 수 있는 자료 번호: ATT-02." in result.user_message
+    assert "출원발명 자료: ATT-01." in result.user_message
+    assert "인용발명 1의 자료 번호를 ATT-01로 바꾸지 않습니다." in result.user_message
 
 
 def test_pdf_page_markers_survive_assembly(work_dir) -> None:

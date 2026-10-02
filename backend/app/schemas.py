@@ -81,6 +81,9 @@ class JobCreate(BaseModel):
     # 구성대비 결과에서 시작하는 미대응 구성 검색. source_job_id 와 함께 쓰며,
     # 일반 유사문헌 검색과 후속 분석에서는 비워 둔다.
     search_component_ids: list[str] = Field(default_factory=list)
+    search_mode: Literal["full", "dependent"] = "full"
+    dependent_claim_text: str = Field(default="", max_length=100000)
+    search_feature_text: str = Field(default="", max_length=100000)
     # 선택적 검색 기준일. 이 날짜까지 **공개된** 문헌만 대상으로 한다.
     #
     #   None / ""  날짜 조건 없음. 과거·최근·미래 공개문헌을 구분 없이 본다.
@@ -92,6 +95,12 @@ class JobCreate(BaseModel):
     # 유사문헌 검색은 발견·패밀리 확인까지 가능한 deep 실행만 새로 만든다.
     # 저장된 과거 작업의 값은 JobOut에서 문자열로 보존한다.
     search_depth: Literal["fast", "deep", "exhaustive"] = "deep"
+
+    @model_validator(mode="after")
+    def _search_input_kind(self):
+        if (self.search_mode != "full" or self.dependent_claim_text.strip() or self.search_feature_text.strip()) and self.job_kind != JobKind.SIMILARITY_SEARCH:
+            raise ValueError("종속항 검색 입력은 유사 문헌 검색에서만 사용할 수 있습니다.")
+        return self
 
     @field_validator("search_cutoff_date")
     @classmethod
@@ -121,6 +130,13 @@ class JobCreate(BaseModel):
         if value not in allowed:
             raise ValueError(f"job_kind 는 {sorted(allowed)} 중 하나여야 합니다.")
         return value
+
+
+class DependentSearchDraft(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    claim_text: str = Field(default="", max_length=100000)
+    dependent_claim_text: str = Field(min_length=1, max_length=100000)
 
 
 class JobAttachmentOut(BaseModel):

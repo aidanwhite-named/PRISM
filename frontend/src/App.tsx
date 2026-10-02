@@ -5,6 +5,7 @@ import { api } from "./lib/api";
 import { useRunSession } from "./lib/runSession";
 import type { Job, JobKind } from "./lib/types";
 import { WORKSPACES } from "./lib/workspaces";
+import PrismSecret from "./components/PrismSecret";
 
 type IconName = "compare" | "search" | "prompts" | "history" | "settings";
 
@@ -199,7 +200,7 @@ export default function App() {
         <div className="main-inner">
           <Outlet />
         </div>
-        <footer className="app-copyright">All rights reserved by Aidan</footer>
+        <PrismSecret />
       </main>
     </div>
   );

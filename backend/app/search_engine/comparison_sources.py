@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
@@ -18,7 +19,7 @@ from ..enums import AttachmentRole
 from ..ingestion.service import IngestionLimits, ingest_one
 from ..patent_search.artifacts import ArtifactStore, ArtifactError
 from .fetcher import ArticleHTML, Fetched, FetchError, SafeFetcher
-from .source_text import PatentClaimsHTML
+from .source_text import PatentClaimsHTML, source_from_fetch
 from .storage import identifier, write_json
 
 
@@ -66,7 +67,7 @@ def acquire(candidate, search_dir, work_dir):
 
     def fetch(url):
         # Reuse the search tool's immutable raw response, never its truncated text window.
-        for section in ('page', 'claims'):
+        for section in ('page', 'claims', 'full_text'):
             prior = search_dir / ('source-' + identifier(url + section) + '.json')
             if prior.exists():
                 try:
@@ -108,7 +109,20 @@ def acquire(candidate, search_dir, work_dir):
             if (urlsplit(fetched.url).hostname == 'patents.google.com' and number
                     and claims.publication and claims.publication.upper() != number):
                 raise FetchError('검색 후보와 본문의 공개번호가 다릅니다. 원문을 확인하십시오.')
-            if (urlsplit(fetched.url).hostname == 'patents.google.com' and number
+            if (urlsplit(fetched.url).hostname in ('arxiv.org', 'www.arxiv.org')
+                    and urlsplit(fetched.url).path.startswith('/html/')):
+                source, pages = source_from_fetch(fetched)
+                def identity(value):
+                    match = re.search(r'(?:^|arxiv:\s*)(\d{4}\.\d{4,5})(?:v\d+)?', value.lower())
+                    return match[1] if match else ''
+                if source['scope'] != 'full_text':
+                    raise FetchError('arXiv의 본문 영역을 확인하지 못했습니다. 원문 PDF를 첨부해 분석할 수 있습니다.')
+                if number and identity(source.get('document_number', '')) != identity(number):
+                    raise FetchError('검색 후보와 본문의 arXiv 번호가 다릅니다. 원문을 확인하십시오.')
+                scope, extension = 'article_html', '.txt'
+                body = (f"{candidate['title']}\n문헌번호: {source['document_number']}\n출처: {fetched.url}\n"
+                        '[논문 HTML 본문 · 도면 이미지 제외]\n' + '\n\n'.join(page.text for page in pages)).encode('utf-8')
+            elif (urlsplit(fetched.url).hostname == 'patents.google.com' and number
                     and claims.publication.upper() == number and len(technical) >= 100):
                 scope, extension = 'description_and_claims', '.txt'
                 body = (f"{candidate['title']}\n공개번호: {number}\n출처: {fetched.url}\n"
@@ -139,7 +153,8 @@ def acquire(candidate, search_dir, work_dir):
         result.update(status='ready', attachment_id=item.attachment_id, filename=name,
                       fetched_url=fetched.url, artifact_id=fetched.artifact_id,
                       scope=scope, sha256=item.sha256,
-                      reason=('설명·청구항 텍스트 확보(도면 제외).' if scope == 'description_and_claims'
+                      reason=('논문 HTML 본문 확보(도면 이미지 제외).' if scope == 'article_html' else
+                              '설명·청구항 텍스트 확보(도면 제외).' if scope == 'description_and_claims'
                               else 'PDF 텍스트 확보(원문 완전성 미검증).') + ' 구성 대응 여부는 분석에서 판단합니다.')
         return asdict(item), result
     except (ValueError, OSError, HTTPError, PdfReadError, ArtifactError) as exc:

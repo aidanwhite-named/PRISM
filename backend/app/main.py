@@ -18,8 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm.exc import StaleDataError
 
 from . import __version__
-from .api import answers, history, jobs, providers, settings
-from . import answer_extraction
+from .api import answers, history, jobs, providers, settings, report_chat as report_chat_api
+from . import answer_extraction, report_chat
 from .config import HOST, PATHS, PORT
 from .db import init_engine
 
@@ -40,10 +40,12 @@ async def lifespan(app: FastAPI):
     PATHS.ensure()
     init_engine()
     answer_extraction.recover()
+    report_chat.recover()
     try:
         yield
     finally:
         from .execution.runner import RUNNER
+        await report_chat.shutdown()
         await RUNNER.shutdown()
         # PRISM이 종료될 때 브라우저 로그인 대기 프로세스나 agy 도우미 창을
         # 고아 프로세스로 남기지 않는다.
@@ -114,6 +116,7 @@ app.include_router(jobs.router)
 app.include_router(history.router)
 app.include_router(settings.router)
 app.include_router(answers.router)
+app.include_router(report_chat_api.router)
 
 
 @app.exception_handler(StaleDataError)

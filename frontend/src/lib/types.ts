@@ -275,12 +275,23 @@ export interface AnalysisManifest {
 }
 
 export interface GapSearchFocus {
+  origin?: "dependent_claims";
+  dependent_claim_text?: string;
+  target_source?: "user_feature" | "dependent_claim";
   version: number;
   mode: "gap";
   source_job_id: string;
   source_job_label: string;
   threshold: number;
   components: AnalysisComponent[];
+}
+
+export interface DependentSearchInput {
+  enabled: boolean;
+  dependentText: string;
+  featureText: string;
+  explanation: string;
+  warnings: string[];
 }
 
 /** 이 후보를 무엇으로 알게 되었는가.
@@ -846,3 +857,14 @@ export type Preflight = {
   message: string;
   error: string | null;
 };
+export interface ReportChatTurn {
+  id: string;
+  job_id: string;
+  question: string;
+  answer: string | null;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  context_scope: "available_document_text" | "report_evidence";
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}

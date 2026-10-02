@@ -12,6 +12,7 @@ import type {
   AttachmentRole,
   RelationType,
   UploadResponse,
+  ReportChatTurn,
 } from "./types";
 import type { AnswerCase, AnswerCaseSummary, AnswerContent } from "./answers";
 
@@ -50,6 +51,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  reportChat: (id: string) => request<ReportChatTurn[]>(`/api/jobs/${id}/chat`),
+  askReport: (id: string, question: string, request_id: string) => request<ReportChatTurn>(`/api/jobs/${id}/chat`,
+    { method: "POST", body: JSON.stringify({ question, request_id }) }),
+  cancelReportAnswer: (id: string, turnId: string) => request<ReportChatTurn>(`/api/jobs/${id}/chat/${turnId}/cancel`,
+    { method: "POST" }),
   searchComparisons: (id: string) => request<SearchComparison[]>(`/api/jobs/${id}/comparisons`),
   compareSearchCandidates: (id: string, candidate_ids: string[]) =>
     request<SearchComparison>(`/api/jobs/${id}/comparisons`, { method: "POST", body: JSON.stringify({ candidate_ids }) }),
@@ -117,6 +123,9 @@ export const api = {
   },
 
   createJob: (body: {
+    search_mode?: "full" | "dependent";
+    dependent_claim_text?: string;
+    search_feature_text?: string;
     use_answer_library?: boolean;
     job_kind?: JobKind;
     provider?: string | null;
@@ -142,6 +151,9 @@ export const api = {
   /** 실행하지 않고 최종 조립 프롬프트의 크기만 받아 온다. 작업을 만들지 않고
    *  Provider 도 부르지 않는다. */
   preflight: (body: {
+    search_mode?: "full" | "dependent";
+    dependent_claim_text?: string;
+    search_feature_text?: string;
     use_answer_library?: boolean;
     job_kind?: JobKind;
     provider?: string | null;
@@ -157,6 +169,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  dependentSearchDraft: (body: { provider?: string | null; model?: string | null;
+    claim_text: string; dependent_claim_text: string }) =>
+    request<{ search_feature_text: string; explanation: string; warnings: string[]; draft_id: string }>(
+      "/api/jobs/dependent-search-draft", { method: "POST", body: JSON.stringify(body) }),
   getJob: (id: string) => request<Job>(`/api/jobs/${id}`),
   continueSearch: (id: string) => request<Job>(`/api/jobs/${id}/continue-search`, { method: "POST" }),
   cancelJob: (id: string) =>

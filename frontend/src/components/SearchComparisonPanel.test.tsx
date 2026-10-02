@@ -3,11 +3,16 @@ import { afterEach, expect, it, vi } from "vitest";
 import { api } from "../lib/api";
 import type { Job, SearchComparison } from "../lib/types";
 import SearchComparisonPanel from "./SearchComparisonPanel";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import ProgressiveSearchResults from "./ProgressiveSearchResults";
 import type { ProgressiveSearchSnapshot } from "../lib/types";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+function Location() {
+  const location = useLocation();
+  return <span aria-label="현재 화면">{location.pathname + location.search}</span>;
+}
 
 it("shows the same six candidates as results and permits selecting the sixth by patent number", async () => {
   vi.spyOn(api, "searchComparisons").mockResolvedValue([]);
@@ -37,12 +42,42 @@ it("submits only selected candidates and links the actual analysis job", async (
   const record: SearchComparison = { candidate_ids: ["a"], job_id: "analysis", status: "QUEUED", errors: [],
     sources: [{ candidate_id: "a", title: "문헌 A", status: "ready", reason: "본문 확보" }] };
   const submit = vi.spyOn(api, "compareSearchCandidates").mockResolvedValue(record);
-  render(<MemoryRouter><SearchComparisonPanel job={job} /></MemoryRouter>);
+  render(<MemoryRouter initialEntries={["/search?job=search"]}><SearchComparisonPanel job={job} /><Location /></MemoryRouter>);
   fireEvent.click(screen.getByLabelText("문헌 A"));
   vi.mocked(api.searchComparisons).mockResolvedValue([record]);
   fireEvent.click(screen.getByRole("button", { name: "선택한 1건 구성대비 시작" }));
   await waitFor(() => expect(submit).toHaveBeenCalledWith("search", ["a"]));
   expect((await screen.findByRole("link", { name: "구성대비 진행·결과 보기" })).getAttribute("href")).toBe("/analysis?job=analysis");
+  expect(screen.getByLabelText("현재 화면").textContent).toBe("/analysis?job=analysis");
+});
+
+it("shows acquisition progress immediately and keeps held sources on the search screen", async () => {
+  vi.spyOn(api, "searchComparisons").mockResolvedValue([]);
+  let complete!: (record: SearchComparison) => void;
+  vi.spyOn(api, "compareSearchCandidates").mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+  render(<MemoryRouter initialEntries={["/search?job=search"]}><SearchComparisonPanel job={job} /><Location /></MemoryRouter>);
+  fireEvent.click(screen.getByLabelText(/문헌 B/));
+  fireEvent.click(screen.getByRole("button", { name: "선택한 1건 구성대비 시작" }));
+  expect(screen.getByRole("status").textContent).toContain("분석이 시작되면 진행 화면으로 이동합니다.");
+  expect((screen.getByRole("button", { name: "선택 문헌의 본문 확보 중…" }) as HTMLButtonElement).disabled).toBe(true);
+  const held: SearchComparison = { candidate_ids: ["b"], job_id: null, status: "held", errors: [],
+    sources: [{ candidate_id: "b", title: "문헌 B", status: "hold", reason: "본문 없음" }] };
+  vi.mocked(api.searchComparisons).mockResolvedValue([held]);
+  complete(held);
+  await screen.findByText(/문헌 B: 보류 — 본문 없음/);
+  expect(screen.getByLabelText("현재 화면").textContent).toBe("/search?job=search");
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("shows request errors and permits another click", async () => {
+  vi.spyOn(api, "searchComparisons").mockResolvedValue([]);
+  vi.spyOn(api, "compareSearchCandidates").mockRejectedValue(new Error("본문 확보 요청 실패"));
+  render(<MemoryRouter initialEntries={["/search?job=search"]}><SearchComparisonPanel job={job} /><Location /></MemoryRouter>);
+  fireEvent.click(screen.getByLabelText("문헌 A"));
+  fireEvent.click(screen.getByRole("button", { name: "선택한 1건 구성대비 시작" }));
+  expect((await screen.findByRole("alert")).textContent).toBe("본문 확보 요청 실패");
+  expect((screen.getByRole("button", { name: "선택한 1건 구성대비 시작" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(screen.getByLabelText("현재 화면").textContent).toBe("/search?job=search");
 });
 
 it("shows held sources without pretending a comparison completed", async () => {

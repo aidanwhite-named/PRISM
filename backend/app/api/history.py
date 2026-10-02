@@ -177,6 +177,8 @@ def _purge(session: Session, jobs: list[ExecutionJob]) -> int:
     보통은 겹치지 않지만, batch_id 가 곧 폴더 이름이 되는 기존 경로가 남아
     있어 확인 없이 지우면 남의 자료를 지울 수 있다.
     """
+    from .. import report_chat
+    report_chat.cancel_jobs({job.id for job in jobs})
     work_dirs = [job.work_dir for job in jobs if job.work_dir]
     for job in jobs:
         session.delete(job)

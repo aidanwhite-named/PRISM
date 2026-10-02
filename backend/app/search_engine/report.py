@@ -40,9 +40,16 @@ def render(snapshot):
     focus = snapshot.get('search_focus')
     gap = bool(focus and focus.get('mode') == 'gap')
     candidates = [c for c in snapshot['candidates'] if c['date_status'] != 'after_cutoff']
-    lines = ['# 미대응 구성 검색 결과' if gap else '# 유사 문헌 검색 결과', '',
+    dependent = bool(focus and focus.get('origin') == 'dependent_claims')
+    lines = ['# 종속항만 따로 검색 결과' if dependent else '# 미대응 구성 검색 결과' if gap else '# 유사 문헌 검색 결과', '',
              f"{STOPS.get(snapshot['stop_reason'], snapshot['stop_reason'])} · {snapshot['elapsed_seconds']:.1f}초", '',
              summary_text(candidates, focus), '']
+    if dependent:
+        automatic = focus.get('target_source') == 'dependent_claim'
+        lines += ['## 검색할 종속항 원문' if automatic else '## 사용자가 확인한 검색 대상', '',
+            *[cell(c['feature']) + '\n' for c in focus.get('components', [])],
+            *(['종속항 원문에서 모델이 추가·한정된 특징을 파악하여 검색합니다.', ''] if automatic else []),
+            '선택한 추가 특징의 대응 문헌을 찾은 결과입니다. 종속항 전체의 대응 여부와 구분합니다.', '']
     for i, c in enumerate(candidates, 1):
         group = None if gap else verified_group(c)
         review = c.get('search_review') or {}

@@ -87,11 +87,12 @@ def test_literature_pdf_preserves_pages_and_ignores_reference_links(monkeypatch,
     assert calls == ['https://example.org/article', 'https://example.org/article.pdf']
 
 
-def test_reuses_search_raw_source_instead_of_its_excerpt(monkeypatch, tmp_path):
+@pytest.mark.parametrize('section', ['claims', 'full_text'])
+def test_reuses_search_raw_source_instead_of_its_excerpt(monkeypatch, tmp_path, section):
     import json
     from app.search_engine.storage import identifier
     aid = ArtifactStore(PATHS.evidence_dir).put(PATENT.encode())
-    cache = tmp_path / ('source-' + identifier(CANDIDATE['url'] + 'claims') + '.json')
+    cache = tmp_path / ('source-' + identifier(CANDIDATE['url'] + section) + '.json')
     cache.write_text(json.dumps({'url': CANDIDATE['url'], 'raw_artifact_id': aid, 'text': 'truncated claims'}))
     def refuse(*args):
         raise AssertionError('Should reuse the raw artifact')
@@ -99,6 +100,35 @@ def test_reuses_search_raw_source_instead_of_its_excerpt(monkeypatch, tmp_path):
     item, receipt = acquire(CANDIDATE, tmp_path, tmp_path / 'batch')
     assert item['char_count'] > 500
     assert receipt['artifact_id'] == aid
+
+
+@pytest.mark.parametrize('number', ['arxiv:2412.12906', 'arxiv:2412.12906v1; DOI 10.1234/example'])
+def test_arxiv_labelled_html_is_acquired_as_full_article(monkeypatch, tmp_path, number):
+    html_source(monkeypatch, '<nav>Site navigation</nav><article class="ltx_document">'
+                '<section class="ltx_section"><h2>Method</h2><p>'
+                + 'A controller connects input A to output B. ' * 20 + '</p></section></article>')
+    candidate = {'id': 'arxiv', 'title': 'Controller paper', 'document_number': number,
+                 'url': 'https://arxiv.org/html/2412.12906v1'}
+    item, receipt = acquire(candidate, tmp_path, tmp_path / 'batch')
+    assert item['read_ok'] and item['role'] == 'CITATION'
+    assert receipt['scope'] == 'article_html'
+    assert '도면 이미지 제외' in receipt['reason']
+    from pathlib import Path
+    delivered = Path(item['normalized_text_path']).read_text(encoding='utf-8')
+    assert 'A controller connects input A to output B.' in delivered
+    assert 'Site navigation' not in delivered
+
+
+@pytest.mark.parametrize('number,html', [
+    ('arxiv:2412.12906', '<p>' + 'An abstract about controllers. ' * 20 + '</p>'),
+    ('arxiv:9999.99999', '<article class="ltx_document"><section class="ltx_section"><p>'
+     + 'A controller connects input A to output B. ' * 20 + '</p></section></article>'),
+])
+def test_arxiv_unlabelled_page_or_wrong_document_is_held(monkeypatch, tmp_path, number, html):
+    html_source(monkeypatch, html)
+    item, receipt = acquire({'id': 'arxiv', 'title': 'Controller paper', 'document_number': number,
+                             'url': 'https://arxiv.org/html/2412.12906v1'}, tmp_path, tmp_path / 'batch')
+    assert item is None and receipt['status'] == 'hold'
 
 
 def test_triage_partial_updates_keep_validated_fields(tmp_path):
@@ -120,10 +150,15 @@ def search_with_candidates(client, candidates):
     return search['id']
 
 
-def test_search_to_real_analysis_and_idempotency(client, autonomous_runtime, monkeypatch):
+@pytest.mark.parametrize('dependent', ['', '청구항 2. 제1항에 있어서, 속도에 따라 임계값을 조정.'])
+def test_search_to_real_analysis_and_idempotency(client, autonomous_runtime, monkeypatch, dependent):
     monkeypatch.setitem(DEFAULTS, 'default_provider', 'test')
     calls = html_source(monkeypatch, PATENT)
     search_id = search_with_candidates(client, [CANDIDATE])
+    if dependent:
+        with session_scope() as session:
+            session.get(ExecutionJob, search_id).search_focus = {'mode': 'gap', 'origin': 'dependent_claims',
+                'dependent_claim_text': dependent, 'components': []}
     response = client.post(f'/api/jobs/{search_id}/comparisons', json={'candidate_ids': ['p']})
     assert response.status_code == 201, response.text
     record = response.json()
@@ -131,7 +166,7 @@ def test_search_to_real_analysis_and_idempotency(client, autonomous_runtime, mon
     assert child['status'] == 'SUCCEEDED', child['errors']
     assert child['job_kind'] == 'patent_analysis'
     assert child['source_job_id'] == search_id
-    assert child['claim_text'] == 'A controls B'
+    assert child['claim_text'] == 'A controls B' + ('\n\n' + dependent if dependent else '')
     assert child['attachments'][0]['role'] == 'CITATION'
     assert child['result_text']
     again = client.post(f'/api/jobs/{search_id}/comparisons', json={'candidate_ids': ['p']}).json()
@@ -150,6 +185,26 @@ def test_hold_does_not_start_analysis_and_invalid_selection_rejected(client, aut
     assert result.json()['sources'][0]['status'] == 'hold'
     assert client.post(f'/api/jobs/{search_id}/comparisons', json={'candidate_ids': ['missing']}).status_code == 400
     assert client.post(f'/api/jobs/{search_id}/comparisons', json={'candidate_ids': ['p'] * 6}).status_code == 422
+
+
+@pytest.mark.parametrize('status', ['FAILED', 'CANCELLED'])
+def test_failed_comparison_can_be_retried_without_changing_old_job(client, autonomous_runtime, monkeypatch, status):
+    html_source(monkeypatch, PATENT)
+    search_id = search_with_candidates(client, [CANDIDATE])
+    endpoint = f'/api/jobs/{search_id}/comparisons'
+    first = client.post(endpoint, json={'candidate_ids': ['p']}).json()
+    wait_for_job(client, first['job_id'])
+    with session_scope() as session:
+        session.get(ExecutionJob, first['job_id']).status = status
+    response = client.post(endpoint, json={'candidate_ids': ['p']})
+    assert response.status_code == 201, response.text
+    second = response.json()
+    assert second['job_id'] != first['job_id']
+    wait_for_job(client, second['job_id'])
+    assert client.get(f"/api/jobs/{first['job_id']}").json()['status'] == status
+    again = client.post(endpoint, json={'candidate_ids': ['p']}).json()
+    assert again['job_id'] == second['job_id']
+    assert len(client.get(endpoint).json()) == 2
 
 
 def test_partial_acquisition_only_hands_usable_sources_to_analysis(client, autonomous_runtime, monkeypatch):

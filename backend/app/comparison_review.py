@@ -18,6 +18,7 @@ from .enums import AttachmentRole, DeliveryMode, JobStatus
 from .evaluation.evaluator import evaluate
 from .providers.base import NO_TOOLS
 from .providers.model_limits import estimate_tokens
+from .reference_selection import INSTRUCTIONS as REFERENCE_SELECTION
 
 MARKER = 'PRISM 기술적 대응 검토'
 COMMON = f'''{MARKER}
@@ -55,6 +56,7 @@ matched는 해당 한정 확인, partial은 일부 확인, not_found는 제공 �
 근거는 해당 한정과 관계를 입증하는 최소 문장 번호입니다. 이미 입증한 한정에 개요·도면 소개를 반복 추가하지 않습니다.
 missing에는 실제 미확인 한정만 기록합니다. 단순 명칭 차이면 naming_only=true로 표시하고 기술적 부재와 구분합니다.
 not_found는 선택된 발췌 목록에서 없다는 뜻이 아닙니다. 제공된 문헌 범위의 다른 용어·직접 실시예도 확인합니다.
+identify_document가 주어지면 문헌 첫 부분의 실제 제목·고유 문헌번호를 title,document_number로 기록하고 identity_sentence_ids에 그 원문 번호를 씁니다. 확인하지 못한 값은 빈 문자열로 두며 파일명으로 고유 문헌번호를 추측하지 않습니다.
 {"attachment":"ATT-01","processes":[{"input":"원문의 입력","operation":"원문의 동작·연결","output":"원문의 결과","sentence_ids":["ATT-01-P1-T1"]}],"components":[{"id":"C001","limitations":[{"requirement_index":1,"status":"matched","sentence_ids":["ATT-01-P1-T1"],"reason":"대상·동작·관계의 대응 이유","missing":"","naming_only":false}]}]}
 '''
 ABSENCE = COMMON + '''\n단계: absence_recheck
@@ -69,17 +71,21 @@ SELECT = COMMON + '''\n단계: primary_selection
 검증된 문헌별 대비 결과를 비교한 뒤 주 인용발명을 고릅니다. 첨부 순서·표제·동기화라는 목적만으로 고르지 않습니다.
 독립항의 필수 한정과 입력→처리→출력의 연결을 단일 문헌에서 가장 폭넓게 확인하는 문헌을 우선합니다.
 다른 문헌의 기재를 합쳐 한 문헌의 대응 범위로 계산하지 않습니다. 근거 부족이나 의미 불확실성도 선정 이유에 반영합니다.
+component_comparisons가 있으면 구성별 입력·동작·출력·관계·조건의 상세 대비를 기준으로 선정합니다. 초기 documents의 전체 상태는 후보 탐색 기록이며 상세 대비의 부분 사실을 무시할 근거가 아닙니다.
 required_primary가 있으면 기존 주 문헌을 유지하고 현재 대응 범위를 설명합니다. document_order에는 모든 실제 자료 번호를 중복 없이 씁니다.
 {"primary_attachment":"ATT-01","document_order":["ATT-01","ATT-02"],"reason":"문헌별 실제 한정과 연결을 비교한 선정 이유"}
 '''
 SEMANTIC = COMMON + '''\n단계: semantic_review
+''' + REFERENCE_SELECTION + '''
 보고서의 모든 구성을 원문과 독립적으로 다시 대조합니다. 구조 검사 통과는 기술적 판단의 정확성을 보증하지 않습니다.
 문헌별 검토 표도 모델의 판단이며 정답이 아닙니다. 원문에 어긋나면 함께 바로잡습니다.
 다음을 검사합니다: 이름 차이를 부재로 처리함, 청구항에 없는 한정 추가, 실제 대응을 누락함, 비슷한 단어만으로 대응함,
 설명에서 인정한 원문 처리를 차이점에서 다시 없다고 함, 다른 구성의 근거가 미연결이라는 이유로 미발견 선언,
 중간 해독·변환 단계가 있다는 이유만으로 입력→결과 관계 부정, 실제 출력 대상·시간 범위 차이를 무시함,
 핵심 관계를 입증하는 원문 미선택, 일반 배경·중복 발췌 과다, 주 문헌 선정과 점수 기준 불일치.
-잔존 차이는 모든 문헌의 대응 범위를 검토한 후에만 확정합니다. 모호한 청구항 의미는 범위와 판단 한계를 설명합니다.
+주 문헌만으로 대응이 끝났는데 다른 문헌을 추가했는지, 앞선 문헌들로 이미 대응한 부분에 중복 문헌을 붙였는지, 추가 문헌이 실제 남은 부분을 새로 대응하는지 검사합니다. 불필요한 support/contrast 문헌과 보완 부분의 연결 설명 누락은 findings에 기록하여 다음 단계에서 바로잡습니다.
+reasoning이 청구항 구성·한정을 먼저 제시하고 각 요구 사항에 대한 인용발명 1의 대응·미대응을 설명하는지 검사합니다. 인용발명 중심의 요약으로 시작하거나 청구항의 일부 한정의 대응 여부를 빠뜨린 경우 findings에 기록하고 청구항 기준의 설명으로 교정합니다. 서술 순서의 교정만으로 근거·점수·기술적 판단을 바꾸지 않습니다.
+잔존 차이는 주 문헌의 미대응 부분과 필요한 보완 문헌의 실제 대응을 검토하여 확정합니다. 미대응이 남으면 다른 후보에서 그 부분을 확인하되 대응이 끝난 구성의 탈락 후보 비교를 보고서에 추가하지 않습니다. 모호한 청구항 의미는 범위와 판단 한계를 설명합니다.
 각 구성의 입력·처리·결과·조건과 원문을 독립적으로 대조한 component_reviews를 빠짐없이 반환합니다. status는 consistent, needs_correction, uncertain입니다. 이전 판단을 정답으로 취급하지 않습니다.
 원문이 점등 상태를 코드로 표현한다면 각 코드 값이 어느 영역의 어떤 상태를 나타내는지 확인합니다. 후속 해독의 존재나 최종 결과의 명칭 차이만으로 중간 상태 판단이 없다고 하지 않습니다.
 문제마다 affected_components의 C번호와 실제 근거 sentence_ids 및 reason을 기록합니다. needs_correction으로 판정한 구성은 반드시 findings에도 포함합니다.
@@ -93,6 +99,7 @@ support는 실제 일부 한정에 대응할 때 사용합니다. contrast 인�
 {"component_reviews":[{"id":"C001","status":"needs_correction","sentence_ids":["ATT-01-P1-T1"],"reason":"입력·동작·결과·조건을 대조한 판단"}],"selection_review":{"primary_attachment":"ATT-01","reason":"실제 한정과 처리 관계를 비교한 선정 이유"},"findings":[{"affected_components":["C001"],"attachment":"ATT-01","sentence_ids":["ATT-01-P1-T1"],"reason":"원문과 판단의 구체적 불일치"}]}
 '''
 CORRECTION = COMMON + '''\n단계: semantic_correction
+''' + REFERENCE_SELECTION + '''
 독립적인 전 구성 검토에서 확인한 findings를 실제로 바로잡은 전체 PRISM 구조화 보고서 V5 JSON을 반환합니다.
 original_report는 수정 전 자료이며 정답이 아닙니다. canonical_components의 청구항·기호·feature·순서는 그대로 보존합니다.
 selection_review의 주 문헌을 첫 문헌으로 사용하고 모든 유사도를 그 최종 주 문헌의 실제 대응 범위로 재평가합니다. 고정 주 문헌은 유지합니다.
@@ -367,7 +374,7 @@ def _fits(provider, system, message, token_budget, max_chars):
 
 
 async def _call(provider, request, stage, system, payload, audit, *, token_budget, max_chars, emit, cancelled,
-                retry_invalid=True):
+                retry_invalid=True, schema=None):
     if cancelled():
         raise asyncio.CancelledError
     message = _json(payload)
@@ -387,7 +394,7 @@ async def _call(provider, request, stage, system, payload, audit, *, token_budge
     try:
         result = await asyncio.wait_for(provider.execute(replace(request, work_dir=directory,
             system_prompt=system, user_message=message, tool_policy=NO_TOOLS,
-            mcp_servers={}, response_schema=stage_schema(stage, payload)), quiet), timeout=request.timeout_seconds)
+            mcp_servers={}, response_schema=schema or stage_schema(stage, payload)), quiet), timeout=request.timeout_seconds)
     except asyncio.TimeoutError:
         await provider.cancel(request.job_id)
         call['status'] = 'timeout'
@@ -421,7 +428,7 @@ async def _call(provider, request, stage, system, payload, audit, *, token_budge
             return await _call(provider, request, stage + '-retry', system +
                 '\n직전 응답이 유효한 JSON이 아니었습니다. 같은 입력을 다시 검토하고 배열·객체의 닫는 괄호까지 완전한 JSON 객체 하나로 반환합니다.',
                 payload, audit, token_budget=token_budget, max_chars=max_chars,
-                emit=emit, cancelled=cancelled, retry_invalid=False)
+                emit=emit, cancelled=cancelled, retry_invalid=False, schema=schema)
         raise ValueError(f'{stage}: 기술 검토 결과 형식이 잘못되었습니다.')
     call['status'] = 'returned'
     return data
@@ -434,7 +441,8 @@ def _save(request, audit):
 
 
 async def prepare(provider, request, *, claim_text, aliases, attachments, bundle=None, prior_mapping=None,
-                  interpretation_instruction='', token_budget=None, max_chars=None, emit, cancelled):
+                  interpretation_instruction='', token_budget=None, max_chars=None, emit, cancelled,
+                  segmented=False):
     audit = {'version': 1, 'status': 'started', 'attempts': [], 'issues': []}
     context = {'version': 1, 'review_scope': 'retrieved_passages' if bundle is not None else 'provided_document_text'}
     options = dict(token_budget=token_budget, max_chars=max_chars, emit=emit, cancelled=cancelled)
@@ -464,16 +472,27 @@ async def prepare(provider, request, *, claim_text, aliases, attachments, bundle
                      'reason': '전달된 본문이 없어 판단할 수 없습니다.', 'missing': req, 'naming_only': False}
                     for n, req in enumerate(c['requirements'], 1)]} for c in context['components']]})
                 continue
+            schema = stage_schema(f'document-{alias}', {'components': context['components'], 'attachment': alias})
+            if segmented:
+                schema['properties'].update(title=STRING, document_number=STRING, identity_sentence_ids=STRINGS)
+                schema['required'] += ['title', 'document_number', 'identity_sentence_ids']
             value = await _call(provider, request, f'document-{alias}', DOCUMENT,
                 {'components': context['components'], 'attachment': alias,
-                 'review_scope': context['review_scope'], 'sources': doc_sources}, audit, **options)
+                 'review_scope': context['review_scope'], 'sources': doc_sources,
+                 **({'identify_document': True} if segmented else {})}, audit, schema=schema, **options)
+            if segmented and 'identity_sentence_ids' in value:
+                refs = value['identity_sentence_ids']
+                if (not isinstance(refs, list) or any(index.get(s) != alias for s in refs) or
+                        any(not isinstance(value.get(k), str) for k in ('title', 'document_number')) or
+                        (value['title'] or value['document_number']) and not refs):
+                    raise ValueError('문헌 제목·번호의 원문 연결이 잘못되었습니다.')
             documents.append(validate_document(value, context['components'], alias, index))
         context['documents'] = documents
         negative = [{'attachment': d['attachment'], 'processes': d['processes'], 'components': [{'id': c['id']} for c in d['components']
                     if any(l['status'] != 'matched' or l['naming_only'] for l in c['limitations'])]}
                     for d in documents]
         negative = [d for d in negative if d['components'] and any(s['attachment'] == d['attachment'] for s in sources)]
-        for target in negative:
+        for target in ([] if segmented else negative):
             await emit('stage', {'stage': 'verifying', 'message': '미대응 한정의 원문과 다른 표현을 다시 확인 중'})
             selected = [c for c in context['components'] if c['id'] in {r['id'] for r in target['components']}]
             value = await _call(provider, request, f"absence-{target['attachment']}", ABSENCE,
@@ -488,17 +507,28 @@ async def prepare(provider, request, *, claim_text, aliases, attachments, bundle
             changes = {c['id']: c for c in revision['components']}
             full['components'] = [changes.get(c['id'], c) for c in full['components']]
             full['processes'] = revision['processes']
-        if any(l['naming_only'] and l['status'] in ('partial', 'not_found')
+        if not segmented and any(l['naming_only'] and l['status'] in ('partial', 'not_found')
                for d in documents for c in d['components'] for l in c['limitations']):
             raise ValueError('명칭 차이만으로 남긴 미대응 판단의 재검토가 완료되지 않았습니다.')
         required = fixed_primary(prior_mapping, aliases)
+        if segmented:
+            from . import comparison_generation
+            context['component_comparisons'] = await comparison_generation.compare_components(
+                provider, request, context, sources, claim_text, audit, **options)
         await emit('stage', {'stage': 'executing', 'message': '문헌별 대응 결과를 비교하여 주 인용발명 선정 중'})
         value = await _call(provider, request, 'selection', SELECT,
-            {'components': context['components'], 'documents': documents, 'required_primary': required}, audit, **options)
+            {'components': context['components'], 'documents': documents, 'required_primary': required,
+             **({'component_comparisons': context['component_comparisons']} if segmented else {})}, audit, **options)
         context['selection'] = validate_selection(value, documents, required)
+        if segmented:
+            request, context['report_plan'] = await comparison_generation.plan_report(
+                provider, request, context, sources, aliases, prior_mapping, audit, **options)
+            audit.update(status='validated', context=context)
+            return request, context, audit
         context_message = '\n\n[문헌별 선행 검토 및 주 문헌 선정]\n' + _json(context) + '''
 이 검토는 모델 판단 자료이며 원문이 최종 근거입니다. 보고서는 이 문헌별 검토 후 작성합니다.
 selection.primary_attachment를 주 인용발명으로 사용하고 document_order대로 문헌을 나열합니다.
+문헌별 선행 검토는 주 문헌 선정과 보완 후보 판단 자료입니다. 검토한 모든 문헌을 각 구성에 나열하지 않습니다. 주 문헌으로 대응이 끝나면 그 구성은 종료하고, 부족한 부분에 가장 잘 대응하는 보완 문헌만 순차 선택합니다.
 각 구성의 실제 입력·동작·조건·출력을 확인하고 근거를 선택한 다음 점수·설명·차이점을 작성합니다.
 명칭만 다른 부분을 차이점으로 만들지 않습니다. 선행 검토와 다른 결론이면 실제 원문 근거로 재검토합니다.
 '''
@@ -531,9 +561,14 @@ def comparison_conflicts(data, context):
         if not planned or row.get('feature') != planned['feature']:
             issues.append('선행 검토의 청구항 구성 문언·기호가 보고서에서 바뀌거나 추가되었습니다.')
             continue
+        detailed = next((c for c in context.get('component_comparisons', []) if c['id'] == planned['id']), None)
         for d in context['documents']:
-            review = next(c for c in d['components'] if c['id'] == planned['id'])
-            positive = any(l['status'] in ('matched', 'partial') for l in review['limitations'])
+            if detailed:
+                document = next(c for c in detailed['documents'] if c['attachment'] == d['attachment'])
+                positive = any(l['status'] in ('matched', 'partial') for l in document['aspects'])
+            else:
+                document = next(c for c in d['components'] if c['id'] == planned['id'])
+                positive = any(l['status'] in ('matched', 'partial') for l in document['limitations'])
             if positive and (row.get('reference_roles') or {}).get(d['attachment']) in ('not_found', 'unavailable'):
                 issues.append(f"{planned['id']}: {d['attachment']}의 실제 부분 대응과 문헌 미발견 판단이 충돌합니다.")
     missing = set(keyed) - {(r.get('claim'), r.get('symbol')) for r in data.get('components', [])}

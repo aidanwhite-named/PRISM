@@ -99,6 +99,9 @@ vi.mock("../lib/api", () => ({
     getJob: vi.fn(async () => job),
     preflight: vi.fn(async () => null),
     createJob: vi.fn(async () => job),
+    reportChat: vi.fn(async () => []),
+    dependentSearchDraft: vi.fn(async () => ({ search_feature_text: "객체의 이동속도에 따라 경고 임계값을 변경하는 기술.",
+      explanation: "추가된 속도와 임계값 관계를 검색합니다.", warnings: [], draft_id: "draft-1" })),
   },
 }));
 
@@ -112,6 +115,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("uses the corner conversation for revision and preserves the report as the follow-up source", async () => {
+  const { api } = await import("../lib/api");
+  window.location.hash = `#/analysis?job=${JOB_ID}`;
+  render(<RunSessionProvider><HashRouter><RunPage kind="patent_analysis" /></HashRouter></RunSessionProvider>);
+  await userEvent.click(await screen.findByRole("button", { name: "보고서 수정·보완" }));
+  await screen.findByText("보고서에서 궁금한 부분을 물어보세요.");
+  await userEvent.type(screen.getByRole("textbox", { name: "보고서에 대한 질문" }), "불필요한 보완 문헌을 제외해줘");
+  await userEvent.click(screen.getByRole("button", { name: "대화 내용으로 수정·보완" }));
+  const instruction = await screen.findByRole("textbox", { name: "추가 요청사항" });
+  expect((instruction as HTMLTextAreaElement).value).toContain("불필요한 보완 문헌을 제외해줘");
+  expect(screen.getByText(/이전 보고서 .*자/)).toBeTruthy();
+  expect(api.createJob).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
 it('shows the fixed search allowance without a precision option', async () => {
   window.location.hash = '#/search';
   render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
@@ -121,6 +139,19 @@ it('shows the fixed search allowance without a precision option', async () => {
   expect(screen.queryByRole('combobox', { name: '검색 전략 프롬프트' })).toBeNull();
   expect(screen.queryByRole('combobox', { name: '검색 깊이' })).toBeNull();
   expect(screen.queryByText('검색 깊이')).toBeNull();
+});
+
+it('does not show a missing-tool warning while the saved settings are still loading', async () => {
+  const { api } = await import('../lib/api');
+  let finish!: (providers: ProviderInfo[]) => void;
+  vi.mocked(api.listProviders).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  window.location.hash = '#/search';
+  render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
+  expect(screen.queryByText('실행할 AI 도구가 지정되지 않았습니다')).toBeNull();
+  expect(screen.getAllByText('확인 중…')).toHaveLength(2);
+  await act(async () => { finish([provider]); });
+  expect(await screen.findByText('agy', { selector: '.run-config-summary b' })).toBeTruthy();
+  expect(screen.queryByText('실행할 AI 도구가 지정되지 않았습니다')).toBeNull();
 });
 
 it('explains a failed CLI check and enables search after rechecking without losing the claim', async () => {
@@ -159,6 +190,95 @@ it.each([
   const report = document.querySelector('.result');
   expect(report).toBeTruthy();
   expect(notice.compareDocumentPosition(report!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+describe("종속항만 따로 검색", () => {
+  it("정리 진행 상태와 실패 원인을 버튼 아래에 표시한다", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.listProviders).mockResolvedValueOnce([{ ...provider, usable: true }]);
+    let rejectDraft!: (reason: Error) => void;
+    vi.mocked(api.dependentSearchDraft).mockImplementationOnce(() => new Promise((_, reject) => { rejectDraft = reject; }));
+    window.location.hash = "#/search";
+    render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
+    await screen.findByRole("textbox", { name: "검색할 청구항" });
+    await userEvent.click(screen.getByRole("radio", { name: "종속항만 따로 검색" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "따로 검색할 종속항" }), "청구항 2. 제1항에 있어서, 추가 특징.");
+    await userEvent.click(screen.getByRole("button", { name: "AI로 검색 대상 정리" }));
+    expect(screen.getByRole("status").textContent).toContain("설정된 검색 모델이 추가 특징을 정리");
+    expect((screen.getByRole("button", { name: "추가 특징 정리 중…" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => rejectDraft(new Error("모델 호출에 실패했습니다.")));
+    const error = await screen.findByRole("alert");
+    expect(error.textContent).toBe("모델 호출에 실패했습니다.");
+    expect(screen.getByRole("region", { name: "종속항 검색 대상 확인" }).contains(error)).toBe(true);
+    expect((screen.getByRole("button", { name: "AI로 검색 대상 정리" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(api.createJob).not.toHaveBeenCalled();
+  });
+
+  it("검색 대상 문장을 비워도 종속항 원문만으로 검색을 시작한다", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.listProviders).mockResolvedValueOnce([{ ...provider, usable: true }]);
+    vi.mocked(api.createJob).mockResolvedValueOnce({ ...job, job_kind: "similarity_search" });
+    window.location.hash = "#/search";
+    render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
+    await screen.findByRole("textbox", { name: "검색할 청구항" });
+    await userEvent.click(screen.getByRole("radio", { name: "종속항만 따로 검색" }));
+    const start = screen.getByRole("button", { name: "검색 시작" }) as HTMLButtonElement;
+    expect(start.disabled).toBe(true);
+    const dependent = "청구항 2. 제1항에 있어서, 이동속도에 따라 경고 임계값을 변경하는 장치.";
+    await userEvent.type(screen.getByRole("textbox", { name: "따로 검색할 종속항" }), dependent);
+    expect((screen.getByRole("textbox", { name: "실제 검색 대상 문장" }) as HTMLTextAreaElement).value).toBe("");
+    expect(start.disabled).toBe(false);
+    await userEvent.click(start);
+    expect(api.dependentSearchDraft).not.toHaveBeenCalled();
+    expect(api.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      search_mode: "dependent", dependent_claim_text: dependent, search_feature_text: "",
+    }));
+  });
+
+  it("AI가 정리한 문장을 확인·수정한 뒤 실제 검색 대상으로 보낸다", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.listProviders).mockResolvedValueOnce([{ ...provider, usable: true }]);
+    vi.mocked(api.createJob).mockResolvedValueOnce({ ...job, job_kind: "similarity_search" });
+    window.location.hash = "#/search";
+    render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
+    const claims = await screen.findByRole("textbox", { name: "검색할 청구항" });
+    await userEvent.type(claims, "청구항 1. 카메라로 객체를 검출하고 경고하는 장치.");
+    await userEvent.click(screen.getByRole("radio", { name: "종속항만 따로 검색" }));
+    const dependent = "청구항 2. 제1항에 있어서, 객체의 이동속도에 따라 경고 임계값을 변경하는 장치.";
+    await userEvent.type(screen.getByRole("textbox", { name: "따로 검색할 종속항" }), dependent);
+    expect((screen.getByRole("button", { name: "검색 시작" }) as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "AI로 검색 대상 정리" }));
+    const target = screen.getByRole("textbox", { name: "실제 검색 대상 문장" }) as HTMLTextAreaElement;
+    await waitFor(() => expect(target.value).toContain("객체의 이동속도"));
+    expect(api.createJob).not.toHaveBeenCalled();
+    expect(api.dependentSearchDraft).toHaveBeenCalledWith(expect.objectContaining({ dependent_claim_text: dependent,
+      claim_text: "청구항 1. 카메라로 객체를 검출하고 경고하는 장치." }));
+    await userEvent.clear(target);
+    const edited = "객체의 이동속도에 따라 경고 임계값을 낮추는 기술.";
+    await userEvent.type(target, edited);
+    await userEvent.click(screen.getByRole("button", { name: "검색 시작" }));
+    expect(api.createJob).toHaveBeenCalledWith(expect.objectContaining({ search_mode: "dependent",
+      dependent_claim_text: dependent, search_feature_text: edited }));
+  });
+
+  it("직접 작성할 수 있고 원문을 변경하면 검색 대상을 다시 확인하게 한다", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.listProviders).mockResolvedValueOnce([{ ...provider, usable: true }]);
+    window.location.hash = "#/search";
+    render(<RunSessionProvider><HashRouter><RunPage kind="similarity_search" /></HashRouter></RunSessionProvider>);
+    await screen.findByRole("textbox", { name: "검색할 청구항" });
+    await userEvent.click(screen.getByRole("radio", { name: "종속항만 따로 검색" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "따로 검색할 종속항" }), "청구항 2. 제1항에 있어서, 추가 특징.");
+    await userEvent.type(screen.getByRole("textbox", { name: "실제 검색 대상 문장" }), "직접 작성한 추가 특징.");
+    expect((screen.getByRole("button", { name: "검색 시작" }) as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.type(screen.getByRole("textbox", { name: "참고할 청구항" }), "청구항 1. 센서 장치.");
+    expect((screen.getByRole("textbox", { name: "실제 검색 대상 문장" }) as HTMLTextAreaElement).value).toBe("");
+    expect((screen.getByRole("button", { name: "검색 시작" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(api.dependentSearchDraft).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("radio", { name: "전체 청구항 검색" }));
+    expect(screen.queryByRole("textbox", { name: "실제 검색 대상 문장" })).toBeNull();
+    expect((screen.getByRole("textbox", { name: "검색할 청구항" }) as HTMLTextAreaElement).value).toBe("청구항 1. 센서 장치.");
+  });
 });
 
 describe("종속항 추가 분석", () => {

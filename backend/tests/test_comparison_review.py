@@ -284,6 +284,35 @@ def test_findings_trigger_a_separate_report_correction(tmp_path, review_input):
     assert [r.work_dir.name for r in provider.requests] == ['semantic', 'correction']
 
 
+@pytest.mark.parametrize('use', ['support', 'contrast'])
+def test_redundant_secondary_reference_can_be_removed_after_semantic_review(tmp_path, review_input, use):
+    # A model can decide that the primary already covers the feature even at a
+    # sub-100 score. The repair must accept its source-grounded removal without
+    # inventing an absence role or dropping the preserved primary mapping.
+    row = review_input[0]['components'][0]
+    row.update(feature='누적 소음에 따라 이득을 변경하는 제어기', difference='',
+               reasoning='{{ATT-01}}의 {{E1}}은 이득 변경에 대응합니다. {{ATT-02}}의 {{E2}}도 비교했습니다.')
+    row['evidence_uses']['E2'] = use
+    corrected = copy.deepcopy(review_input[0])
+    corrected['evidence'] = [corrected['evidence'][0]]
+    corrected['components'][0].update(evidence=['E1'], evidence_uses={'E1': 'support'},
+        reference_roles={}, reasoning='{{ATT-01}}의 {{E1}}은 누적 소음에 따른 이득 변경에 대응합니다.')
+    provider, original, (compiled, audit) = run_review(tmp_path, review_input, [
+        {'findings': [{'affected_components': ['C001'], 'attachment': 'ATT-02',
+                      'sentence_ids': ['ATT-02-P0-T1'], 'reason': '주 문헌으로 대응이 끝난 구성에 불필요한 문헌을 추가했습니다.'}]},
+        corrected])
+    assert audit['status'] == 'corrected', audit
+    assert compiled[1]['report']['data']['components'][0]['evidence'] == ['E1']
+    assert compiled[1]['report']['data']['components'][0]['reference_roles'] == {}
+    assert compiled[1]['items'][0]['similarity'] == original[1]['items'][0]['similarity'] == 70
+    assert compiled[2] == original[2]
+    comparison = compiled[0].split('#### [구성요소]')[1].split('#### [차이점]')[0]
+    assert '**인용발명 2**' not in comparison
+    assert original[1]['report']['data']['components'][0]['evidence'] == ['E1', 'E2']
+    from app.reference_selection import INSTRUCTIONS
+    assert all(INSTRUCTIONS in r.system_prompt for r in provider.requests)
+
+
 def test_semantic_reanalysis_can_reuse_verified_passages_without_duplicates(tmp_path, review_input):
     corrected = copy.deepcopy(review_input[0])
     row = corrected['components'][0]
@@ -363,7 +392,10 @@ def test_cancellation_stops_before_call_and_saves_audit(tmp_path, review_input):
 
 
 @pytest.mark.parametrize('semantic_failure', [False, True])
-def test_runner_executes_and_persists_all_stages(client, monkeypatch, review_input, semantic_failure):
+@pytest.mark.parametrize('component_failure', [False, True])
+def test_runner_executes_and_persists_all_stages(client, monkeypatch, review_input, semantic_failure, component_failure):
+    from app import comparison_generation as generation
+    from .test_comparison_generation import comparison, selected_decision
     from .fake_provider import DeterministicTestProvider
     from .conftest import wait_for_job
     from app.db import session_scope
@@ -387,6 +419,14 @@ def test_runner_executes_and_persists_all_stages(client, monkeypatch, review_inp
             value = {'documents': [second]}
         elif request.system_prompt == review.SELECT:
             value = {'primary_attachment': 'ATT-01', 'document_order': ['ATT-01', 'ATT-02'], 'reason': '직접 이득 변경을 개시합니다.'}
+        elif request.system_prompt == generation.COMPARE:
+            value = comparison(components[0])
+            if component_failure:
+                value['documents'] = []
+        elif request.system_prompt == generation.DECIDE:
+            value = selected_decision()
+        elif request.system_prompt == generation.WRITE:
+            value = {'translations': [{'id': 'E1', 'translation': main['evidence'][0]['translation']}], 'summary': main['summary']}
         elif request.system_prompt == review.SEMANTIC:
             value = {} if semantic_failure else {'findings': [], 'report': None}
             if not semantic_failure:
@@ -404,9 +444,14 @@ def test_runner_executes_and_persists_all_stages(client, monkeypatch, review_inp
         '청구항 1\n(A) ' + components[0]['feature'], 'batch_id': batch['batch_id']})
     assert created.status_code == 201, created.text
     job = wait_for_job(client, created.json()['id'])
+    if component_failure:
+        assert job['status'] == 'FAILED' and job['error_code'] == 'INVALID_OUTPUT'
+        assert '구성별' in job['result_text'] and job['usage']['total_tokens'] == 50
+        assert all(r.system_prompt not in (generation.DECIDE, generation.WRITE, review.SEMANTIC) for r in calls)
+        return
     assert job['status'] == 'SUCCEEDED'
-    assert len(calls) == 7 and calls[-1].system_prompt == review.SEMANTIC
-    assert job['usage']['total_tokens'] == 70 and job['usage']['report_generation']['total_tokens'] == 10
+    assert len(calls) == 8 and calls[-1].system_prompt == review.SEMANTIC
+    assert job['usage']['total_tokens'] == 80 and job['usage']['report_generation']['total_tokens'] == 10
     report = job['analysis_manifest']['report']
     assert report['comparison_preparation']['status'] == 'validated'
     assert report['semantic_review']['status'] == ('incomplete' if semantic_failure else 'validated')
@@ -417,6 +462,9 @@ def test_runner_executes_and_persists_all_stages(client, monkeypatch, review_inp
         prompt = Path(row.final_prompt_path).read_text(encoding='utf-8')
         assert calls[-2].user_message in prompt
         assert row.final_prompt_chars == len(calls[-2].system_prompt) + len(calls[-2].user_message)
-    assert json.loads((directory / 'analysis-response.txt').read_text(encoding='utf-8')) == main
+    stored = json.loads((directory / 'analysis-response.txt').read_text(encoding='utf-8'))
+    assert stored['components'][0]['similarity'] == 70
+    assert stored['components'][0]['evidence'] == ['E1']
+    assert (directory / 'writing-response.txt').exists()
     assert (directory / 'comparison-review' / 'audit.json').exists()
     assert (directory / 'comparison-review' / 'semantic-audit.json').exists()

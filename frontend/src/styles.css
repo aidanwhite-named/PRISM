@@ -1,5 +1,45 @@
 /* PRISM production interface — single consolidated stylesheet. */
 
+.report-chat { position: fixed; right: 24px; bottom: 22px; z-index: 80; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.report-chat-launcher { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 50px; padding: 0 20px; background: var(--accent-strong); color: white; border: 1px solid rgba(255,255,255,.15); border-radius: 28px; box-shadow: 0 6px 24px rgba(29,41,43,.2); cursor: pointer; font: inherit; font-size: 13px; font-weight: 650; }
+.report-chat-launcher:hover { background: var(--accent); }
+.report-chat-panel { width: 420px; height: min(620px, calc(100dvh - 115px)); display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--surface-solid); box-shadow: 0 12px 48px rgba(29,41,43,.2); }
+.report-chat-head { display: flex; align-items: center; justify-content: space-between; padding: 17px 18px; background: var(--accent-strong); color: white; }
+.report-chat-head strong { display: block; font-size: 15px; }
+.report-chat-head span { display: block; font-size: 11px; opacity: .8; margin-top: 5px; }
+.report-chat-close { background: transparent; border: none; color: white; cursor: pointer; font-size: 25px; width: 34px; height: 34px; border-radius: 8px; }
+.report-chat-close:hover { background: rgba(255,255,255,.12); }
+.report-chat-context { padding: 9px 18px; background: var(--accent-soft); font-size: 11px; color: var(--accent-strong); text-overflow: ellipsis; white-space: nowrap; overflow: hidden; flex-shrink: 0; }
+.report-chat-messages { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 20px 16px; }
+.report-chat-welcome { font-size: 13px; line-height: 1.7; padding: 14px 2px; }
+.report-chat-welcome p { color: var(--text-muted); font-size: 12px; margin: 8px 0 18px; }
+.report-chat-welcome button { display: block; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent-strong); border-radius: 10px; padding: 10px 12px; text-align: left; font: inherit; font-size: 12px; margin: 8px 0; cursor: pointer; }
+.report-chat-turn { display: flex; flex-direction: column; gap: 12px; margin-bottom: 22px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.report-chat-question { align-self: flex-end; max-width: 88%; padding: 10px 14px; white-space: pre-wrap; background: var(--accent-soft); border-radius: 14px 14px 3px 14px; }
+.report-chat .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.report-chat-answer { min-width: 0; }
+.report-chat-speaker { display: block; font-size: 10px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+.report-chat-answer .result { border: 0; background: transparent; padding: 0; font-size: 13px; line-height: 1.75; border-radius: 0; box-shadow: none; }
+.report-chat-answer .result h1, .report-chat-answer .result h2, .report-chat-answer .result h3 { font-size: 14px; margin: 14px 0 8px; }
+.report-chat-answer .result p { margin: 5px 0 10px; }
+.report-chat-answer .result table { display: block; overflow-x: auto; }
+.report-chat-scope, .report-chat-status { color: var(--text-muted); font-size: 11px; }
+.report-chat-compose { border-top: 1px solid var(--border); padding: 12px 14px; flex-shrink: 0; }
+.report-chat-compose textarea { width: 100%; display: block; resize: vertical; min-height: 68px; max-height: 150px; font: inherit; font-size: 13px; line-height: 1.6; border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.report-chat-compose-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.report-chat-compose-actions > span { font-size: 10px; color: var(--text-faint); }
+.report-chat-footer { padding: 10px 14px 13px; background: var(--surface-2); border-top: 1px solid var(--border); flex-shrink: 0; }
+.report-chat-footer > span { display: block; font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+.report-chat-error { background: var(--danger-soft); color: var(--danger); padding: 9px 14px; font-size: 12px; max-height: 100px; overflow-y: auto; }
+.report-chat-error button { margin-left: 8px; background: transparent; color: inherit; border: 0; text-decoration: underline; cursor: pointer; }
+.report-chat button:disabled { opacity: .5; cursor: default; }
+.report-chat button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 520px) {
+  .report-chat { right: 12px; bottom: 12px; left: 12px; }
+  .report-chat-panel { width: 100%; height: min(620px, calc(100dvh - 96px)); }
+  .report-chat-launcher { min-height: 46px; }
+}
+
 .version-badge { font-size: 11px; vertical-align: top; color: var(--accent); }
 .answer-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
 .answer-sidebar { position: sticky; top: 20px; }
@@ -41,7 +81,7 @@
 }
 
 :root {
-  --bg: #f5f5f1;
+  --bg: #f4f3ee;
   --surface: rgba(255, 255, 252, 0.9);
   --surface-solid: #fffffc;
   --surface-2: #eff1ed;
@@ -72,7 +112,7 @@
   --danger-soft: #f5e5e2;
   --shadow-sm: 0 1px 1px rgba(30, 43, 44, 0.03), 0 8px 24px rgba(39, 52, 52, 0.045);
   --radius: 16px;
-  --radius-card: 26px 26px 26px 7px;
+  --radius-card: 22px 22px 22px 6px;
   --mono: "SFMono-Regular", "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
 }
 
@@ -461,8 +501,8 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   padding: 7px 11px;
   border: 1px solid transparent;
   border-radius: 11px 11px 11px 3px;
-  color: var(--text-faint);
-  font-size: 11.5px;
+  color: var(--text-muted);
+  font-size: 12px;
   font-weight: 660;
   text-decoration: none;
   white-space: nowrap;
@@ -525,27 +565,32 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   padding: 0 34px 72px;
   overflow: clip;
 }
-.main-inner { flex: 1; width: 100%; max-width: 1380px; margin: 0 auto; padding-top: 34px; }
+.main-inner { flex: 1; width: 100%; max-width: 1380px; margin: 0 auto; padding-top: 28px; }
 .app-copyright {
   width: 100%;
   max-width: 1380px;
   margin: 28px auto -48px;
   padding-top: 14px;
-  border-top: 1px solid rgba(84, 105, 104, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid rgba(84, 105, 104, 0.07);
   color: var(--text-faint);
   font-family: var(--mono);
   font-size: 9px;
-  font-weight: 650;
+  font-weight: 400;
   letter-spacing: 0.09em;
   text-align: right;
 }
+.app-copyright > span { opacity: .38; }
 
 /* ----------------------------------------------------------- page rhythm */
 
 .page { min-width: 0; }
 .page-head {
   position: relative;
-  min-height: 126px;
+  min-height: 100px;
   margin: 0 0 27px;
   padding: 7px 120px 0 2px;
 }
@@ -608,8 +653,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   opacity: 0.68;
 }
 .page > .card:nth-of-type(even) {
-  border-radius: 28px 7px 28px 28px;
-  transform: translateX(3px);
+  border-radius: 22px 6px 22px 22px;
 }
 .card > h2,
 .card .split > h2 {
@@ -625,8 +669,8 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 
 .page-run {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 272px;
-  gap: 0 24px;
+  grid-template-columns: minmax(0, 1fr) 304px;
+  gap: 0 22px;
   align-items: start;
 }
 .page-run > .workspace-head,
@@ -635,10 +679,11 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
    길게 눕히면 정작 일하는 칸이 화면 밖으로 밀린다. */
 .page-run > .workspace-head {
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 12px 24px;
+  margin-bottom: 22px;
 }
 .page-run .page-head {
   flex: 1 1 460px;
@@ -649,7 +694,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 /* 오른쪽 위 장식이 앉던 자리를 탭에게 내준다. */
 .page-run .page-head::after { display: none; }
 .page-run .page-head h1 { font-size: clamp(24px, 2.3vw, 31px); }
-.page-run .run-tabs { flex: 0 0 auto; margin: 0 0 20px; }
+.page-run .run-tabs { flex: 0 0 auto; margin: 0; }
 .page-run .run-input-card { grid-column: 1; }
 .page-run .run-side-rail {
   grid-column: 2;
@@ -659,13 +704,13 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   flex-direction: column;
   gap: 14px;
   min-width: 0;
-  margin-top: 12px;
+  margin-top: 0;
 }
 .page-run .run-action-card {
   position: static;
-  padding: 24px 22px;
+  padding: 24px;
   margin: 0;
-  border-radius: 8px 26px 26px 26px;
+  border-radius: 6px 22px 22px 22px;
   background:
     linear-gradient(150deg, var(--mode-soft), rgba(255, 254, 250, 0.92) 58%),
     var(--surface);
@@ -877,46 +922,45 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 /* ---------------------------------------------------- analysis workspace */
 
 .run-config-summary {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   color: var(--text-muted);
   font-size: 12px;
-  display: grid;
-  grid-template-columns: 1.35fr 1fr 1fr auto;
-  gap: 0;
-  margin: -2px 0 20px;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid rgba(82, 105, 103, 0.13);
-  border-radius: 14px 14px 14px 5px;
-  background: rgba(237, 240, 237, 0.72);
+  gap: 8px 18px;
+  margin: 0;
+  padding: 7px 0;
 }
 .run-config-summary > span,
 .run-config-summary > a {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 58px;
-  padding: 10px 14px;
-  border-right: 1px solid rgba(82, 105, 103, 0.11);
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
 }
 .run-config-summary strong {
-  margin: 0 0 2px;
-  color: var(--text-faint);
-  font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.run-config-summary a { margin-left: auto;
-  align-items: center;
-  min-width: 118px;
-  border-right: 0;
-  color: var(--accent);
+  color: var(--text-muted);
   font-size: 11px;
-  font-weight: 660;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.run-config-summary b { color: var(--text); font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.run-config-summary a {
+  align-items: center;
+  min-height: 32px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
   text-decoration: none;
 }
+.run-config-summary a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.run-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.section-kicker { display: block; margin-bottom: 7px; color: var(--mode); font-family: var(--mono); font-size: 9px; letter-spacing: .14em; }
+.run-section-heading h2 { margin: 0; font-size: clamp(19px, 1.8vw, 24px); font-weight: 720; letter-spacing: -.045em; }
+.section-orbit { display: flex; gap: 5px; padding: 10px; transform: rotate(-12deg); }
+.section-orbit i { width: 7px; height: 26px; background: var(--mode); border-radius: 3px; opacity: .22; }
+.section-orbit i:nth-child(2) { height: 36px; background: var(--sage); margin-top: -5px; }
+.section-orbit i:nth-child(3) { height: 19px; background: var(--amber); margin-top: 6px; }
 
 .patent-input-grid {
   display: grid;
@@ -981,8 +1025,8 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 }
 .input-panel.citation .input-step { color: var(--amber); border-color: rgba(166, 117, 62, 0.2); }
 .input-panel .hint, .file-prepare-row .hint {
-  color: var(--text-faint); font-size: 11px; line-height: 1.5; }
-.claim-input { flex: 1; min-height: 310px; }
+  color: var(--text-muted); font-size: 12px; line-height: 1.65; }
+.claim-input { flex: 1; min-height: 300px; line-height: 1.85; }
 .file-prepare-row {
   border-top: 1px solid var(--border); margin-top: 18px; padding-top: 18px; }
 .citation-prepare-row {
@@ -1054,36 +1098,49 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .run-ready-row:last-child { border-bottom: 0; }
 .run-ready-row > span {
   flex: 0 0 auto;
-  color: var(--text-faint);
-  font-family: var(--mono);
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 450;
 }
 .run-ready-row > strong {
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 690;
   text-align: right;
 }
 
 /* --- 유사 문헌 검색 결과 -------------------------------------------------- */
 
-.search-panel-input { margin-top: 4px; }
+.input-panel.claim-panel.search-panel-input { margin: 0; padding: 0; border: 0; background: transparent; border-radius: 0; overflow: visible; }
+.search-panel-input::after { display: none; }
+.search-mode-options { display: flex; gap: 4px; padding: 4px; margin: 0 0 24px; width: fit-content; max-width: 100%; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2); }
+.search-mode-options .checkbox { position: relative; margin: 0; padding: 8px 12px; gap: 8px; border-radius: 7px; font-size: 12px; cursor: pointer; }
+.search-mode-options .checkbox:has(input:checked) { background: var(--surface-solid); color: var(--mode-strong); box-shadow: 0 1px 4px rgba(30,43,44,.08); }
+.search-mode-options input { accent-color: var(--mode); margin: 0; }
+.search-mode-options .checkbox:has(input:focus-visible) { outline: 2px solid var(--mode); outline-offset: 2px; }
+.search-depth-notice { display: flex; align-items: baseline; gap: 10px; padding: 16px 0 2px; margin: 0; color: var(--text-muted); font-size: 12px; }
+.search-depth-notice strong { font-weight: 500; }
+.search-depth-notice .hint { font-size: 12px; line-height: 1.6; margin-top: 3px; }
+.search-depth-mark { color: var(--mode); font-size: 20px; }
+.notice.input-size-notice.info { background: var(--surface-2); color: var(--text-muted); border-color: var(--border); border-radius: 9px; font-size: 12px; }
+.run-guidance { color: var(--text-muted); background: var(--surface-2); border-color: var(--border); font-size: 12px; }
+.run-guidance strong { font-weight: 600; }
+.dependent-search-panel { margin-top: 16px; }
+.dependent-search-panel .btn-row { margin-bottom: 18px; }
+.dependent-search-panel textarea { min-height: 120px; }
 /* 검색 축의 선택 문서는 실행 카드와 분리된 우측 보조 카드다. */
 .search-spec-card {
   margin: 0;
-  padding: 17px;
+  padding: 22px;
   border-radius: 22px 7px 22px 22px;
-  background: linear-gradient(150deg, var(--mode-soft), rgba(255, 254, 250, 0.94));
+  background: var(--surface);
 }
 .search-spec-panel { margin: 0; }
 .search-spec-panel .file-prepare-row { margin-top: 12px; padding-top: 12px; }
 .search-spec-panel .search-cutoff-field {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
   border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px;
-  color: var(--text-muted); font-size: 11px; font-weight: 680; }
+  color: var(--text-muted); font-size: 12px; font-weight: 550; }
 .search-spec-card .search-spec-panel .input-panel-head { margin-bottom: 11px; }
 .search-spec-card .search-spec-panel .input-step {
   width: 25px;
@@ -1091,7 +1148,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 }
 .search-spec-card .search-spec-panel input[type="file"] {
   width: 100%;
-  font-size: 10px;
+  font-size: 12px;
 }
 .search-spec-card .search-spec-panel .selected-file {
   align-items: flex-start;
@@ -1186,9 +1243,9 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 /* -------------------------------------------------------------- controls */
 
 .field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
-.field > label { color: var(--text-muted); font-size: 11px; font-weight: 680; letter-spacing: 0.01em; }
-.field .hint, .hint { color: var(--text-faint); font-size: 10.5px; }
-input[type="text"], input[type="number"], .settings-kipris input[type="password"], select, textarea {
+.field > label { color: var(--text-muted); font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
+.field .hint, .hint { color: var(--text-muted); font-size: 12px; line-height: 1.65; }
+input[type="text"], input[type="number"], input[type="date"], input[type="password"], select, textarea {
   width: 100%;
   outline: none;
   min-height: 42px;
@@ -1311,7 +1368,7 @@ input[type="file"]::file-selector-button {
 }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th, td { text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; padding: 11px 12px; border-bottom-color: rgba(83, 104, 101, 0.12); }
-th { text-transform: uppercase; font-weight: 600; color: var(--text-faint); font-size: 9px; letter-spacing: 0.08em; background: rgba(232, 235, 231, 0.48); }
+th { font-weight: 600; color: var(--text-muted); font-size: 11px; letter-spacing: 0; background: rgba(232, 235, 231, 0.48); }
 tbody tr:hover { background: rgba(230, 237, 238, 0.43); }
 .provider-auth-cell {
   display: flex;
@@ -1632,7 +1689,6 @@ details > summary { color: var(--text-muted); font-size: 12px; }
       var(--surface);
   }
   .run-ready,
-  .run-config-summary,
   .selected-file { background: rgba(30, 38, 39, 0.5); }
   input[type="file"]::file-selector-button {
     color: var(--accent-strong);
@@ -1650,7 +1706,7 @@ details > summary { color: var(--text-muted); font-size: 12px; }
   .input-panel.citation { background: rgba(52, 46, 36, 0.78); }
   .provider-details { background: rgba(34, 42, 43, 0.55); }
   .provider-details > summary:hover { background: rgba(45, 55, 56, 0.9); }
-  input[type="text"], input[type="number"], select, textarea, .btn { background: rgba(34, 42, 43, 0.92); }
+  input[type="text"], input[type="number"], input[type="date"], input[type="password"], select, textarea, .btn { background: rgba(34, 42, 43, 0.92); }
   .event-log, .result-raw, .result pre, .result code { background: #222a2b; }
   .table-scroll, .result { background: rgba(30, 38, 39, 0.62); }
   th { background: rgba(42, 51, 51, 0.72); }
@@ -1701,9 +1757,7 @@ details > summary { color: var(--text-muted); font-size: 12px; }
   .page-run .run-side-rail { position: static; }
   .page-run .run-action-card .btn-row { flex-direction: row; }
   .page-run .run-action-card .btn { width: auto; }
-  .run-config-summary { grid-template-columns: 1fr 1fr; }
-  .run-config-summary > *:nth-child(2) { border-right: 0; }
-  .run-config-summary > *:nth-child(-n+2) { border-bottom: 1px solid rgba(82, 105, 103, 0.11); }
+  .page-run .run-side-rail { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
 }
 
 /* 상단 바를 두 줄로 접는다. 접히더라도 두 작업 탭은 한 줄을 둘로 나눠 갖는다 —
@@ -1738,7 +1792,7 @@ details > summary { color: var(--text-muted); font-size: 12px; }
   .page-head::after { top: 2px; right: 2px; width: 38px; height: 38px; border-radius: 13px 13px 13px 3px; }
   .page-head .eyebrow { margin-bottom: 8px; font-size: 7.5px; }
   .page-head h1 { margin-bottom: 8px; font-size: 27px; }
-  .page-head p { font-size: 11px; }
+  .page-head p { font-size: 12px; }
   .page-settings, .page-prompts, .page-history { display: block; }
   .settings-tools-grid { grid-template-columns: 1fr; }
   .settings-tool-panel { padding: 12px; }
@@ -1754,10 +1808,11 @@ details > summary { color: var(--text-muted); font-size: 12px; }
   .claim-input { min-height: 220px; }
   .run-tabs { width: 100%; }
   .run-tab { flex: 1; min-width: 0; padding-inline: 8px; }
-  .run-config-summary { grid-template-columns: 1fr; }
-  .run-config-summary > span,
-  .run-config-summary > a { min-height: 49px; border-right: 0; border-bottom: 1px solid rgba(82, 105, 103, 0.11); }
-  .run-config-summary > a { border-bottom: 0; }
+  .run-config-summary { padding: 0; gap: 4px 14px; }
+  .run-config-summary > a { min-height: 30px; }
+  .page-run .run-side-rail { display: flex; align-items: stretch; }
+  .run-section-heading { margin-bottom: 20px; }
+  .search-mode-options .checkbox { padding: 8px; font-size: 11px; }
   .page-run .run-action-card .btn-row { flex-direction: column; }
   .page-run .run-action-card .btn { width: 100%; }
   .card-row { display: block; }
@@ -1770,6 +1825,19 @@ details > summary { color: var(--text-muted); font-size: 12px; }
   .login-method-grid { grid-template-columns: 1fr; }
   .app-copyright { margin: 22px 0 -25px; text-align: center; }
 }
+
+/* The quiet fragment opens a separate, deliberately playful optical room. */
+.prism-fragment { width: 40px; height: 30px; padding: 3px; border: 0; border-radius: 5px; color: var(--text-faint); background: transparent; cursor: pointer; opacity: .45; transition: opacity .2s, transform .2s; }
+.prism-fragment svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1; }
+.prism-fragment .fragment-light { stroke: var(--mode); }
+.prism-fragment:hover, .prism-fragment:focus-visible { opacity: 1; transform: rotate(-8deg); }
+.prism-fragment[data-glints="1"] { color: var(--search); opacity: .8; }
+.prism-fragment[data-glints="2"] { color: var(--amber); opacity: 1; transform: rotate(8deg); }
+.prism-fragment:focus-visible { outline: 2px solid var(--mode); outline-offset: 3px; }
+.prism-observatory { width: min(800px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 0; border: 1px solid #4b485e; border-radius: 24px 24px 24px 5px; color: #e9e7f0; background: #191a24; box-shadow: 0 30px 100px #0008; overflow-y: auto; overscroll-behavior: contain; }
+.prism-observatory::backdrop { background: #111420a8; backdrop-filter: blur(9px); }
+.prism-observatory button:focus-visible, .prism-observatory input:focus-visible { outline: 2px solid #c2a6df; outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) { .prism-fragment { transition: none; } }
 
 @media print {
   .topbar, .no-print { display: none !important; }

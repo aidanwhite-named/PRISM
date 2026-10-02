@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { searchCandidateLabel, visibleSearchCandidates } from "../lib/searchCandidates";
 import type { Job, ProgressiveSearchSnapshot, SearchComparison } from "../lib/types";
@@ -11,12 +11,14 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function SearchComparisonPanel({ job }: { job: Job }) {
+  const navigate = useNavigate();
   const engine = job.search_manifest?.engine as ProgressiveSearchSnapshot | undefined;
   const candidates = visibleSearchCandidates(engine);
   const [selected, setSelected] = useState<string[]>([]);
   const [records, setRecords] = useState<SearchComparison[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [refreshVersion, setRefreshVersion] = useState(0);
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -30,7 +32,7 @@ export default function SearchComparisonPanel({ job }: { job: Job }) {
     };
     if (job.job_kind === "similarity_search") void refresh();
     return () => { disposed = true; clearTimeout(timer); };
-  }, [job.id, job.job_kind, pending]);
+  }, [job.id, job.job_kind, refreshVersion]);
   if (job.job_kind !== "similarity_search" || !candidates.length) return null;
   const ready = terminal.has(job.status);
   const analyzed = new Set(records.filter(record => record.job_id && ["QUEUED", "RUNNING", "SUCCEEDED"].includes(record.status))
@@ -46,6 +48,10 @@ export default function SearchComparisonPanel({ job }: { job: Job }) {
     try {
       const record = await api.compareSearchCandidates(job.id, selected);
       setRecords(old => [...old.filter(r => !record.job_id || r.job_id !== record.job_id), record]);
+      setRefreshVersion(version => version + 1);
+      if (record.job_id && record.status !== "unavailable") {
+        navigate(`/analysis?job=${encodeURIComponent(record.job_id)}`);
+      }
     } catch (e) { setError((e as Error).message); }
     finally { setPending(false); }
   };
@@ -53,7 +59,7 @@ export default function SearchComparisonPanel({ job }: { job: Job }) {
     <h3 id="search-comparison-title">검색 후보 → 본문 확보 → 구성대비</h3>
     <p>검색의 관련성 판단은 잠정 결과입니다. 비교할 문헌을 선택하면 본문을 확보하고, 원문 근거와 위치를 제시하는 구성대비 분석을 실행합니다.</p>
     <p>전체 후보 {candidates.length}건 중 원하는 문헌을 선택하세요. 한 번에 최대 5건을 함께 분석하며, 나머지 문헌은 다음 분석에서 선택할 수 있습니다. 분석에는 추가 토큰이 사용되며, 본문을 확보하지 못한 문헌은 보류합니다. 설정의 구성대비 모델을 사용합니다.</p>
-    <p>본문은 후보의 공개 웹페이지·PDF에서 자동으로 확보해 분석 자료로 저장합니다. Google Patents 설명·청구항은 텍스트로 저장하며 도면은 포함하지 않습니다.</p>
+    <p>본문은 후보의 공개 웹페이지·PDF에서 자동으로 확보해 분석 자료로 저장합니다. Google Patents 설명·청구항과 arXiv HTML 본문은 텍스트로 저장하며 도면 이미지는 포함하지 않습니다.</p>
     <div className="btn-row">
       <button className="btn small" disabled={!ready || pending} onClick={recommend}>우선 검토 후보 3건 선택</button>
       <button className="btn small" disabled={pending} onClick={() => setSelected([])}>선택 해제</button>
@@ -73,6 +79,7 @@ export default function SearchComparisonPanel({ job }: { job: Job }) {
     <button className="btn primary" disabled={!ready || pending || !selected.length} onClick={start}>
       {pending ? "선택 문헌의 본문 확보 중…" : `선택한 ${selected.length}건 구성대비 시작`}
     </button>
+    {pending && <p role="status">선택한 {selected.length}건의 본문을 확보하고 있습니다. 분석이 시작되면 진행 화면으로 이동합니다.</p>}
     {!ready && <p>검색 종료 후 문헌을 선택할 수 있습니다.</p>}
     {error && <p role="alert">{error}</p>}
     <div aria-live="polite">

@@ -117,7 +117,7 @@ def system_text(seconds, focus=None):
         '확인한 핵심 대응만 간결하게 저장하고 긴 문헌별 보고서를 반복 작성하지 마십시오.')
     if focus and focus.get('mode') == 'gap':
         instruction = (
-            '미대응 구성 검색입니다. 청구항 전체는 문맥이고 focus.components에 선택된 구성의 대응을 찾으십시오. '
+            '선택 특징 검색입니다. 청구항 전체는 문맥이고 focus.components에 선택된 구성의 대응을 찾으십시오. '
             '검색 전략에 X/Y/Z가 있어도 이 실행에서는 적용하지 말고 review.group을 생략하십시오. '
             '선택 구성마다 review.component_matches에 component_id, verdict(strong/partial/mismatch/unavailable), '
             'reason, gaps, passage_indices를 저장하십시오. passage_indices는 review.passages의 0부터 시작하는 순번입니다. '
@@ -125,7 +125,23 @@ def system_text(seconds, focus=None):
             '관계·조건까지 대응하면 strong, 일부만 확인되면 partial, 실제 다른 관계가 확인되면 mismatch입니다. '
             '원문 미확보는 unavailable이고 비대응이 아닙니다. 확인하지 못한 구성은 미확인으로 남기십시오. '
             '전체 시스템이 다르다는 이유로 특정 구성의 대응을 낮추지 마십시오. '
+            '선행항은 지시어·용어·기술적 의미와 관련성을 이해하는 참고자료입니다. '
+            '검색어, 구성의 조합·개별 검색, 문맥의 활용 정도, 기술분야 확장과 재검색 여부는 스스로 판단하십시오. '
+            '선행항의 주변 구성이나 기술분야를 모든 후보의 필수 조건으로 부과하지 마십시오. '
+            '단어 일치보다 선택 특징의 대상·동작·조건·관계를 확인하십시오. '
+            'reason에는 선택 특징에서 출발해 실제 대응을 설명하고, gaps에는 남은 한정과 적용 맥락의 차이를 구분해 설명하십시오. '
             '충분하면 확보한 결과를 저장하고 일찍 종료할 수 있습니다. 단계별 시간 배분과 후보 수 할당은 없습니다.')
+        if focus.get('origin') == 'dependent_claims':
+            instruction += (' 종속항만 따로 검색입니다. '
+                'dependent_claim_text와 전체 청구항을 참고하되 검색 대상을 선행항 전체로 바꾸지 마십시오. '
+                '여러 종속항의 특징이 들어 있으면 각각의 대응을 설명하고 모든 특징의 조합을 일률적으로 요구하지 마십시오. '
+                '이 실행은 추가 특징의 대응 문헌 탐색이며 종속항 전체가 한 문헌에 대응한다는 결론과 구분하십시오.')
+            if focus.get('target_source') == 'dependent_claim':
+                instruction += (' 사용자가 별도 검색 대상 문장을 지정하지 않았습니다. focus.components의 feature는 종속항 원문입니다. '
+                    '인용한 선행항은 의미를 이해하는 데 사용하고 종속항의 추가·한정된 특징을 스스로 구분하여 검색하십시오. '
+                    '구성별 대응 이유에는 원문에서 어떤 추가 특징을 검색·대조했는지 설명하십시오.')
+            else:
+                instruction += ' focus.components의 문장은 사용자가 확인·수정한 검색 대상입니다. 그 문장을 검색 기준으로 사용하십시오.'
     return SYSTEM + f'\n전체 남은 제한시간: {seconds}초.\n' + instruction
 
 

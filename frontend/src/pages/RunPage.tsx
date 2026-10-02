@@ -11,8 +11,10 @@ import AnswerContextView from "../components/AnswerContextView";
 import SearchContinuation from "../components/SearchContinuation";
 
 import GapSearchPanel from "../components/GapSearchPanel";
+import DependentSearchPanel from "../components/DependentSearchPanel";
 import AnalysisDegreeOverview from "../components/AnalysisDegreeOverview";
 import ResultView from "../components/ResultView";
+import ReportChat from "../components/ReportChat";
 import DeliverySummary from "../components/DeliverySummary";
 import RetrievalManifestView from "../components/RetrievalManifestView";
 import SearchManifestView, { SearchResults } from "../components/SearchManifestView";
@@ -25,7 +27,7 @@ import {
   hasAnalysisMaterial,
   selectedAttachmentIds,
 } from "../lib/attachmentSelection";
-import { useRunSession } from "../lib/runSession";
+import { EMPTY_DEPENDENT_SEARCH, useRunSession } from "../lib/runSession";
 import { DELIVERY_LABEL, isNarrowed } from "../lib/types";
 import { WORKSPACE_BY_ID, workspacePath } from "../lib/workspaces";
 import type {
@@ -112,7 +114,7 @@ function SizeNotice({
   if (!preflight) {
     return (
       <div
-        className={`notice ${overBudget ? "danger" : "info"}`}
+        className={`notice input-size-notice ${overBudget ? "danger" : "info"}`}
         style={{ marginTop: 12 }}
       >
         화면 추정 입력 크기 {totalChars.toLocaleString()}자
@@ -121,7 +123,7 @@ function SizeNotice({
           : budget === null
             ? ""
             : ` / 설정한 한도 ${budget.toLocaleString()}자`}
-        {" — 최종 크기를 확인하는 중입니다."}
+        {totalChars ? " — 최종 크기를 확인하는 중입니다." : " — 입력 후 최종 크기를 확인합니다."}
       </div>
     );
   }
@@ -137,7 +139,7 @@ function SizeNotice({
   const retrieval = preflight.delivery_plan === "local_retrieval";
   return (
     <div
-      className={`notice ${preflight.blocked ? "danger" : "info"}`}
+      className={`notice input-size-notice ${preflight.blocked ? "danger" : "info"}`}
       style={{ marginTop: 12 }}
     >
       <div>
@@ -231,6 +233,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   // 검색 전략 프롬프트는 분석 프롬프트와 다른 목록이다. 한 목록에 담으면
   // 어느 쪽 화면에서든 상대 작업의 프롬프트를 고를 수 있게 된다.
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [loadingTools, setLoadingTools] = useState(true);
   const [probingProvider, setProbingProvider] = useState(false);
   // 빈 문자열 = 지정 안 함. 제한된 안전성 Provider 가 자동으로 선택되면
   // 사용자가 위험을 확인하지 않은 채 실행하게 된다.
@@ -251,6 +254,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const progressiveSearch = preflight?.delivery_plan === "autonomous_search";
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [preparingDependent, setPreparingDependent] = useState(false);
+  const [dependentDraftError, setDependentDraftError] = useState("");
+  const dependentDraftVersion = useRef(0);
   const [gapSearchOpen, setGapSearchOpen] = useState(false);
   const [selectedGapIds, setSelectedGapIds] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -271,6 +277,8 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     setClaimText,
     searchClaimText,
     setSearchClaimText,
+    dependentSearch,
+    setDependentSearch,
     searchCutoffDate,
     setSearchCutoffDate,
     lineage,
@@ -342,7 +350,8 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             : analysis,
         );
       })
-      .catch((e) => setError(String(e.message)));
+      .catch((e) => setError(String(e.message)))
+      .finally(() => setLoadingTools(false));
   }, []);
 
   // 실행 기록에서 고른 작업은 별도 팝업 대신 이 화면의 결과 탭으로 복원한다.
@@ -371,6 +380,11 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         // 청구항 칸은 두 작업이 따로 쓴다. 이 화면의 칸에 채운다.
         if (storedJob.job_kind === "similarity_search") {
           setSearchClaimText(storedJob.claim_text);
+          const focus = storedJob.search_focus;
+          setDependentSearch(focus?.origin === "dependent_claims"
+            ? { ...EMPTY_DEPENDENT_SEARCH, enabled: true, dependentText: focus.dependent_claim_text ?? "",
+                featureText: focus.target_source === "dependent_claim" ? "" : focus.components.map(c => c.feature).join("\n\n") }
+            : EMPTY_DEPENDENT_SEARCH);
         } else {
           setClaimText(storedJob.claim_text);
         }
@@ -393,6 +407,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   }, [historyJobId, kind]);
 
   const searching = kind === "similarity_search";
+  useEffect(() => () => { dependentDraftVersion.current += 1; }, [searchClaimText, dependentSearch.dependentText]);
   // 이 화면이 실행할 도구.
   const { provider: providerId, model } = searching ? searchTool : analysisTool;
   const selectedProvider = useMemo(
@@ -487,6 +502,11 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           relation_type: lineage?.relationType ?? null,
           followup_instruction: followupInstruction,
           use_answer_library: useAnswerLibrary,
+          ...(searching && dependentSearch.enabled ? {
+            search_mode: "dependent" as const,
+            dependent_claim_text: dependentSearch.dependentText,
+            search_feature_text: dependentSearch.featureText,
+          } : {}),
         })
         .then((result) => {
           if (!cancelled) setPreflight(result);
@@ -513,6 +533,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     lineage?.relationType,
     followupInstruction,
     useAnswerLibrary,
+    dependentSearch,
   ]);
 
   const selectedUploadItems = useMemo(
@@ -608,6 +629,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   };
 
   const runSearch = async () => {
+    if (dependentSearch.enabled && !dependentSearch.dependentText.trim()) {
+      setError("검색할 종속항을 입력하십시오.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -623,6 +648,11 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         // 선택란은 숨기고 설정에서 불러온 기본 검색 지침을 적용한다.
 
         claim_text: searchClaimText,
+        ...(dependentSearch.enabled ? {
+          search_mode: "dependent" as const,
+          dependent_claim_text: dependentSearch.dependentText,
+          search_feature_text: dependentSearch.featureText,
+        } : {}),
         batch_id: prepared?.batch_id ?? null,
         // 비워 두면 null 로 보낸다. 오늘 날짜를 대신 채우지 않는다 — 그러면
         // 사용자가 넣지 않은 조건이 생기고, 같은 청구항의 검색 범위가 실행한
@@ -647,6 +677,23 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     setGapSearchOpen(true);
   };
 
+  const prepareDependentSearch = async () => {
+    const version = dependentDraftVersion.current;
+    setPreparingDependent(true);
+    setDependentDraftError("");
+    setError("");
+    try {
+      const draft = await api.dependentSearchDraft({ provider: providerId || null, model: model || null,
+        claim_text: searchClaimText, dependent_claim_text: dependentSearch.dependentText });
+      if (version === dependentDraftVersion.current) setDependentSearch(prev => ({ ...prev, featureText: draft.search_feature_text,
+        explanation: draft.explanation, warnings: draft.warnings }));
+    } catch (e) {
+      setDependentDraftError((e as Error).message);
+    } finally {
+      setPreparingDependent(false);
+    }
+  };
+
   const runGapSearch = async () => {
     if (!job || job.job_kind !== "patent_analysis") return;
     setSubmitting(true);
@@ -663,6 +710,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         search_cutoff_date: searchCutoffDate.trim() || null,
       });
       setSearchClaimText(created.claim_text);
+      setDependentSearch(EMPTY_DEPENDENT_SEARCH);
       setJob(created);
       setGapSearchOpen(false);
       setSelectedGapIds([]);
@@ -803,6 +851,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
     clearSearchSpec();
     setGapSearchOpen(false);
     setSelectedGapIds([]);
+    if (searching) setDependentSearch(EMPTY_DEPENDENT_SEARCH);
     setActiveTab("input");
     navigate(workspacePath(kind), { replace: true });
   };
@@ -816,7 +865,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
    *  첨부는 원본에서 복제해 오므로 선택 상태를 비우고, 새로 고른 PDF 만 batch 로
    *  나가게 한다.
    */
-  const startFollowUp = (relationType: RelationType) => {
+  const startFollowUp = (relationType: RelationType, instruction = "") => {
     if (!job) return;
     const carriesClaims = relationType !== "REANALYZED";
     const priorClaimText = [job.prior_claim_text, job.claim_text]
@@ -836,7 +885,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         relationType === "CONTINUED" ? (job.result_text ?? "").length : 0,
     });
     setClaimText(relationType === "MAPPED" ? "" : job.claim_text);
-    setFollowupInstruction("");
+    setFollowupInstruction(instruction);
     setGapSearchOpen(false);
     setSelectedGapIds([]);
     clearSelectedFiles();
@@ -856,7 +905,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
   const searchSpecPanel = (
     <section className="search-spec-panel">
       <div className="input-panel-head">
-        <span className="input-step">2</span>
+        <span className="input-step" aria-hidden="true">＋</span>
         <div>
           <strong>출원발명 문서 (선택)</strong>
           <div className="hint">PDF를 넣으면 명세서를 참고해 청구항 용어를 해석하고 검색어를 넓힙니다.</div>
@@ -978,11 +1027,16 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             {running && <span className="spinner" aria-label="실행 중" />}
           </button>
         </div>
+        <div className="run-config-summary" aria-label="현재 실행 설정">
+          <span><strong>실행 도구</strong><b>{loadingTools ? "확인 중…" : selectedProvider?.display_name ?? (providerId || "설정 필요")}</b></span>
+          <span><strong>모델</strong><b>{loadingTools ? "확인 중…" : model || "CLI 기본값"}</b></span>
+          <a href="#/settings">기본값 변경 <span aria-hidden="true">↗</span></a>
+        </div>
       </div>
 
       {error && <div className="notice danger">{error}</div>}
 
-      {!providerId && (
+      {!providerId && !loadingTools && (
         <div className="notice danger">
           <strong>실행할 AI 도구가 지정되지 않았습니다</strong>
           <div style={{ marginTop: 4 }}>
@@ -994,17 +1048,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
       {activeTab === "input" && (
         <>
       <div className="card no-print run-input-card">
-        <h2>{searching ? "검색 준비" : "분석 자료 준비"}</h2>
-
-        <div className="run-config-summary">
-          <span>
-            <strong>실행 도구</strong>{" "}
-            {selectedProvider?.display_name ?? (providerId || "설정 필요")}
-          </span>
-          <span>
-            <strong>모델</strong> {model || "CLI 기본값"}
-          </span>
-          <a href="#/settings">기본값 변경</a>
+        <div className="run-section-heading">
+          <div><span className="section-kicker">{searching ? "SEARCH / INPUT" : "COMPARE / INPUT"}</span>
+          <h2>{searching ? "청구항으로 유사발명 찾기" : "분석 자료 준비"}</h2></div>
+          <span className="section-orbit" aria-hidden="true"><i /><i /><i /></span>
         </div>
 
         {searching ? (
@@ -1020,32 +1067,49 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               </div>
             )}
 
-            <div className="notice info search-depth-notice">
-              {progressiveSearch ? preflight?.message : "설정한 전체 시간 안에서 자율 검색"}
-              <div className="hint">구성별 검색으로 후보를 모으고, 원문에서 관계와 근거를 확인합니다.</div>
-            </div>
             <section className="input-panel claim-panel search-panel-input">
+              <div className="btn-row search-mode-options" role="radiogroup" aria-label="검색 대상 선택">
+                <label className="checkbox"><input type="radio" name="searchMode" checked={!dependentSearch.enabled}
+                  disabled={running || preparingDependent || submitting} onChange={() => setDependentSearch(prev => ({ ...prev, enabled: false }))} />전체 청구항 검색</label>
+                <label className="checkbox"><input type="radio" name="searchMode" checked={dependentSearch.enabled}
+                  disabled={running || preparingDependent || submitting} onChange={() => setDependentSearch(prev => ({ ...prev, enabled: true }))} />종속항만 따로 검색</label>
+              </div>
               <div className="input-panel-head">
                 <span className="input-step">1</span>
                 <div>
-                  <strong>검색할 청구항</strong>
+                  <strong>{dependentSearch.enabled ? "참고할 청구항" : "검색할 청구항"}</strong>
                   <div className="hint">
-                    청구항 전문을 붙여넣으세요. 입력 내용이 검색 범위를 정합니다.
+                    {dependentSearch.enabled ? "인용한 선행항과 종속항을 넣으면 추가 특징의 의미를 이해하는 데 활용합니다. 검색 대상은 아래에서 따로 확인합니다."
+                      : "청구항 전문을 붙여넣으세요. 입력 내용이 검색 범위를 정합니다."}
                   </div>
                 </div>
               </div>
               <textarea
                 id="searchClaimText"
                 className="claim-input"
-                aria-label="검색할 청구항"
+                aria-label={dependentSearch.enabled ? "참고할 청구항" : "검색할 청구항"}
                 value={searchClaimText}
-                onChange={(e) => setSearchClaimText(e.target.value)}
+                onChange={(e) => {
+                  setSearchClaimText(e.target.value);
+                  setDependentSearch(prev => ({ ...prev, featureText: "", explanation: "", warnings: [] }));
+                }}
                 placeholder={
                   "예: 청구항 1. ...\n\n독립항 하나만 넣어도 되고, 종속항까지 함께 넣어도 됩니다."
                 }
-                disabled={running}
+                disabled={running || preparingDependent || submitting}
               />
             </section>
+
+            <div className="search-depth-notice">
+              <span className="search-depth-mark" aria-hidden="true">↳</span>
+              <div><strong>{progressiveSearch ? preflight?.message : "설정한 전체 시간 안에서 자율 검색"}</strong>
+              <div className="hint">구성별 검색으로 후보를 모으고, 원문에서 관계와 근거를 확인합니다.</div></div>
+            </div>
+
+            {dependentSearch.enabled && <DependentSearchPanel value={dependentSearch} onChange={setDependentSearch}
+              onPrepare={prepareDependentSearch} preparing={preparingDependent}
+              disabled={running || preparingDependent || submitting || busy}
+              canPrepare={!!providerId && !!selectedProvider?.usable} error={dependentDraftError} />}
 
             <SizeNotice
               preflight={preflight}
@@ -1348,18 +1412,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
       </div>
 
       <div className="run-side-rail no-print">
-      {!searching && <div className="card answer-run-card">
-        <h2>내 정답 사례 활용</h2>
-        <label className="checkbox"><input type="checkbox" checked={useAnswerLibrary} disabled={running} onChange={e => {
-          setUseAnswerLibrary(e.target.checked); localStorage.setItem("prism.answerLibrary", String(e.target.checked));
-        }} />확정한 판단 사례와 문체 참고</label>
-        <p className="faint">관련 사례만 입력 예산 안에서 선택합니다.</p>
-        <AnswerContextView context={preflight?.report_context} />
-        <Link to="/answers">정답 라이브러리 관리</Link>
-      </div>}
-      {searching && (
-        <div className="card search-spec-card">{searchSpecPanel}</div>
-      )}
       <div className="card run-action-card">
         <h2>
           {searching
@@ -1373,6 +1425,11 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             <span>작업</span>
             <strong>{jobKindLabel}</strong>
           </div>
+          {searching && dependentSearch.enabled && <div className="run-ready-row">
+            <span>검색 대상</span><strong>{dependentSearch.featureText.trim()
+              ? `직접 지정한 특징 · ${dependentSearch.featureText.length.toLocaleString()}자`
+              : "종속항 원문에서 AI가 추가 특징 파악"}</strong>
+          </div>}
           <div className="run-ready-row">
             <span>{!searching && addingDependentClaims ? "추가할 종속항" : "청구항"}</span>
             <strong>
@@ -1417,7 +1474,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         </div>
 
         {!searching && !claimText.trim() && (
-          <div className="notice danger" style={{ marginBottom: 12 }}>
+          <div className="notice run-guidance" style={{ marginBottom: 12 }}>
             <strong>{addingDependentClaims ? "추가할 종속항이 필요합니다" : "출원발명 청구항이 필요합니다"}</strong>
             <div style={{ marginTop: 4 }}>
               분석할 청구항을 위쪽 입력 칸에 붙여넣으십시오.
@@ -1426,7 +1483,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         )}
 
         {!searching && !hasAnalysisAttachments && (
-          <div className="notice danger" style={{ marginBottom: 12 }}>
+          <div className="notice run-guidance" style={{ marginBottom: 12 }}>
             <strong>인용발명 문헌이 필요합니다</strong>
             <div style={{ marginTop: 4 }}>
               구성대비 분석을 시작하려면 PDF를 최소 1건 첨부하거나 이전 실행의
@@ -1477,6 +1534,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               busy ||
               uploading ||
               submitting ||
+              preparingDependent ||
               !providerId ||
               !selectedProvider?.usable ||
               // preflight 가 이미 막기로 판정한 실행은 누를 수 없게 한다.
@@ -1484,7 +1542,9 @@ export default function RunPage({ kind }: { kind: JobKind }) {
               // 확정된 작업을 만들어 실패 목록에서 같은 문장을 다시 읽는다.
               Boolean(preflight?.blocked) ||
               (searching
-                ? !searchClaimText.trim() || !searchAvailable
+                ? !searchAvailable || (dependentSearch.enabled
+                  ? !dependentSearch.dependentText.trim()
+                  : !searchClaimText.trim())
                 : !claimText.trim() || !analysisMaterialReady)
             }
           >
@@ -1498,7 +1558,7 @@ export default function RunPage({ kind }: { kind: JobKind }) {
             중단
           </button>
           {(job || lineage) && !running && (
-            <button className="btn" onClick={reset}>
+            <button className="btn" onClick={reset} disabled={preparingDependent || submitting}>
               {searching ? "모두 비우고 새 검색" : "모두 비우고 새 분석"}
             </button>
           )}
@@ -1520,6 +1580,18 @@ export default function RunPage({ kind }: { kind: JobKind }) {
           )}
         </div>
       </div>
+      {searching && (
+        <div className="card search-spec-card">{searchSpecPanel}</div>
+      )}
+      {!searching && <div className="card answer-run-card">
+        <h2>내 정답 사례 활용</h2>
+        <label className="checkbox"><input type="checkbox" checked={useAnswerLibrary} disabled={running} onChange={e => {
+          setUseAnswerLibrary(e.target.checked); localStorage.setItem("prism.answerLibrary", String(e.target.checked));
+        }} />확정한 판단 사례와 문체 참고</label>
+        <p className="faint">관련 사례만 입력 예산 안에서 선택합니다.</p>
+        <AnswerContextView context={preflight?.report_context} />
+        <Link to="/answers">정답 라이브러리 관리</Link>
+      </div>}
       </div>
 
         </>
@@ -1603,14 +1675,6 @@ export default function RunPage({ kind }: { kind: JobKind }) {
                     }
                   >
                     {RELATION_LABEL.MAPPED}
-                  </button>
-                  <button
-                    className="btn small"
-                    onClick={() => startFollowUp("CONTINUED")}
-                    disabled={!(job.result_text ?? "").trim()}
-                    title="이전 보고서 전체를 전달합니다. 보고서 자체를 고치거나 보완할 때만 쓰십시오."
-                  >
-                    {RELATION_LABEL.CONTINUED}
                   </button>
                   <button
                     className="btn small"
@@ -1813,6 +1877,10 @@ export default function RunPage({ kind }: { kind: JobKind }) {
         </div>
       )}
 
+      {activeTab === "result" && job?.job_kind === "patent_analysis" && !running && !!job.result_text?.trim() && (
+        <ReportChat key={`chat-${job.id}`} job={job} revisionDisabled={busy || submitting || Boolean(lineage)}
+          onRevise={instruction => startFollowUp("CONTINUED", instruction)} />
+      )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ function safeLink(raw: string): string | undefined {
 export default function AutonomousResults({ data }: { data: ProgressiveSearchSnapshot }) {
   const candidates = visibleSearchCandidates(data);
   const gap = data.search_focus?.mode === "gap";
+  const dependent = data.search_focus?.origin === "dependent_claims";
   const targets = gap ? data.search_focus!.components : [];
   const groups = { X: 0, Y: 0, Z: 0 };
   let pending = 0, unavailable = 0;
@@ -33,7 +34,9 @@ export default function AutonomousResults({ data }: { data: ProgressiveSearchSna
       <p>{data.elapsed_seconds.toFixed(1)}초 경과 · 원문 근거가 확인된 유사 후보 우선</p>
       {!gap && <p>원문 근거 검증을 통과한 분류: X {groups.X}건, Y {groups.Y}건, Z {groups.Z}건</p>}
       {gap && <>
-        <p>선택한 미대응 구성별로 대응 정도와 원문 근거를 표시합니다.</p>
+        <p>{dependent ? "종속항만 따로 검색 · 추가 특징의 대응 정도와 원문 근거를 표시합니다. 종속항 전체의 대응 여부와는 구분합니다."
+          : "선택한 미대응 구성별로 대응 정도와 원문 근거를 표시합니다."}</p>
+        {dependent && data.search_focus?.target_source === "dependent_claim" && <p>별도 검색 대상 문장을 지정하지 않아 종속항 원문에서 AI가 추가 특징을 파악해 검색합니다.</p>}
         {targets.map(target => {
           const matches = candidates.filter(c => c.triage_status !== "rejected").map(c => c.search_review?.component_matches?.find(m => m.component_id === target.id));
           const strong = matches.filter(m => m?.status === "source_checked" && m.verdict === "strong").length;

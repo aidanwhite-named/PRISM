@@ -55,6 +55,78 @@ def test_paragraph_markers_are_only_displayed_in_location(report_input, foreign)
     assert 'First statement.' in report and 'Second statement.' in report
 
 
+@pytest.mark.parametrize('retrieved', [False, True])
+@pytest.mark.parametrize('year_context', [
+    'Agarwal et al. [2000] describe another method.\n',
+    'Agarwal et al.\n[2000] describe another method.\n',
+])
+def test_bibliography_year_before_quote_keeps_verified_pdf_page(report_input, retrieved, year_context):
+    row = report_input[0]['evidence'][0]
+    quote = row['quote']
+    body = year_context + quote
+    Path(report_input[2][0].normalized_text_path).write_text('--- PAGE 4 ---\n' + body, encoding='utf-8')
+    kwargs = {'bundle': {'candidate_sources': [
+        {'attachment': 'ATT-01', 'pdf_page': 4, 'source_text': body}]}} if retrieved else {}
+    report, manifest, _ = compile_input(report_input, **kwargs)
+    assert 'PDF 페이지 4' in report
+    assert '단락' not in report.split('## 구성대비', 1)[-1].split('※ 발췌', 1)[0]
+    item = manifest['report']['evidence']['E1']
+    assert item['verified'] and item['page'] == 4 and item['quote'] == quote
+
+
+@pytest.mark.parametrize('page', [None, 4])
+def test_bibliography_year_in_quote_is_preserved(report_input, page):
+    quote = 'Agarwal et al. [2000] describe the quality measure.'
+    body = ('--- PAGE 4 ---\n' if page else '') + quote
+    Path(report_input[2][0].normalized_text_path).write_text(body, encoding='utf-8')
+    report_input[0]['evidence'][0].update(quote=quote, translation='Agarwal 등의 [2000] 연구는 품질 측정값을 설명합니다.')
+    report, manifest, _ = compile_input(report_input)
+    assert ('PDF 페이지 4' if page else '텍스트 자료 · 페이지 구분 없음') in report
+    assert r'단락 \[2000\]' not in report
+    assert report.count(r'\[2000\]') == 2
+    assert manifest['report']['evidence']['E1']['quote'] == quote
+
+
+@pytest.mark.parametrize('retrieved', [False, True])
+def test_v5_sentence_selection_after_bibliography_year_keeps_page(report_input, retrieved):
+    data = report_input[0]
+    quote = data['evidence'][0]['quote']
+    body = 'Agarwal et al. [2000] describe another method.\n' + quote
+    Path(report_input[2][0].normalized_text_path).write_text('--- PAGE 4 ---\n' + body, encoding='utf-8')
+    prefix = 'S001' if retrieved else 'ATT-01-P4'
+    selected = report_sources.sentences(prefix, 'ATT-01', 4, body)[-1]['id']
+    data['version'] = 5
+    data['evidence'][0] = {'id': 'E1', 'attachment': 'ATT-01', 'sentence_ids': [selected],
+                          'language': 'foreign', 'translation': '제어기는 누적 소음에 따라 이득을 변경한다.'}
+    kwargs = {'bundle': {'candidate_sources': [
+        {'attachment': 'ATT-01', 'pdf_page': 4, 'source_text': body}]}} if retrieved else {}
+    report, manifest, _ = compile_input(report_input, **kwargs)
+    item = manifest['report']['evidence']['E1']
+    assert item['verified'] and item['resolution_method'] == 'source_sentence_ids'
+    assert item['quote'] == quote and item['page'] == 4
+    assert 'PDF 페이지 4' in report and r'단락 \[2000\]' not in report
+
+
+def test_real_unpadded_paragraph_sequence_can_include_2000(report_input):
+    quote = 'The controller changes the gain based on accumulated noise.'
+    body = '[1999] Earlier paragraph.\n[2000] ' + quote + '\n[2001] Next paragraph.'
+    Path(report_input[2][0].normalized_text_path).write_text('--- PAGE 4 ---\n' + body, encoding='utf-8')
+    report, manifest, _ = compile_input(report_input)
+    assert r'단락 \[2000\]' in report
+    assert manifest['report']['evidence']['E1']['quote'] == quote
+
+
+def test_inline_citation_with_same_number_as_paragraph_stays_in_original(report_input):
+    quote = 'Agarwal et al. [2000] describe the quality measure.'
+    body = '[1999] Earlier paragraph.\n[2000] ' + quote + '\n[2001] Next paragraph.'
+    Path(report_input[2][0].normalized_text_path).write_text(body, encoding='utf-8')
+    report_input[0]['evidence'][0].update(quote=quote, translation='Agarwal 등의 [2000] 연구는 품질 측정값을 설명합니다.')
+    report, manifest, _ = compile_input(report_input)
+    assert r'단락 \[2000\]' in report and r'et al. \[2000\]' in report
+    assert r'등의 \[2000\] 연구' in report
+    assert manifest['report']['evidence']['E1']['quote'] == quote
+
+
 def test_page_end_list_fragment_requires_translation_scope_review(report_input):
     quote = '[0060] Operations comprising: (a) obtaining a response; (f)\n14'
     Path(report_input[2][0].normalized_text_path).write_text(quote, encoding='utf-8')

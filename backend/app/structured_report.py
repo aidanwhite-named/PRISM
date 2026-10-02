@@ -11,6 +11,7 @@ import re
 
 from . import analysis_evidence, analysis_manifest, citation_mapping, report_sources, report_references
 from .enums import AttachmentRole, DeliveryMode
+from .reference_selection import INSTRUCTIONS as REFERENCE_SELECTION
 
 MARKER = '# PRISM 구조화 보고서 V5'
 INSTRUCTIONS = MARKER + '''
@@ -34,13 +35,14 @@ language는 ko 또는 foreign이다. foreign이면 선택한 전체 범위의 �
 evidence(실제로 설명에 사용하는 근거 ID 목록), evidence_uses(근거 ID별 support/contrast 용도), reference_roles(미대응·확인 불가 문헌의 검토 결과), reasoning(한정별 대응 이유와 범위), difference(복수 문헌 대비 후 잔존 차이)를 한 번씩 기록한다.
 feature는 사용자의 구성 문언을 한정 생략 없이 그대로 보존한다.
 symbol은 비울 수 없다. 기호 없는 전제부는 (전제부), 다른 미표기 구성은 (분석 1) 등으로 표시하되 사용자의 (A), (B) 기호를 변경하지 않는다.
-구성대비 evidence와 reasoning에는 복수 인용발명을 사용할 수 있다. 문헌별로 실제 대응하는 한정과 근거 ID를 구분한다.
+구성대비 evidence와 reasoning에는 주 문헌과 남은 한정을 실제로 보완하는 데 필요한 최소 인용발명만 사용한다. 문헌별로 실제 대응하는 한정과 근거 ID를 구분한다.
 유사도만 인용발명 1 자체를 기준으로 평가한다. 다른 문헌의 대응 근거를 점수에 합산하지 않는다. 주 문헌의 부족한 한정은 reasoning의 대응 범위 설명에 포함한다.
 difference는 복수 문헌으로 대비해도 대응되지 않는 부분만 한 문장으로 쓰며, 없으면 빈 문자열이다. 이 필드는 생략하지 않는다.
 낮은 주 문헌 유사도만으로 difference를 강제로 채우지 않는다. 여러 문헌의 개별 기재를 합쳐 단일 문헌의 전체 개시 또는 문헌 간 연결 관계의 입증으로 취급하지 않는다.
 resolution, supplements, derivation은 작성하지 않는다. 대응 근거와 설명은 모두 구성대비에 기록하고 차이점에는 발췌·번역·보완 설명을 반복하지 않는다.
 모든 evidence 참조는 근거가 하나여도 ["E8"]처럼 배열로 쓴다. 같은 원문·위치의 근거는 하나의 ID로 재사용한다.
 근거 재사용 시 각 구성의 evidence 배열에는 해당 ID를 다시 연결한다. 앞 구성에 출력됐다는 이유로 연결을 생략하지 않는다. 중복 출력만 프로그램이 제거한다. reasoning에서 사용한 모든 E번호는 현재 구성의 evidence에도 있어야 한다.
+''' + REFERENCE_SELECTION + '''
 각 구성은 필수 한정의 대응 여부를 판단하고 필요한 원문을 선택한 뒤 설명과 근거를 연결한다. evidence의 모든 ID에 evidence_uses를 {"E1":"support","E2":"contrast"}처럼 기록한다.
 support는 해당 구성의 한정에 실제 대응하는 근거다. contrast는 문헌의 실제 내용을 보여 주어 처리 대상·동작·관계가 왜 다른지 설명하는 비교 근거이며 대응의 입증이나 양수 점수의 근거로 세지 않는다. 일반 배경은 두 용도 모두에서 제외한다.
 support 문헌은 연결된 support 근거에서 프로그램이 산출하므로 reference_roles에 중복 선언하지 않는다. reference_roles에는 긍정 대응 근거가 없는 검토 문헌의 not_found 또는 unavailable만 기록한다.
@@ -64,7 +66,7 @@ summary.main_reason은 주 문헌 선정 이유, summary.relationships는 전체
  "version":5,
  "documents":[{"attachment":"ATT-01","document_number":"","title":""},{"attachment":"ATT-02","document_number":"","title":""}],
  "evidence":[{"id":"E1","attachment":"ATT-01","sentence_ids":["ATT-01-P3-T2"],"language":"ko","translation":""},{"id":"E2","attachment":"ATT-02","sentence_ids":["ATT-02-P1-T1"],"language":"foreign","translation":"선택한 원문 범위의 충실한 번역"}],
- "components":[{"claim":"청구항 1","symbol":"(A)","feature":"청구항 구성 원문을 요약 없이 그대로","similarity":70,"basis":"direct","evidence":["E1","E2"],"evidence_uses":{"E1":"support","E2":"support"},"reference_roles":{},"reasoning":"{{ATT-01}}의 {{E1}}은 첫 한정에, {{ATT-02}}의 {{E2}}는 다른 필수 한정에 대응합니다.","difference":"두 문헌에서도 확인되지 않은 구체적인 연결 조건입니다."}],
+ "components":[{"claim":"청구항 1","symbol":"(A)","feature":"청구항 구성 원문을 요약 없이 그대로","similarity":70,"basis":"direct","evidence":["E1","E2"],"evidence_uses":{"E1":"support","E2":"support"},"reference_roles":{},"reasoning":"청구항 구성 (A)의 첫 필수 한정은 {{ATT-01}}의 {{E1}}에 기재된 내용에 대응합니다. 청구항의 다른 필수 한정은 {{ATT-01}}에서 확인되지 않지만, {{ATT-02}}의 {{E2}}에 기재된 동작에 대응합니다.","difference":"두 문헌에서도 확인되지 않은 구체적인 연결 조건입니다."}],
  "summary":{"main_reason":"주 문헌 선정 이유","relationships":"전체 구성 관계 및 잔존 차이"}
 }
 '''
@@ -88,6 +90,23 @@ def original_preview(value, limit=120):
     if boundary > limit // 2:
         prefix = prefix[:boundary]
     return prefix.rstrip() + '…'
+
+
+def paragraph_markers(content):
+    """Locate structural paragraph labels, not bracketed bibliography years.
+
+    Patent labels begin a line and usually have zero padding. Unpadded labels
+    need a consecutive numbering sequence; an isolated line-wrapped [2000]
+    is insufficient. Ambiguous sources keep their verified PDF page location.
+    This does not change the historical sentence IDs used for evidence.
+    """
+    candidates = list(re.finditer(
+        r'(?m)^[ \t]*(?P<label>\[[ \t]*(?P<number>\d{4,6})[ \t]*\])(?=\s|$)', content))
+    numbered = set()
+    for first, second in zip(candidates, candidates[1:]):
+        if int(second['number']) == int(first['number']) + 1:
+            numbered.update((first.start(), second.start()))
+    return [m for m in candidates if m['number'].startswith('0') or m.start() in numbered]
 
 
 def no_remaining_difference(value):
@@ -464,31 +483,47 @@ def compile_report(raw, aliases, attachments, *, prior_mapping=None, bundle=None
         # Derive paragraph numbers from verified source text, never model labels.
         paragraph_locations = set()
         paragraph_numbers = set()
+        display_quotes = set()
         for page, content in sources.get(item['attachment'], {}).get('pages', []):
             if page != item['page']:
                 continue
             hit = analysis_evidence.anchor(item['quote'], content)
             if not hit:
                 continue
-            markers = list(re.finditer(r'\[\s*(\d{4,6})\s*\]', content[:hit[1]]))
-            preceding = [m for m in markers if m.start() <= hit[0]]
-            relevant = ([preceding[-1]] if preceding else []) + [m for m in markers if m.start() > hit[0]]
+            markers = [m for m in paragraph_markers(content) if m.start('label') < hit[1]]
+            preceding = [m for m in markers if m.start('label') <= hit[0]]
+            relevant = ([preceding[-1]] if preceding else []) + [m for m in markers if m.start('label') > hit[0]]
             if relevant:
-                numbers = list(dict.fromkeys(m[1] for m in relevant))
+                numbers = list(dict.fromkeys(m['number'] for m in relevant))
                 paragraph_locations.add('단락 ' + ', '.join('[' + n + ']' for n in numbers))
                 paragraph_numbers.update(numbers)
+                # Remove only labels at verified source positions, preserving
+                # bibliography years even if they share a paragraph's digits.
+                display_quote = content[hit[0]:hit[1]]
+                for marker in reversed(relevant):
+                    start, end = marker.span('label')
+                    if start >= hit[0] and end <= hit[1]:
+                        display_quote = display_quote[:start - hit[0]] + display_quote[end - hit[0]:]
+                display_quotes.add(display_quote.strip())
         if len(paragraph_locations) == 1:
             location = prose(next(iter(paragraph_locations)))
+        else:
+            paragraph_numbers.clear()
         # Display paragraph labels only in the location, preserving stored raw evidence.
         def display_excerpt(value):
+            def remove_label(match):
+                line_prefix = value[:match.start()].rsplit('\n', 1)[-1]
+                is_label = match[1].startswith('0') or not line_prefix.strip()
+                return '' if match[1] in paragraph_numbers and is_label else match[0]
             return re.sub(r'\[\s*(\d{4,6})\s*\]',
-                          lambda m: '' if m[1] in paragraph_numbers else m[0], value).strip()
+                          remove_label, value).strip()
 
-        quote = '"' + prose(display_excerpt(item['quote']), original=True) + '"'
+        original = next(iter(display_quotes)) if len(paragraph_locations) == 1 and len(display_quotes) == 1 else item['quote']
+        quote = '"' + prose(original, original=True) + '"'
         if item['foreign']:
             translation = '"' + prose(display_excerpt(item['translation'])) + '"' if item['translation'] else '[번역 미제공]'
             if multi_comparison:
-                quote = '"' + prose(original_preview(display_excerpt(item['quote'])), original=True) + '"'
+                quote = '"' + prose(original_preview(original), original=True) + '"'
             return translation + ' (' + location + '; ' + quote + ')'
         return quote + ' (' + location + ')'
 

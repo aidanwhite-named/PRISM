@@ -37,6 +37,7 @@ from .. import (
     report_repair,
     report_consistency,
     comparison_review,
+    comparison_generation,
 )
 from ..config import PATHS
 from ..db import session_scope
@@ -720,11 +721,22 @@ class JobRunner:
                     aliases=assembled.aliases,
                     attachments=attachments, bundle=report_bundle, prior_mapping=prior_mapping,
                     token_budget=assembly.decision.token_budget if assembly.decision else None,
-                    max_chars=max_chars, emit=emit, cancelled=lambda: job_id in self._cancel_requested)
+                    max_chars=max_chars, emit=emit, cancelled=lambda: job_id in self._cancel_requested,
+                    segmented=True)
                 if preparation_audit['status'] == 'cancelled' or job_id in self._cancel_requested:
                     await self._cancelled(job_id)
                     return
+                if preparation_audit['status'] == 'incomplete' and preparation_audit.get('partial_context', {}).get('components'):
+                    with session_scope() as session:
+                        job = session.get(ExecutionJob, job_id)
+                        if job is not None:
+                            job.usage = report_repair.merge_usage(None, preparation_audit, category='comparison_preparation')
+                            job.result_text = '# 구성대비 작성 미완료\n\n' + '\n'.join(preparation_audit['issues'])
+                    await self._fail(job_id, ErrorCode.INVALID_OUTPUT, '구성별 판단을 확정하지 못했습니다: ' +
+                                     ' '.join(preparation_audit['issues']))
+                    return
                 if comparison_context is not None:
+                    assembled.system_prompt = request.system_prompt
                     assembled.user_message = request.user_message
                     assembled.total_chars = len(request.system_prompt) + len(request.user_message)
                     assembled.sha256 = hashlib.sha256(
@@ -738,6 +750,7 @@ class JobRunner:
                     with session_scope() as session:
                         job = session.get(ExecutionJob, job_id)
                         if job is not None:
+                            job.system_prompt_snapshot = request.system_prompt
                             job.final_prompt_sha256 = final_prompt_sha
                             job.final_prompt_chars = final_prompt_chars
                     await self._emit(job_id, 'prompt_ready', {'chars': final_prompt_chars,
@@ -772,6 +785,13 @@ class JobRunner:
             structured_requested = not analysis_protocol.declares_blocks(master_prompt)
             # Keep the exact response independently of stdout settings, including failures.
             if expects_blocks and structured_requested:
+                if comparison_context and comparison_context.get('report_plan') and verdict.status == JobStatus.SUCCEEDED:
+                    (work_dir / 'writing-response.txt').write_text(outcome.result_text, encoding='utf-8')
+                    try:
+                        outcome.result_text = comparison_generation.publish(outcome.result_text, comparison_context['report_plan'])
+                    except (ValueError, TypeError, KeyError) as exc:
+                        verdict = Verdict(JobStatus.FAILED, ErrorCode.INVALID_OUTPUT, [*verdict.errors, str(exc)])
+                        outcome.result_text = '# 확정된 분석의 번역·요약 작성 미완료\n\n' + str(exc)
                 (work_dir / 'analysis-response.txt').write_text(outcome.result_text, encoding='utf-8')
                 legacy_response = (not outcome.result_text.lstrip().startswith(('{', '```json')) and
                     (analysis_manifest._OPEN in outcome.result_text or citation_mapping._OPEN in outcome.result_text))

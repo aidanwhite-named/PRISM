@@ -17,6 +17,7 @@ from .enums import JobStatus
 from .evaluation.evaluator import evaluate
 from .providers.base import NO_TOOLS
 from .providers.model_limits import estimate_tokens
+from .reference_selection import INSTRUCTIONS as REFERENCE_SELECTION
 
 MAX_SECONDS = 120
 SYSTEM = '''당신은 구성대비 보고서의 근거 연결과 주 문헌 유사도 불일치만 재검토합니다.
@@ -31,10 +32,11 @@ contrast만 사용하여 처리 방식의 차이를 설명하는 문헌은 프�
 unavailable은 원문을 읽거나 판단할 수 없는 경우이며 그 문헌의 발췌를 연결하지 않습니다. 원문을 검토하여 한정의 대응이 없으면 not_found를 사용합니다. 일부 한정에 실제 대응하면 support 용도로 연결하고, 구성 전체가 없다는 이유로 그 문헌을 not_found로 바꾸지 마십시오.
 역할에만 support가 있고 설명과 발췌가 없는 문헌은 provided_sources 원문을 재검토합니다. 실제 대응이 있으면 필요한 문장만 새 발췌로 선택하고 그 한정과 연결하십시오. 없으면 제공된 범위의 검토 결과를 기록합니다. 사용하지 않는 역할 표시를 유지하거나 다른 구성의 무관한 발췌를 붙이지 마십시오.
 새 발췌는 provided_sources의 전달 문장 번호에서만 선택하여 최상위 evidence 배열에 {"id":"기존 ID와 겹치지 않는 E번호","attachment":"ATT-번호","sentence_ids":["문장 번호"],"language":"ko 또는 foreign","translation":"선택 범위 전체 번역"}으로 기록합니다. 기존 evidence_catalog를 수정하지 마십시오. 새 발췌가 없으면 최상위 evidence는 빈 배열입니다.
+''' + REFERENCE_SELECTION + '''
 유사도는 primary_attachment 자체의 대응 정도입니다. 다른 문헌만 대응할 때 그 대응을 주 문헌 점수에 합산하지 마십시오.
 주 문헌을 not_found로 판단한 기존 분석을 유지한다면 similarity는 0입니다. 부분 대응으로 판단을 수정할 때는 실제 주 문헌 근거를 연결하고 대응 범위를 설명해야 합니다. 판독·판단 불가이면 null/unavailable입니다.
 발췌 목록은 문헌 전체가 아닙니다. 발췌 목록에서 찾지 못했다는 이유로 문헌 전체에 대응 없음으로 단정하지 마십시오. 기존 not_found도 원문과 실제 한정을 다시 대조하여 판단하십시오. 새로운 not_found는 reviewed_attachments에 제공된 원문 전체를 검토한 문헌에만 허용되며 검토 범위 밖의 부재를 주장하지 마십시오.
-미연결 근거는 연결을 재검토할 문제입니다. 이를 해결하려고 대응 설명과 근거를 없애거나 문헌을 not_found로 바꾸지 마십시오. 다른 구성에 선택된 근거도 현재 한정에 대응하면 재사용하십시오.
+미연결 근거는 연결을 재검토할 문제입니다. 필요한 보완 근거라면 연결하고 대응 범위를 설명합니다. 실제 한정을 재검토하여 이미 선택한 문헌으로 대응이 끝난 경우에만 불필요한 추가 문헌의 근거·설명·역할을 함께 제외합니다. 경고만 없애려고 필요한 대응 설명과 근거를 없애거나 문헌을 not_found로 바꾸지 마십시오. 다른 구성에 선택된 근거도 남은 한정에 대응하면 재사용하십시오.
 원문에 없는 한정은 억지로 대응시키지 않습니다. difference에는 복수 문헌으로도 남는 한정·관계만 한 문장으로 쓰고 없으면 빈 문자열로 둡니다.
 repair_scope가 difference_only인 구성은 {"component_index":1,"difference":"잔존 한정 또는 빈 문자열","review_basis":"어느 근거가 어떤 필수 한정에 대응하는지, 무엇이 남는지 검토한 짧은 이유"}만 반환합니다. 점수·근거·대응 이유는 프로그램이 보존합니다. review_basis는 교정 감사 기록이며 보고서에서 재출력하지 않습니다. difference 누락을 차이 없음으로 가정하지 마십시오.
 기존 reasoning에 직접 확인되지 않은 필수 한정이나 연결 관계가 있으면 다른 연결 근거로 충족되는지 확인하십시오. 충족 근거가 없으면 그 실제 잔존 한정을 difference에 반드시 기록하십시오. 근거가 하나뿐이고 그 기재가 현재 구성의 핵심 관계를 개시하지 않는다고 분석했다면 difference를 비워서는 안 됩니다.

@@ -72,7 +72,7 @@ powershell -ExecutionPolicy Bypass -File .\build-release.ps1 -InnoCompiler "C:\p
 python scripts/test_windows_setup.py
 python scripts/test_windows_uninstall.py
 python scripts/test_installer_lifecycle.py --compiler "C:\path\to\ISCC.exe"
-python scripts/smoke_release.py release/PRISM-2.0.6-windows-x64.zip
+python scripts/smoke_release.py release/PRISM-2.0.7-windows-x64.zip
 ```
 
 Inno Setup 7.1 이상이 필요합니다(7.1.0으로 검증). 배포 자산은 `Setup-x64.exe`와 같은 EXE를 담은 `installer-windows-x64.zip`, 각각의 SHA-256입니다. `windows-x64.zip`은 개발용 소스 런타임 검증 산출물이므로 일반 사용자 배포에 사용하지 않습니다.
