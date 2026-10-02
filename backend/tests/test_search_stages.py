@@ -15,10 +15,13 @@ def test_legacy_settings_migrate_to_a_single_bounded_budget():
     assert time_limit({}) == 360
     assert time_limit({'search_timeout_seconds': 300, 'search_verification_seconds': 900}) == 360
     assert time_limit({'search_total_seconds': 75}) == 75
-    assert time_limit({'search_total_seconds': 900}) == 360
+    assert time_limit({'search_total_seconds': 900}) == 900
+    assert time_limit({'search_total_seconds': 1200}) == 1200
+    assert time_limit({'search_total_seconds': 1800}) == 1200
 
 
 def test_settings_reject_values_above_stage_caps(client):
+    assert client.put('/api/settings', json={'values': {'search_total_seconds': 1201}}).status_code == 400
     assert client.put('/api/settings', json={'values': {'search_timeout_seconds': 241}}).status_code == 400
     assert client.put('/api/settings', json={'values': {'search_verification_seconds': 121}}).status_code == 400
 

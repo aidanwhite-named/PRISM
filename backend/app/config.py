@@ -107,7 +107,7 @@ DEFAULTS: dict[str, object] = {
     # 어느 쪽을 넘든 PRISM 은 문서를 자르거나 요약하지 않고 중단한다.
     "max_inline_chars": 0,
     "default_timeout_seconds": 900,
-    "search_total_seconds": 360,
+    "search_total_seconds": 1200,
     "search_timeout_seconds": 240,
     "search_verification_seconds": 120,
     "max_concurrency_per_provider": 1,

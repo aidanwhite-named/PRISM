@@ -151,7 +151,7 @@ _INT_KEYS = frozenset(
 )
 
 _LIMITS = {
-    "search_total_seconds": (10, 360),
+    "search_total_seconds": (10, 1200),
     "search_timeout_seconds": (10, 240),
     "search_verification_seconds": (10, 120),
     "max_file_size_bytes": (1024, 500 * 1024 * 1024),
@@ -570,7 +570,7 @@ def get_all(session: Session) -> dict[str, Any]:
         values[key] = min(maximum, max(1, int(values[key])))
     if 'search_total_seconds' not in stored_keys:
         values['search_total_seconds'] = values['search_timeout_seconds'] + values['search_verification_seconds']
-    values['search_total_seconds'] = min(360, max(10, int(values['search_total_seconds'])))
+    values['search_total_seconds'] = min(1200, max(10, int(values['search_total_seconds'])))
     return values
 
 

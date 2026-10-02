@@ -100,7 +100,7 @@ def time_limit(values):
         # Preserve the combined allowance of installations with two old settings.
         total = (min(240, max(1, int(values.get('search_timeout_seconds', 240))))
                  + min(120, max(1, int(values.get('search_verification_seconds', 120)))))
-    return min(360, max(1, int(total)))
+    return min(1200, max(1, int(total)))
 
 
 def system_text(seconds, focus=None):

@@ -1314,7 +1314,7 @@ export default function SettingsPage() {
                 <NumberField label="실행 제한시간 (초)" value={v.default_timeout_seconds}
                   onSave={(n) => saveValue("default_timeout_seconds", n)} />
                 <NumberField label="유사문헌 검색 전체 제한시간 (초)" value={v.search_total_seconds ?? Math.min(v.search_timeout_seconds ?? 240, 240) + Math.min(v.search_verification_seconds ?? 120, 120)}
-                  hint="최대 360초. 검색·원문 확인·분류를 자유롭게 진행하며 충분한 근거가 확보되면 일찍 종료합니다."
+                  hint="최대 1200초(20분). 검색·원문 확인·분류를 자유롭게 진행하며 충분한 근거가 확보되면 일찍 종료합니다."
                   onSave={(n) => saveValue("search_total_seconds", n)} />
               </section>
             </div>
