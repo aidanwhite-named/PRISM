@@ -16,7 +16,37 @@ try {
     Write-Host 'PRISM 최초 설치' -ForegroundColor Cyan
     Write-Host '[1/6] Python을 준비합니다.'
     if (-not (Test-Path (Join-Path $PSScriptRoot 'frontend\dist\index.html'))) {
-        throw 'Built UI is missing. Use the release ZIP, or build frontend first (see README).'
+        $frontend = Join-Path $PSScriptRoot 'frontend'
+        if (-not (Test-Path (Join-Path $frontend 'package-lock.json'))) {
+            throw 'Built UI and frontend source are missing. Use the release ZIP or a complete source checkout.'
+        }
+        Write-Host 'Building UI from source...' -ForegroundColor Cyan
+        $node = Get-Command node.exe -ErrorAction SilentlyContinue
+        $nodeOk = $false
+        if ($node) {
+            & $node.Source --use-system-ca -e 'process.exit(Number(process.versions.node.split(String.fromCharCode(46))[0]) >= 22 ? 0 : 1)'
+            $nodeOk = $LASTEXITCODE -eq 0
+        }
+        if (-not $nodeOk) {
+            $nodeWasPresent = $null -ne $node
+            Install-PrismPackage 'OpenJS.NodeJS.LTS' 'https://nodejs.org/en/download'
+            if (-not $nodeWasPresent) { Save-PrismDependency $OwnershipFile 'node' }
+        }
+        Update-PrismPath
+        $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+        if (-not $npm) { throw 'npm was not found after installing Node.js LTS. Reopen setup.' }
+        $previousNodeOptions = $env:NODE_OPTIONS
+        try {
+            $env:NODE_OPTIONS = "$previousNodeOptions --use-system-ca".Trim()
+            Push-Location $frontend
+            try {
+                Invoke-Checked $npm.Source @('ci')
+                Invoke-Checked $npm.Source @('run', 'build')
+            } finally { Pop-Location }
+        } finally { $env:NODE_OPTIONS = $previousNodeOptions }
+        if (-not (Test-Path (Join-Path $frontend 'dist\index.html'))) {
+            throw 'Frontend build completed without dist\index.html.'
+        }
     }
     $venv = Join-Path $PSScriptRoot 'backend\.venv\Scripts\python.exe'
     if (-not (Test-PrismPython $venv)) {
