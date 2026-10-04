@@ -28,6 +28,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from . import claim_scope
+
 _SPACES = re.compile(r"\s+")
 
 # 검색 매니페스트가 "이 범위는 다 못 봤다"고 표시하는 값.
@@ -58,6 +60,7 @@ def check(
     analysis_manifest: dict | None,
     analysis_error: str | None = None,
     process_succeeded: bool = True,
+    claim_text: str | None = None,
 ) -> dict[str, Any]:
     """세 층위를 나눠서 점검한 결과를 돌려준다."""
     declared = _declared(retrieval_manifest)
@@ -85,6 +88,34 @@ def check(
         comparable = matched > 0
         if not comparable:
             missing = []
+
+    # Explicit input labels remain available even when no local search ran.
+    # Semantic decomposition of an unlabelled claim is not a program fact.
+    input_scope = claim_scope.from_text(claim_text) if claim_text is not None else None
+    missing_claims, duplicates = [], []
+    input_comparable = False
+    if input_scope is not None:
+        reported_claims = {claim_scope.claim_key(row.get('claim', '')) for row in reported}
+        missing_claims = [claim for claim in input_scope['claims'] if claim not in reported_claims]
+        fixed_keys = [(claim_scope.claim_key(row.get('claim', '')),
+                       claim_scope.symbol_key(row.get('symbol', ''))) for row in reported]
+        counts = {}
+        for key in fixed_keys:
+            counts[key] = counts.get(key, 0) + 1
+        duplicates = [f'{claim} ({symbol.upper() if symbol != "전제부" else symbol})'
+                      for (claim, symbol), count in counts.items() if count > 1]
+        for component in input_scope['components']:
+            claim = component['claim']
+            # An unnumbered labelled input can be linked only to a single reported claim.
+            if not claim:
+                if len(reported_claims) != 1:
+                    continue
+                claim = next(iter(reported_claims))
+            input_comparable = True
+            key = (claim_scope.claim_key(claim), claim_scope.symbol_key(component['symbol']))
+            if key not in counts and component['label'] not in missing:
+                missing.append(component['label'])
+        comparable = comparable or input_comparable
 
     # 직접 근거 없이 대응으로 평가된 구성. 점수는 그대로 두고 사실만 적는다.
     inferred: list[str] = []
@@ -143,9 +174,16 @@ def check(
         "reported_components": len(reported),
         "comparable": comparable,
         "missing_components": missing,
+        "missing_claims": missing_claims,
+        "duplicate_components": duplicates,
+        "input_scope": input_scope,
+        "input_comparable": input_comparable,
         "inferred_components": inferred,
         "scope": scope,
-        "complete": bool(comparable and not missing) and not scope.get("limited", False),
+        "complete": bool(comparable and not missing and not missing_claims and not duplicates
+                         and reported and not analysis_error and process_succeeded)
+                    and not scope.get("limited", False)
+                    and (input_scope is None or bool(declared) or input_scope['component_scope_known']),
     }
 
 
@@ -155,11 +193,13 @@ def render(result: dict[str, Any]) -> str:
         return ""
     lines: list[str] = []
     scope = result.get("scope") or {}
+    input_scope = result.get('input_scope')
 
     if result.get("missing_components"):
+        basis = ("입력 청구항·검색 기록의 구성 중 " if result.get('input_comparable')
+                 else f"로컬 검색이 선언한 구성 {result.get('declared_components')}개 중 ")
         lines.append(
-            "- 로컬 검색이 선언한 구성 "
-            f"{result.get('declared_components')}개 중 "
+            "- " + basis +
             f"{len(result['missing_components'])}개가 최종 구성 목록에 없습니다: "
             + ", ".join(result["missing_components"])
             + ". 이 구성에 대한 대응 판단은 이 보고서에 없습니다."
@@ -170,6 +210,17 @@ def render(result: dict[str, Any]) -> str:
             f"최종 구성 목록 {result.get('reported_components')}개의 이름이 서로 달라 "
             "구성 단위 대조를 하지 못했습니다."
         )
+
+    if result.get('missing_claims'):
+        lines.append('- 입력 청구항 중 최종 구성 목록에 없는 청구항: '
+                     + ', '.join(result['missing_claims']) + '. 이 청구항의 분석 범위를 확인하십시오.')
+    if result.get('duplicate_components'):
+        lines.append('- 최종 구성 목록에 같은 식별자가 여러 번 기록되었습니다: '
+                     + ', '.join(result['duplicate_components']) + '. 구성 연결을 확인하십시오.')
+    if input_scope is not None and not result.get('declared_components'):
+        if not input_scope['component_scope_known'] or not result.get('input_comparable'):
+            lines.append('- 입력의 명시적 구성 표식으로 모든 구성의 누락을 대조할 수 없습니다. '
+                         '청구항 번호의 기록 여부와 별개로, 관계·조건·한정의 분석 누락은 자동 확인되지 않았습니다.')
 
     if scope.get("limited"):
         detail = []

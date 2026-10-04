@@ -538,6 +538,16 @@ export interface AnalysisCompleteness {
   /** 검색이 선언한 구성 이름과 보고서의 구성 이름을 대조할 수 있었는가. */
   comparable: boolean;
   missing_components: string[];
+  missing_claims?: string[];
+  duplicate_components?: string[];
+  input_comparable?: boolean;
+  input_scope?: {
+    claims: string[];
+    components: Array<{ claim: string; symbol: string; label: string; feature: string;
+      source_start: number; source_end: number }>;
+    unmarked_claims: string[];
+    component_scope_known: boolean;
+  } | null;
   inferred_components: string[];
   scope: {
     status?: string;

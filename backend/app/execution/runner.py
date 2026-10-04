@@ -771,6 +771,7 @@ class JobRunner:
                     analysis_manifest=component_result,
                     analysis_error=component_error,
                     process_succeeded=verdict.status == JobStatus.SUCCEEDED,
+                    claim_text=claim_text,
                 )
                 notice = analysis_completeness.render(completeness)
                 if notice and outcome.result_text.strip():

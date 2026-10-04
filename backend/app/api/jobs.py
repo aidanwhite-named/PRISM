@@ -339,6 +339,7 @@ def _job_out(job: ExecutionJob) -> JobOut:
                 analysis_manifest=job.analysis_manifest,
                 analysis_error=job.analysis_manifest_error,
                 process_succeeded=job.status == JobStatus.SUCCEEDED,
+                claim_text=job.claim_text,
             )
             if job.job_kind != JobKind.SIMILARITY_SEARCH
             else None

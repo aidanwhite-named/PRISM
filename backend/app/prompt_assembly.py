@@ -36,7 +36,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 
-from . import analysis_protocol, retrieval
+from . import analysis_protocol, claim_scope, retrieval
 from .citation_mapping import AliasedAttachment, assign_aliases
 from .citation_mapping import ordered_attachments as citation_ordered_attachments
 from .citation_mapping import render as render_mapping
@@ -210,6 +210,9 @@ def assemble(
 
     if claim_text.strip():
         sections += ["", "[출원발명 청구항]", claim_text.strip()]
+        scope_instructions = claim_scope.instructions(claim_text)
+        if scope_instructions:
+            sections += ["", scope_instructions]
 
     if report_context:
         sections += ["", report_context]

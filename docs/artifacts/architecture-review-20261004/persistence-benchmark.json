@@ -1,0 +1,20 @@
+{
+  "kind": "offline_local_persistence",
+  "before": {
+    "polls": 40,
+    "candidates": 130,
+    "full_snapshot_updates": 41,
+    "local_seconds": 3.873421,
+    "final_candidates": 130,
+    "final_stop_reason": "deadline"
+  },
+  "after": {
+    "polls": 40,
+    "candidates": 130,
+    "full_snapshot_updates": 2,
+    "local_seconds": 0.218217,
+    "final_candidates": 130,
+    "final_stop_reason": "deadline"
+  },
+  "limitations": "No LLM, network, DB commits or retrieval quality measured. This is not an end-to-end search speedup."
+}
