@@ -102,8 +102,9 @@ def test_reused_quote_keeps_each_components_distinct_purpose(purpose_input):
     data['components'].append(row)
     report, manifest, _ = compile_input(purpose_input)
     assert not manifest['report']['issues']
-    assert report.count('"The controller changes') == 1
-    assert '근거 E1 (비교 설명): 청구항 1 (A)의 근거 E1 참조.' in report
+    assert report.count('"The controller changes') == 2
+    assert '근거 E1 — 비교 설명: "제어기는 누적 소음에 따라 이득을 변경한다."' in report
+    assert '의 근거 E1 참조.' not in report
 
 
 def test_sentence_split_preserves_purpose_on_every_new_evidence_id(purpose_input):

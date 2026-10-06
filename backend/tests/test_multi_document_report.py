@@ -64,7 +64,7 @@ def test_additional_document_cannot_bypass_source_validation(multi_input, defect
     assert '"Another controller' not in report
 
 
-def test_same_quote_is_printed_once_across_ids_components_and_claims(multi_input):
+def test_reused_quotes_are_visible_in_every_component_and_claim(multi_input):
     data = multi_input[0]
     data['evidence'].append({**data['evidence'][0], 'id': 'E3'})
     row = data['components'][0]
@@ -72,9 +72,13 @@ def test_same_quote_is_printed_once_across_ids_components_and_claims(multi_input
     data['components'].append({**row, 'symbol': '(B)'})
     data['components'].append({**row, 'claim': '청구항 2'})
     report, manifest, _ = compile_input(multi_input)
-    assert report.count('"제어기는 누적 소음에 따라 이득을 변경한다."') == 1
-    assert report.count('"Another controller retains') == 1
-    assert '청구항 1 (A)의 근거 E1 참조.' in report
+    assert report.count('"제어기는 누적 소음에 따라 이득을 변경한다."') == 6
+    assert report.count('"Another controller retains') == 3
+    assert '의 근거 E1 참조.' not in report
+    for section in report.split('**(')[1:]:
+        assert '근거 E1 — "제어기는 누적 소음에 따라 이득을 변경한다."' in section
+        assert '근거 E2 — "다른 제어기는 초기 음성 구간을 유지한다."' in section
+        assert '근거 E3 — "제어기는 누적 소음에 따라 이득을 변경한다."' in section
     assert len(manifest['items']) == 3 and len(manifest['report']['evidence']) == 3
     assert not manifest['report']['issues']
 

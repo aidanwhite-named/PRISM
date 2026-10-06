@@ -41,7 +41,7 @@ difference는 복수 문헌으로 대비해도 대응되지 않는 부분만 한
 낮은 주 문헌 유사도만으로 difference를 강제로 채우지 않는다. 여러 문헌의 개별 기재를 합쳐 단일 문헌의 전체 개시 또는 문헌 간 연결 관계의 입증으로 취급하지 않는다.
 resolution, supplements, derivation은 작성하지 않는다. 대응 근거와 설명은 모두 구성대비에 기록하고 차이점에는 발췌·번역·보완 설명을 반복하지 않는다.
 모든 evidence 참조는 근거가 하나여도 ["E8"]처럼 배열로 쓴다. 같은 원문·위치의 근거는 하나의 ID로 재사용한다.
-근거 재사용 시 각 구성의 evidence 배열에는 해당 ID를 다시 연결한다. 앞 구성에 출력됐다는 이유로 연결을 생략하지 않는다. 중복 출력만 프로그램이 제거한다. reasoning에서 사용한 모든 E번호는 현재 구성의 evidence에도 있어야 한다.
+근거 재사용 시 각 구성의 evidence 배열에는 해당 ID를 다시 연결한다. 앞 구성에 출력됐다는 이유로 연결을 생략하지 않는다. 프로그램이 각 구성에 연결된 근거 문장을 표시한다. reasoning에서 사용한 모든 E번호는 현재 구성의 evidence에도 있어야 한다.
 ''' + REFERENCE_SELECTION + '''
 각 구성은 필수 한정의 대응 여부를 판단하고 필요한 원문을 선택한 뒤 설명과 근거를 연결한다. evidence의 모든 ID에 evidence_uses를 {"E1":"support","E2":"contrast"}처럼 기록한다.
 support는 해당 구성의 한정에 실제 대응하는 근거다. contrast는 문헌의 실제 내용을 보여 주어 처리 대상·동작·관계가 왜 다른지 설명하는 비교 근거이며 대응의 입증이나 양수 점수의 근거로 세지 않는다. 일반 배경은 두 용도 모두에서 제외한다.
@@ -57,7 +57,7 @@ reasoning에는 원문·번역을 다시 옮기지 말고 대응 관계만 짧�
 외국어 근거는 필요한 선택 범위 전체의 충실한 번역을 기록한다. 프로그램은 번역 (위치; 원문 확인용 짧은 구절) 순으로 출력한다.
 표시용 원문은 번역 전체와 같은 길이일 필요가 없다. 검증용 전체 원문은 보존하고 표시만 한 줄 길이로 축약한다. 생략부호는 표시용이며 원문 자체에 추가하지 않는다.
 한국어 근거는 실제 대응 내용을 필요한 만큼 발췌하고 위치를 붙인다. 한 줄 제한을 적용하지 않는다.
-프로그램이 동일 발췌의 중복 출력을 막고 앞의 구성·근거를 참조하므로 같은 발췌를 설명에 다시 작성하지 않는다.
+프로그램이 저장된 발췌와 번역을 각 구성에 표시하므로 같은 발췌를 reasoning에 다시 작성하지 않는다. 동일 근거는 기존 ID와 번역을 재사용하며 다시 생성하지 않는다.
 차이점은 구성별 한 줄이며 미대응 한정·관계 또는 확인 불가 범위만 담는다. difference에 근거 ID, 번역, 발췌, 해소 판단, 보완 문헌 소개를 넣지 않는다.
 summary.main_reason은 주 문헌 선정 이유, summary.relationships는 전체 유사점과 잔존 차이만 간결하게 쓴다. 법적 최종 결론을 쓰지 않는다.
 근거 검증 실패·누락은 별도의 보고서 항목 점검으로 표시하며 모델의 점수를 대체하지 않는다. 모든 청구항 구성을 빠뜨리지 않는다.
@@ -527,8 +527,6 @@ def compile_report(raw, aliases, attachments, *, prior_mapping=None, bundle=None
             return translation + ' (' + location + '; ' + quote + ')'
         return quote + ' (' + location + ')'
 
-    displayed_evidence = {}
-
     def render_evidence(refs, label, *, show_reference=True, uses=None):
         output = []
         for eid in refs:
@@ -538,23 +536,15 @@ def compile_report(raw, aliases, attachments, *, prior_mapping=None, bundle=None
                 issues.append(label + ': 없는 근거 ID ' + eid)
                 continue
             if item['verified']:
-                key = (item['attachment'], item['page'], re.sub(r'\s+', ' ', item['quote']).strip())
-                previous_excerpt = displayed_evidence.get(key) if multi_comparison else None
-                if previous_excerpt:
-                    first_label, first_id = previous_excerpt
-                    purpose = ' (비교 설명)' if uses and uses.get(eid) == 'contrast' else ''
-                    output += ['', f'근거 {prose(eid)}{purpose}: {prose(first_label)}의 근거 {prose(first_id)} 참조.']
-                else:
-                    needs_reference = multi_comparison or show_reference or documents[item['attachment']]['citation_number'] != 1
-                    prefix = reference(item['attachment']) + ': ' if needs_reference else ''
-                    if multi_comparison:
-                        prefix += f'근거 {prose(eid)} — '
-                    if uses and uses.get(eid) == 'contrast':
-                        prefix += '비교 설명: '
-                    output += ['', prefix + excerpt(item)]
-                    # A missing translation must not suppress a later valid one.
-                    if not item['issues']:
-                        displayed_evidence[key] = (label, eid)
+                # Reuse the verified text locally so every component is readable
+                # without navigating to an earlier claim or generating it again.
+                needs_reference = multi_comparison or show_reference or documents[item['attachment']]['citation_number'] != 1
+                prefix = reference(item['attachment']) + ': ' if needs_reference else ''
+                if multi_comparison:
+                    prefix += f'근거 {prose(eid)} — '
+                if uses and uses.get(eid) == 'contrast':
+                    prefix += '비교 설명: '
+                output += ['', prefix + excerpt(item)]
             for issue in item['issues']:
                 detail = f"{eid} ({item['attachment']}): {issue}"
                 issues.append(detail)
