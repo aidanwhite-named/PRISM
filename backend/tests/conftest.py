@@ -32,7 +32,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from app.config import PATHS, PROJECT_ROOT  # noqa: E402
 from app.db import init_engine  # noqa: E402
-from app.prompt_store import RESERVED_PROMPT_IDS  # noqa: E402
+from app.task_instructions import ANALYSIS, SEARCH  # noqa: E402
+RESERVED_PROMPT_IDS = frozenset((ANALYSIS.id, SEARCH.id))
 
 
 @pytest.fixture(scope="session", autouse=True)

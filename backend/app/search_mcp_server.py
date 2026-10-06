@@ -155,6 +155,12 @@ class SearchTools:
             pass
         return result
 
+    def phase(self):
+        try:
+            return json.loads((self.work_dir / 'search_phase.json').read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return 'searching'
+
     def tool_definitions(self):
         statuses = self.statuses()
         return [_CAPABILITIES, _SAVE_FINDINGS, _SOURCE_FETCH, _CITATION_SEARCH] + [
@@ -174,11 +180,39 @@ class SearchTools:
         return row
 
     def _run_call(self, name, arguments, row):
+        failed_findings = []
         try:
             definition = next((tool for tool in self.tool_definitions() if tool["name"] == name), None)
             if definition is None:
                 raise ValueError("tool_unavailable")
-            _validate(arguments, definition["inputSchema"])
+            schema = definition["inputSchema"]
+            if name == 'save_findings':
+                # Check the batch envelope here; individual documents are
+                # validated and saved independently by the storage handler.
+                schema = copy.deepcopy(schema)
+                schema['properties']['records']['items'] = {}
+            _validate(arguments, schema)
+            if name == 'save_findings':
+                accepted = []
+                item_schema = definition['inputSchema']['properties']['records']['items']
+                for position, raw in enumerate(arguments['records']):
+                    try:
+                        _validate(raw, item_schema)
+                        accepted.append(raw)
+                    except ValueError as exc:
+                        failed_findings.append({'index': position,
+                            'title': raw.get('title', '') if isinstance(raw, dict) else '',
+                            'url': raw.get('url', '') if isinstance(raw, dict) else '',
+                            'code': 'invalid_finding_shape', 'detail': str(exc)})
+                arguments = {**arguments, 'records': accepted}
+            from .search_engine import input_documents
+            target = input_documents.fetch_target(name, arguments)
+            if target and input_documents.is_input(self.work_dir, target):
+                input_documents.record_exclusion(self.work_dir, target)
+                result = {'records': [], 'excluded_input_document': True,
+                          'detail': '입력으로 제공한 동일 문헌입니다. 추가 조회·검증과 후보 저장을 생략하고 다른 문헌을 탐색하세요.'}
+                self._record({**row, 'state': 'completed', 'ok': True, 'result': result})
+                return result
             if name not in ("search_capabilities", "save_findings") and self.budget().get('seconds_remaining', 1) <= 0:
                 result = {"records": [], "budget": self.budget(), "budget_stopped": True,
                           "not_evidence_of_absence": True}
@@ -193,6 +227,9 @@ class SearchTools:
                     if (previous.get("tool") == name and previous.get("state") == "completed"
                             and previous.get("ok") is True and actual == expected
                             and result.get("records") and not result.get("failed_sources")
+                            and (name != 'literature_fetch' or arguments.get('constituent') != 'full_text'
+                                 or result.get('verification_scope') == 'full_text')
+                            and (name != 'source_fetch' or result.get('capture_version') == 2)
                             and result.get("identifier_matched") is not False):
                         result = copy.deepcopy(result)
                         result["budget"] = self.budget()
@@ -213,14 +250,28 @@ class SearchTools:
                         raise PatentSearchError("quota_persistence_failed")
             else:
                 result = self._execute(name, arguments)
+            if failed_findings:
+                result.setdefault('failed_findings', []).extend(failed_findings)
         except Exception as exc:
             if name == 'kipris_search' and getattr(exc, 'fault_code', '') in ('KIPRIS.30', 'KIPRIS.31'):
                 self.disabled_sources['kipris'] = str(exc)
             self._record({**row, "state": "completed", "ok": False,
                           **error_response(exc, name, arguments, self.secrets)})
             raise
+        if result.get('records'):
+            original = result['records']
+            result['records'] = input_documents.filter_records(self.work_dir, original)
+            if len(result['records']) != len(original):
+                result['excluded_input_documents'] = [
+                    {k: r.get(k, '') for k in ('title', 'url', 'document_number')}
+                    for r in original if input_documents.is_input(self.work_dir, r)]
+                result['scope_note'] = '입력과 동일한 문헌은 후보에서 제외했습니다. 다른 문헌만 선별·검증하세요.'
         result["budget"] = self.budget()
         self._record({**row, "state": "completed", "ok": True, "result": result})
+        if name in ('source_fetch', 'literature_fetch', 'epo_fetch') and result.get('records'):
+            # Reconcile aliases after the source receipt is durable.
+            from .search_engine import autonomous_store
+            autonomous_store.merge(self.work_dir, [])
         return result
 
     def _execute(self, name, arguments):
@@ -304,6 +355,9 @@ class SearchTools:
     def _fetch(self, backend_id, arguments, identifier_key):
         identifier = arguments[identifier_key]
         constituent = arguments.get("constituent", "abstract" if backend_id == "literature" else "claims")
+        if backend_id == 'literature' and constituent == 'full_text':
+            from .search_engine.source_acquisition import article_full_text
+            return article_full_text(self, arguments)
         backend = self._backend(backend_id)
         response = backend.fetch_document(identifier, constituent)
         result = _response(response, scope=constituent)
@@ -311,6 +365,9 @@ class SearchTools:
             return search_manifest.identity_key(doi=number) if backend_id == "literature" else search_manifest.identity_key(number)
         result["requested_identifier"] = identifier
         result["identifier_matched"] = any(identity(record["document_number"]) == identity(identifier) for record in result["records"])
+        if backend_id == 'epo':
+            from .search_engine.source_acquisition import ops_capture
+            result = ops_capture(result, constituent)
         return result
 
 def _validate(value, schema, depth=0):
@@ -541,14 +598,23 @@ _LITERATURE_SEARCH = _tool(
 )
 _LITERATURE_FETCH = _tool(
     "literature_fetch",
-    "Fetch bibliographic or abstract evidence for an exact DOI (Europe PMC, then OpenAlex, then Crossref for abstracts; a record without an abstract does not stop the search). arXiv IDs are accepted as 10.48550/arXiv.<id>, arXiv:<id> or arxiv.org/abs/<id> (version suffix ignored for identity) and try arXiv first, then OpenAlex. Mismatched identities are rejected; PDF full text is not fetched.",
-    {"doi": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "biblio"]}},
+    "Fetch evidence for an exact DOI. abstract uses Europe PMC, then OpenAlex, then Crossref; biblio uses Crossref/OpenAlex. arXiv IDs are accepted as 10.48550/arXiv.<id>, arXiv:<id> or arxiv.org/abs/<id> (version suffix ignored for identity). Mismatched identities are rejected. full_text uses OpenAlex public copy locations as described below.",
+    {"doi": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "biblio", "full_text"]},
+     "find": {"type": "string", "minLength": 1, "maxLength": 200},
+     "max_chars": {"type": "integer", "minimum": 1000, "maximum": 24000}},
     ["doi"],
 )
+_LITERATURE_FETCH['description'] += (' constituent=full_text resolves the exact DOI via OpenAlex best_oa_location/locations, '
+    'then tries up to four public HTTPS copies within the remaining budget, using source_fetch. '
+    'Use this when publisher/ResearchGate/DOI access fails. captured_source contains capture_artifact_id and passage_options '
+    'for observed body evidence; public_copies alone and metadata/abstract are not body evidence.')
+_EPO_FETCH['description'] += (' Actual returned claims/description include capture_artifact_id and passage_options for '
+    'save_findings review, so OPS body text can be used directly if a Google Patents page is blocked. '
+    'Exact publication identity is preserved; another family publication is a separate candidate.')
 _CAPABILITIES = _tool("search_capabilities", "Report which PRISM search tools are enabled and configured without making a network request.", {}, [])
 
 _SAVE_FINDINGS = _tool('save_findings',
-    'Save useful findings immediately. No classification, count limit or mandatory full-text check. '
+    'Save useful findings immediately, including provisional leads before source checking. '
     'ranked=true places these findings first in your relevance order; other saved leads remain. '
     'reported_scope describes what you actually inspected; storage does not certify that assessment.',
     {'records': {'type': 'array', 'items': {'type': 'object', 'required': ['title', 'url', 'reason'],
@@ -556,12 +622,46 @@ _SAVE_FINDINGS = _tool('save_findings',
         ('title', 'url', 'document_number', 'reason', 'difference', 'reported_scope', 'publication_date', 'authors')}}},
      'ranked': {'type': 'boolean'}}, ['records'])
 _SAVE_FINDINGS['annotations'].update(readOnlyHint=False, openWorldHint=False)
+_finding_fields = _SAVE_FINDINGS['inputSchema']['properties']['records']['items']['properties']
+_finding_fields.update({key: {'type': 'string'} for key in ('triage_status', 'triage_reason', 'core_matches', 'review_stage')})
+_finding_fields['review'] = {'type': 'object', 'additionalProperties': False,
+    'required': ['verdict', 'reason', 'gaps', 'queries', 'passages'], 'properties': {
+        'verdict': {'type': 'string', 'enum': ['strong', 'partial', 'mismatch', 'unavailable']},
+        'group': {'type': 'string', 'enum': ['X', 'Y', 'Z']},
+        'reason': {'type': 'string'}, 'gaps': {'type': 'string'},
+        'queries': {'type': 'array', 'maxItems': 4, 'items': {'type': 'string'}},
+        'passages': {'type': 'array', 'maxItems': 12, 'items': {'type': 'object',
+            'additionalProperties': False, 'required': ['capture_artifact_id', 'feature', 'relation', 'translation'],
+            'properties': {key: {'type': 'string'} for key in
+                ('capture_artifact_id', 'passage_id', 'quote', 'feature', 'relation', 'translation')}}}}}
+_finding_fields['review']['properties']['component_matches'] = {
+    'type': 'array', 'items': {'type': 'object', 'additionalProperties': False,
+        'required': ['component_id', 'verdict', 'reason', 'gaps', 'passage_indices'],
+        'properties': {'component_id': {'type': 'string'},
+            'verdict': {'type': 'string', 'enum': ['strong', 'partial', 'mismatch', 'unavailable']},
+            'reason': {'type': 'string'}, 'gaps': {'type': 'string'},
+            'passage_indices': {'type': 'array', 'items': {'type': 'integer', 'minimum': 0, 'maximum': 11}}}}}
+_SAVE_FINDINGS['description'] += (' Save document reviews frequently and inspect saved_reviews. A failed review does not prevent other searches, reads or reviews. Save review with exact '
+    'capture_artifact_id and passage_id selected from source_fetch.passage_options (preferred), '
+    'or one exact continuous quote. Never use ellipses, paraphrase, case changes or joined sentences in quote. '
+    'Translate the entire selected passage. Use repair_options to correct pending_source_checks when worthwhile; '
+    'reuse those observed passages rather than fetching again. Compare technical features AND relations/conditions. '
+    'Use partial/mismatch and gap-driven queries to refine the search; unavailable is not mismatch. '
+    'Set review.group to X (strong overall structure and core), Y (different overall structure but strong core), '
+    'or Z (similar overall structure, partial core). Omit group for unverified or irrelevant sources. '
+    'X/Y use verdict=strong; Z uses partial. Explain both structure and core relations in reason. '
+    'X/Y/Z are output groups, not search-order requirements or automatic stop conditions. '
+    'The response returns pending source checks and search gaps. Quote validation is not semantic certification.')
+_SAVE_FINDINGS['description'] += (' For gap search (focus.mode=gap), omit group and save component_matches '
+    'for selected component IDs with independent verdict/reason/gaps and zero-based passage_indices into review.passages. '
+    'The whole claim is context, not a requirement that every component match. Observed source evidence remains required per component.')
 
 _SOURCE_FETCH = _tool('source_fetch',
-    'Read and preserve a public HTTPS source page or PDF with evidence_refs. No login, no TLS bypass. Prefer a known canonical source URL to a failing redirect. section=claims extracts labelled Google Patents claims; section=page retains description, family and citation tables. offset reads later text windows from the same capture. Identity is confirmed only when parsed from the page; other pages match by URL.',
+    'Read and preserve a public HTTPS source page or PDF with evidence_refs. No login, no TLS bypass. Prefer a known canonical source URL to a failing redirect. section=claims or description extracts labelled Google Patents text; section=page retains page text, while a labelled arXiv article body is extracted as full_text. offset reads later windows; find locates an exact term with preceding context from the cached capture, saving tokens. Exact DOI/arXiv/publication identifiers and captured citation metadata/canonical/PDF links connect source URLs. Landing pages do not qualify as full_text. Search, source reading and review saving may be interleaved freely.',
     {'url': {'type': 'string', 'maxLength': 4000},
-     'section': {'type': 'string', 'enum': ['claims', 'page']},
+     'section': {'type': 'string', 'enum': ['claims', 'description', 'page']},
      'offset': {'type': 'integer', 'minimum': 0, 'maximum': 1000000},
+     'find': {'type': 'string', 'minLength': 1, 'maxLength': 200},
      'max_chars': {'type': 'integer', 'minimum': 1000, 'maximum': 24000}}, ['url'])
 _CITATION_SEARCH = _tool('citation_search',
     'Retrieve one hop of backward (cited) or forward (citing) publications for an exact patent number, DOI or openalex:W identifier. Uses enabled EPO/OpenAlex APIs. Does not union families: inspect the family/source page and select additional family identifiers yourself. Citation adjacency never proves claim similarity. begin pages patent forward results.',

@@ -232,6 +232,13 @@ class DocumentIndex:
         ).fetchall()
         return [_row(record) for record in records]
 
+    def page_text(self, page_number: int) -> str:
+        """Original extracted page, without search-chunk overlaps or separators."""
+        row = self._connection.execute(
+            "SELECT text FROM pages WHERE page_number = ?", (page_number,)
+        ).fetchone()
+        return row[0] if row else ""
+
     def page_status(self, page_number: int) -> dict | None:
         record = self._connection.execute(
             "SELECT page_number, printed_page, status, extraction_method, "

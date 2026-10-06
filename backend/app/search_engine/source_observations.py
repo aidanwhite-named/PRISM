@@ -3,6 +3,7 @@ from urllib.parse import unquote, urlsplit
 import re
 
 from .. import search_manifest
+from .document_identity import DocumentIndex, primary_identity
 
 
 SCOPE_LABELS = {
@@ -22,6 +23,9 @@ def record_scopes(record):
 
 
 def _identity(record):
+    exact = primary_identity(record)
+    if exact:
+        return exact
     number = str(record.get('document_number') or record.get('doi') or '').strip()
     if number:
         if number.lower().startswith(('10.', 'doi:', 'https://doi.org/', 'http://doi.org/', 'arxiv:')):
@@ -42,16 +46,13 @@ def _identity(record):
 
 def candidate_observation(candidate, calls):
     receipts, scopes = [], []
-    identity = _identity(candidate)
+    index = DocumentIndex(calls)
     for call in calls:
         result = call.get('result') or {}
         if call.get('ok') is not True or result.get('identifier_matched') is False:
             continue
         for record in result.get('records', []):
-            other = _identity(record)
-            matches = identity == other if identity and other else (
-                bool(candidate.get('url')) and candidate.get('url') == record.get('url'))
-            if not matches:
+            if not index.matches(candidate, record):
                 continue
             observed = record_scopes(record)
             scopes.extend(observed)

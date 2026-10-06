@@ -270,9 +270,9 @@ class CodexStreamState:
         return self.status is not None and self.status != "completed"
 
     def _haystack(self) -> str:
-        return " ".join(
-            filter(None, [self.error_message or "", " ".join(self.messages)])
-        ).lower()
+        # Agent text is report content, not CLI diagnostics. Patent excerpts
+        # routinely contain "authentication", "unauthorized", or "quota".
+        return (self.error_message or "").lower() if self.is_error else ""
 
     @property
     def auth_required(self) -> bool:

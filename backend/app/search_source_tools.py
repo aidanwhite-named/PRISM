@@ -27,14 +27,14 @@ def citation_search(tools, arguments):
     return paper_citations(tools, number, direction, arguments.get('begin', 1))
 
 def source_fetch(tools, arguments):
-    from .search_engine.fetcher import SafeFetcher, ArticleHTML
+    from .search_engine.fetcher import SafeFetcher, ArticleHTML, Fetched
     from .search_engine.source_text import source_from_fetch
     from .search_engine.storage import identifier, write_json
     store = ArtifactStore(PATHS.evidence_dir)
     # Re-reading a later text window reuses the captured response, not the network.
     cache = tools.work_dir / ('source-' + identifier(arguments['url'] + arguments.get('section', 'claims')) + '.json')
     capture_origin = 'local_cache'
-    if cache.exists():
+    if cache.exists() and json.loads(cache.read_text(encoding='utf-8')).get('capture_version') == 2:
         capture = json.loads(cache.read_text(encoding='utf-8'))
         store.read(capture['raw_artifact_id'])
     else:
@@ -42,33 +42,75 @@ def source_fetch(tools, arguments):
         capture = captured_source(tools.work_dir, arguments, store)
         capture_origin = 'continuation' if capture is not None else 'network'
         if capture is None:
-            fetched = SafeFetcher(store).get(arguments['url'])
+            fetched = None
+            for section in ('claims', 'description', 'page'):
+                prior = tools.work_dir / ('source-' + identifier(arguments['url'] + section) + '.json')
+                if prior.exists():
+                    saved = json.loads(prior.read_text(encoding='utf-8'))
+                    raw = store.read(saved['raw_artifact_id'])
+                    fetched = Fetched(saved['url'], raw,
+                        saved.get('content_type') or ('application/pdf' if raw.startswith(b'%PDF-') else 'text/html'),
+                        saved['raw_artifact_id'])
+                    break
+            fetched = fetched or SafeFetcher(store).get(arguments['url'])
             source, pages = source_from_fetch(fetched)
             text = '\n\n'.join(page.text for page in pages)
-            if arguments.get('section') == 'page' and fetched.content_type != 'application/pdf':
+            page_spans, cursor = [], 0
+            for page in pages:
+                page_spans.append({'page': page.page_number, 'start': cursor, 'end': cursor + len(page.text)})
+                cursor += len(page.text) + 2
+            if (arguments.get('section') == 'page' and fetched.content_type != 'application/pdf'
+                    and source['scope'] != 'full_text'):
                 parser = ArticleHTML()
                 parser.feed(fetched.body.decode('utf-8', errors='replace'))
                 text = parser.text()
                 source['scope'] = 'page_text'
-            capture = {'url': fetched.url, 'raw_artifact_id': fetched.artifact_id,
+            elif (arguments.get('section') == 'description' and fetched.content_type != 'application/pdf'
+                  and source['scope'] != 'full_text'):
+                from .search_engine.comparison_sources import DescriptionHTML
+                parser = DescriptionHTML()
+                parser.feed(fetched.body.decode('utf-8', errors='replace'))
+                description = ''.join(parser.parts).strip()
+                if source.get('document_number') and len(description) >= 100:
+                    text, source['scope'] = description, 'description'
+                else:
+                    raise ValueError('labelled_description_unavailable; use claims or linked PDF')
+            capture = {'capture_version': 2, 'url': fetched.url, 'raw_artifact_id': fetched.artifact_id,
+                       'content_type': fetched.content_type,
                        'document_number': source.get('document_number', ''),
                        'title': source.get('title', ''), 'scope': source['scope'], 'text': text,
-                       'pdf_urls': source.get('pdf_urls', [])}
+                       'pdf_urls': source.get('pdf_urls', []),
+                       'document_identifiers': source.get('document_identifiers', []),
+                       'document_links': source.get('document_links', [])}
+            if fetched.content_type == 'application/pdf':
+                capture['page_spans'] = page_spans
         write_json(cache, capture)
     offset, limit = arguments.get('offset', 0), arguments.get('max_chars', 16000)
+    if arguments.get('find'):
+        hit = capture['text'].casefold().find(arguments['find'].casefold(), offset)
+        if hit >= 0:
+            offset = max(offset, hit - 800)
+        else:
+            return {'records': [], 'verification_scope': capture['scope'], 'find_found': False,
+                    'total_chars': len(capture['text']), 'scope_note': '검색어가 추출 본문에서 발견되지 않았습니다. 기술적 대응 부재의 증거는 아닙니다.'}
     text = capture['text'][offset:offset + limit]
     # Immutable capture with raw-byte provenance. Generic profile proves captured
     # text, never official/original-language status (Google pages may translate).
     aid = store.put(json.dumps(capture, ensure_ascii=False).encode('utf-8'))
-    field = 'claims' if capture['scope'] == 'claims' else 'full_text' if capture['scope'] == 'full_text' else 'page_text'
+    field = capture['scope'] if capture['scope'] in ('claims', 'description', 'full_text') else 'page_text'
     record = {'document_number': capture['document_number'], 'title': capture['title'], 'url': capture['url'],
+              'document_identifiers': capture.get('document_identifiers', []),
               'fields': {field: text, 'title': capture['title']},
               'evidence_refs': {field: {'artifact_id': aid, 'field_path': 'text', 'profile_id': 'generic_json'},
                                 'title': {'artifact_id': aid, 'field_path': 'title', 'profile_id': 'generic_json'}}}
-    return {'records': [record], 'raw_artifact_id': capture['raw_artifact_id'], 'capture_artifact_id': aid,
-            'capture_origin': capture_origin,
+    from .search_engine.source_passages import options
+    passages = options(text, field, offset) if field in ('claims', 'description', 'full_text') else []
+    return {'capture_version': capture.get('capture_version', 1), 'records': [record], 'raw_artifact_id': capture['raw_artifact_id'], 'capture_artifact_id': aid,
+            'passage_options': passages, 'capture_origin': capture_origin,
             'verification_scope': capture['scope'], 'source_kind': 'public_capture',
             'untrusted_external_data': True, 'offset': offset, 'total_chars': len(capture['text']),
             'next_offset': offset + len(text) if offset + len(text) < len(capture['text']) else None,
             'pdf_urls': capture['pdf_urls'],
-            'scope_note': 'Captured page text, not certified original text. section=page includes description/family/citation tables; use offset to read later sections.'}
+            'document_links': capture.get('document_links', []),
+            'page_spans': capture.get('page_spans', []),
+            'scope_note': 'Save document reviews frequently; search, reading and saving may be interleaved. Select a passage_id from passage_options with this capture_artifact_id, feature, relation and its Korean translation. Never join or paraphrase quoted text. Only labelled article bodies, patent sections and PDFs qualify as body evidence; generic landing pages do not.'}

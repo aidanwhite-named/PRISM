@@ -86,6 +86,9 @@ def test_claim_and_attachment_roles_have_dedicated_sections(work_dir) -> None:
     assert "[인용발명 문헌]" in result.user_message
     assert result.manifest[0]["role"] == AttachmentRole.APPLICATION
     assert result.manifest[1]["role"] == AttachmentRole.CITATION
+    assert "인용문헌으로 사용할 수 있는 자료 번호: ATT-02." in result.user_message
+    assert "출원발명 자료: ATT-01." in result.user_message
+    assert "인용발명 1의 자료 번호를 ATT-01로 바꾸지 않습니다." in result.user_message
 
 
 def test_pdf_page_markers_survive_assembly(work_dir) -> None:
@@ -237,8 +240,9 @@ def test_output_rules_are_attached_to_a_prompt_that_never_mentions_them() -> Non
     """
     result = assemble("청구항을 구성별로 대비하라.", [], RULES, True, 100_000)
     assert "청구항을 구성별로 대비하라." in result.user_message
-    assert "[PRISM_COMPONENT_ANALYSIS_V1]" in result.user_message
-    assert "[PRISM_CITATION_MAPPING_V1]" in result.user_message
+    assert "# PRISM 구조화 보고서 V5" in result.user_message
+    assert "[PRISM_COMPONENT_ANALYSIS_V1]" not in result.user_message
+    assert "[PRISM_CITATION_MAPPING_V1]" not in result.user_message
 
 
 def test_output_rules_are_not_attached_twice() -> None:

@@ -24,3 +24,11 @@ frontend/tsconfig.tsbuildinfo
 
 # Source distribution archives
 /release/
+/.build-venv/
+/build/
+/dist/
+/build-windows.log
+/output/
+/tmp/
+/docs/artifacts/
+/docs/prompts/

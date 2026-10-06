@@ -36,7 +36,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 
-from . import analysis_protocol, claim_scope, retrieval
+from . import analysis_protocol, claim_scope, retrieval, report_sources
 from .citation_mapping import AliasedAttachment, assign_aliases
 from .citation_mapping import ordered_attachments as citation_ordered_attachments
 from .citation_mapping import render as render_mapping
@@ -116,6 +116,7 @@ def _attachment_block(
     alias: str = "",
     *,
     retrieval_mode: bool = False,
+    excerpt_choices: bool = False,
 ) -> str:
     role_label = {
         AttachmentRole.APPLICATION: "출원발명 문서",
@@ -168,7 +169,8 @@ def _attachment_block(
         [
             *header,
             f"--- 본문 시작: {item.original_filename} ---",
-            body,
+            report_sources.render_full_text(alias, body)
+            if excerpt_choices and item.role != AttachmentRole.APPLICATION else body,
             f"--- 본문 끝: {item.original_filename} ---",
         ]
     )
@@ -205,8 +207,19 @@ def assemble(
     # 이 경로를 지나지 않으므로 검색 프롬프트에는 붙지 않는다.
     sections: list[str] = [
         "[MASTER PROMPT]",
-        analysis_protocol.apply(master_prompt).strip(),
+        analysis_protocol.apply(master_prompt, retrieved=evidence_bundle is not None).strip(),
     ]
+
+    if attachments:
+        citation_aliases = [alias_by_id[a.attachment_id] for a in ranked if a.role != AttachmentRole.APPLICATION]
+        application_aliases = [alias_by_id[a.attachment_id] for a in ranked if a.role == AttachmentRole.APPLICATION]
+        sections += ["", "[이번 실행의 자료 역할과 보고서 문헌 범위]",
+                     "인용문헌으로 사용할 수 있는 자료 번호: " + (", ".join(citation_aliases) or "없음") + ".",
+                     "documents와 evidence의 attachment, reference_roles 및 인용문헌 참조에는 위 자료 번호만 사용합니다.",
+                     "ATT 자료 번호는 첨부의 식별자입니다. 인용발명 1의 자료 번호를 ATT-01로 바꾸지 않습니다."]
+        if application_aliases:
+            sections.append("출원발명 자료: " + ", ".join(application_aliases)
+                            + ". 청구항 해석에만 참고하며 인용문헌 목록과 대비 근거에 넣지 않습니다.")
 
     if claim_text.strip():
         sections += ["", "[출원발명 청구항]", claim_text.strip()]
@@ -311,6 +324,7 @@ def assemble(
                         item,
                         alias_by_id.get(item.attachment_id, ""),
                         retrieval_mode=retrieval_mode,
+                        excerpt_choices=not analysis_protocol.declares_blocks(master_prompt),
                     )
                 )
                 sections.append("")

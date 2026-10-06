@@ -5,6 +5,7 @@ import { api } from "./lib/api";
 import { useRunSession } from "./lib/runSession";
 import type { Job, JobKind } from "./lib/types";
 import { WORKSPACES } from "./lib/workspaces";
+import PrismSecret from "./components/PrismSecret";
 
 type IconName = "compare" | "search" | "prompts" | "history" | "settings";
 
@@ -17,7 +18,6 @@ const WORKSPACE_ICON: Record<JobKind, IconName> = {
  *  목록에 섞어 번호를 매기면 다섯 개가 한 줄기 순서로 읽힌다. */
 const TOOLS: Array<{ to: string; label: string; icon: IconName }> = [
   { to: "/answers", label: "정답 라이브러리", icon: "prompts" },
-  { to: "/prompts", label: "프롬프트", icon: "prompts" },
   { to: "/history", label: "실행 기록", icon: "history" },
   { to: "/settings", label: "환경 설정", icon: "settings" },
 ];
@@ -200,7 +200,7 @@ export default function App() {
         <div className="main-inner">
           <Outlet />
         </div>
-        <footer className="app-copyright">All rights reserved by Aidan</footer>
+        <PrismSecret />
       </main>
     </div>
   );

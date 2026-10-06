@@ -180,10 +180,12 @@ def check(
         "input_comparable": input_comparable,
         "inferred_components": inferred,
         "scope": scope,
+        "report_issues": (analysis_manifest or {}).get("report", {}).get("issues", []),
         "complete": bool(comparable and not missing and not missing_claims and not duplicates
                          and reported and not analysis_error and process_succeeded)
                     and not scope.get("limited", False)
-                    and (input_scope is None or bool(declared) or input_scope['component_scope_known']),
+                    and (input_scope is None or bool(declared) or input_scope['component_scope_known'])
+                    and not (analysis_manifest or {}).get("report", {}).get("issues"),
     }
 
 

@@ -59,6 +59,7 @@ from .base import (
 )
 from .codex_models import capabilities as model_capabilities, discover
 from .codex_stream import CodexStreamParser
+from .codex_models import capabilities as model_capabilities, discover
 from .env import build_child_env
 from .resolver import ResolvedExecutable, resolve_simple
 
@@ -280,6 +281,9 @@ class CodexCliProvider(Provider):
                 if local_save in enabled:
                     args += ["-c", f'{prefix}.tools.{local_save}.approval_mode="approve"']
             args += ["-c", f"{prefix}.required=true"]
+        if request.response_schema is not None:
+            schema_path = (output_path or request.work_dir / _LAST_MESSAGE_FILE).with_suffix('.schema.json')
+            args += ['--output-schema', str(schema_path)]
         # 마지막 인수. 프롬프트를 stdin 에서 읽는다 — Windows 의 명령행 길이
         # 제한(32,767자) 때문에 인수로는 긴 프롬프트를 넘길 수 없다.
         args.append("-")
@@ -313,6 +317,9 @@ class CodexCliProvider(Provider):
 
         # 같은 작업 폴더를 쓰는 후속 호출도 이전 응답 파일을 읽지 않는다.
         output_path = request.work_dir / f"codex_last_message-{uuid.uuid4().hex}.txt"
+        if request.response_schema is not None:
+            output_path.with_suffix('.schema.json').write_text(
+                json.dumps(request.response_schema, ensure_ascii=False), encoding='utf-8')
         args = self.build_args(request, output_path=output_path)
         outcome.cli_path = resolved.path
         outcome.cli_args = list(args)

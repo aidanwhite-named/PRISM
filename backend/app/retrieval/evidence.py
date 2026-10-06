@@ -173,8 +173,7 @@ def identity_excerpt(document: IndexedDocument) -> str:
 def identity_excerpt_location(document: IndexedDocument) -> tuple[int | None, str]:
     """Keep the actual page when empty leading pages require a fallback."""
     for page in range(1, max(1, document.page_count) + 1):
-        rows = document.index.page_rows(page)
-        text = "\n".join(row.text for row in rows).strip()
+        text = document.index.page_text(page).strip()
         if text:
             return page, text[:IDENTITY_EXCERPT_CHARS]
     return None, ""

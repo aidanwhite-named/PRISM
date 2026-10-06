@@ -27,7 +27,7 @@ def search_state(snapshot: dict) -> dict:
                 # A whole captured artifact does not imply every window was delivered.
                 fields = record.get('fields') or {}
                 chars = sum(len(v) for k, v in fields.items()
-                            if k in ('claims', 'full_text', 'page_text') and isinstance(v, str))
+                            if k in ('claims', 'description', 'full_text', 'page_text') and isinstance(v, str))
                 source['window'] = {'offset': result.get('offset', 0), 'chars': chars,
                     'total_chars': result.get('total_chars'), 'next_offset': result.get('next_offset')}
                 source['capture_artifact_id'] = result.get('capture_artifact_id', '')
@@ -78,7 +78,7 @@ def captured_source(directory, arguments, store):
             store.read(capture['raw_artifact_id'])
             if (all(isinstance(capture.get(k), str) for k in ('text', 'url', 'document_number', 'title'))
                     and isinstance(capture.get('pdf_urls'), list)
-                    and capture.get('scope') in ('claims', 'full_text', 'page_text')):
+                    and capture.get('scope') in ('claims', 'description', 'full_text', 'page_text')):
                 return capture
         except (ArtifactError, OSError, ValueError, KeyError, TypeError, AttributeError):
             # Missing or corrupt historic bytes require a fresh real source request.

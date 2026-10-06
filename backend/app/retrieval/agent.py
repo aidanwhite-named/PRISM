@@ -36,6 +36,7 @@ from .actions import (
     ACTION_READ_PAGES,
     ALL_DOCUMENTS,
     ActionError,
+    FinalizeComponent,
     FinalizeEvidence,
     GetDocumentStatus,
     ReadPage,
@@ -548,6 +549,7 @@ class RetrievalRun:
     rounds: list[RoundRecord] = field(default_factory=list)
     components: list[ComponentState] = field(default_factory=list)
     finalize: FinalizeEvidence | None = None
+    selection_events: list[dict] = field(default_factory=list)
     # PRISM 이 이번 실행에서 **실제로 AI 에게 돌려준** 청크. (attachment_id, chunk_id)
     #
     # 근거 패키지에 들어갈 수 있는 것은 이 집합 안의 구간뿐이다. 없으면 AI 가
@@ -733,6 +735,8 @@ class RetrievalAgent:
         # Explicitly delivered reads survive independent model calls. Store original
         # text, never references into a previous call's transient search results.
         self._retained_reads: dict[tuple, dict] = {}
+        # Validated selections survive independently of the model's next input.
+        self._selected_components: dict[str, FinalizeComponent] = {}
 
     # ------------------------------------------------------------- 유틸리티
 
@@ -852,6 +856,10 @@ class RetrievalAgent:
         position = 0
         for deferred in pending:
             deferred.item = self._canonical_action(deferred.item)
+            if getattr(deferred.item, "component_id", "") in self._selected_components:
+                # Preserve unreviewed scope for the report, without fetching it again.
+                self._deferred_actions.append(deferred)
+                continue
             key = self._action_key(deferred.item)
             if key in seen:
                 continue
@@ -888,7 +896,9 @@ class RetrievalAgent:
         # 사유별로 묶는다. 어떤 요청이 왜 미처리인지는 그대로 남는다.
         groups: list[dict] = []
         by_reason: dict[str, dict] = {}
-        for entry in self._deferred_actions[:20]:
+        active = [entry for entry in self._deferred_actions
+                  if getattr(entry.item, "component_id", "") not in self._selected_components]
+        for entry in active[:20]:
             row = entry.to_dict()
             reason = row.pop("reason", "")
             row = {key: value for key, value in row.items() if value not in ("", 0)}
@@ -899,7 +909,8 @@ class RetrievalAgent:
                 groups.append(group)
             group["items"].append(row)
         return {
-            "count": len(self._deferred_actions),
+            "count": len(active),
+            "paused_for_selected_components": len(self._deferred_actions) - len(active),
             "deferred": groups,
             "note": (
                 "PRISM 이 다음 action 을 자동 이월합니다. 같은 요청을 반복하지 "
@@ -911,6 +922,8 @@ class RetrievalAgent:
     def _has_blocking_deferred(self) -> bool:
         for deferred in self._deferred_actions:
             component_id = str(getattr(deferred.item, "component_id", "") or "").strip()
+            if component_id in self._selected_components:
+                continue
             # get_document_status 같은 전역 action 은 특정 구성의 검토 미완료를
             # 뜻하지 않는다. 구성 id 가 없다는 이유만으로 finalize 를 막으면
             # 반환 예산에 밀린 상태 조회가 영구 교착을 만든다.
@@ -1163,6 +1176,24 @@ class RetrievalAgent:
             record.status = "ok"
             run.rounds.append(record)
 
+            # An explicit new lookup reopens only that component. Re-fetch the
+            # requested originals; restoring every old read could overflow a
+            # budget that other components have since filled.
+            for item in response.actions:
+                key = getattr(item, "component_id", "")
+                if key in self._selected_components:
+                    self._reopen_selection(key)
+                    event = {"round": round_no, "component_id": key, "event": "reopened"}
+                    run.selection_events.append(event)
+                    self.trace.write("component_selection", event, round_no=round_no)
+
+            selection_problem = self._save_selections(response, run, round_no, final_round)
+            if selection_problem:
+                pending_error = selection_problem
+                run.action_errors.append({"round": round_no, "action": "selected_components",
+                                          "reason": selection_problem})
+                self.trace.write("selection_rejected", {"reason": selection_problem}, round_no=round_no)
+
             # The last call consumes the previous results; nothing may be fetched
             # after it, because no model call remains to inspect the new output.
             if final_round:
@@ -1175,6 +1206,24 @@ class RetrievalAgent:
                 (item for item in response.actions if item.action == ACTION_FINALIZE),
                 None,
             )
+            if selection_problem:
+                # Do not silently accept a finalization that accompanied invalid
+                # selections. The next bounded call must correct them.
+                if final_round:
+                    record.status = "finalize_rejected"
+                    record.error = selection_problem
+                else:
+                    results_payload = await self._execute_actions(response.actions, run, round_no)
+                continue
+            if finalize is None and len(self._selected_components) == len(self._order):
+                finalize = FinalizeEvidence(action=ACTION_FINALIZE, components=[])
+            if finalize is not None and self._selected_components:
+                included = {row.component_id for row in finalize.components}
+                finalize = finalize.model_copy(update={"components": [
+                    *finalize.components,
+                    *(self._selected_components[key] for key in self._order
+                      if key not in included and key in self._selected_components),
+                ]})
             if finalize is not None:
                 problem = self._finalize_problem(finalize)
                 if not problem and not final_round and self._has_blocking_deferred():
@@ -1265,6 +1314,45 @@ class RetrievalAgent:
             )
         return run
 
+    def _reopen_selection(self, key: str) -> None:
+        del self._selected_components[key]
+        self._retained_reads = {read_key: entry for read_key, entry in self._retained_reads.items()
+                                if entry.get("component_id") != key}
+
+    def _save_selections(self, response, run: RetrievalRun, round_no: int, final_round: bool) -> str:
+        """Atomically checkpoint explicit model choices, never inferred matches."""
+        selections = [self._canonical_action(row) for row in response.selected_components]
+        requested = {getattr(item, "component_id", "") for item in response.actions}
+        staged: dict[str, FinalizeComponent] = {}
+        for row in selections:
+            key = row.component_id
+            if key not in self._components or key in staged:
+                return f"selected_components의 구성 ID가 미선언 또는 중복입니다: {key}"
+            if key in self._selected_components and row != self._selected_components[key]:
+                return f"{key}: 저장한 선택을 수정하려면 먼저 해당 구성의 원문을 추가 조회하십시오."
+            if key in requested:
+                return f"{key}: 근거 저장과 추가 조회를 동시에 요청할 수 없습니다. 먼저 새 원문을 검토하십시오."
+            state = self._components[key]
+            if not final_round and any(doc.attachment_id not in state.searched for doc in self.corpus):
+                return f"{key}: 아직 검색하지 않은 입력 문헌이 있습니다. 모든 문헌을 한 번 검색한 뒤 선택을 저장하십시오."
+            if not row.evidence and row.status_claim == "matched":
+                return f"{key}: matched 선택에는 실제 반환된 근거가 필요합니다."
+            for ref in row.evidence:
+                doc = self._by_alias.get(ref.attachment)
+                chunk = doc.index.chunk(ref.chunk_id) if doc and ref.chunk_id else None
+                if (chunk is None or (doc.attachment_id, chunk.chunk_id) not in run.exposed_chunks
+                        or (ref.page and ref.page != chunk.page_number)
+                        or (ref.paragraph and ref.paragraph != chunk.paragraph)):
+                    return f"{key}: 선택 근거는 실제 반환된 attachment와 chunk_id 및 일치하는 위치여야 합니다: {ref.attachment}/{ref.chunk_id}"
+            staged[key] = row.model_copy(deep=True)
+        self._selected_components.update(staged)
+        for key, row in staged.items():
+            event = {"round": round_no, "component_id": key, "event": "selected",
+                     "selection": row.model_dump(mode="json")}
+            run.selection_events.append(event)
+            self.trace.write("component_selection", event, round_no=round_no)
+        return ""
+
     async def _execute_round(self, request: ExecutionRequest, record: RoundRecord) -> ExecutionOutcome:
         """일시 혼잡만 같은 입력으로 재시도한다. 검색 상태는 여기서 변경하지 않는다."""
         deadline = time.monotonic() + self.timeout_seconds
@@ -1344,6 +1432,9 @@ class RetrievalAgent:
         unknown: list[str] = []
         for item in finalize.components:
             component_id = str(item.component_id or "").strip()
+            saved = self._selected_components.get(component_id)
+            if saved is not None and item != saved:
+                return f"{component_id}: 이미 저장한 선택은 생략하십시오. 변경하려면 원문 추가 조회로 재검토하십시오."
             if component_id not in declared:
                 if component_id not in unknown:
                     unknown.append(component_id or "(빈 값)")
@@ -1541,6 +1632,8 @@ class RetrievalAgent:
         if self._order:
             component_rows = []
             for key in self._order:
+                if key in self._selected_components:
+                    continue
                 state = self._components[key]
                 component_rows.append(
                     {
@@ -1567,6 +1660,13 @@ class RetrievalAgent:
                     }
                 )
             payload["components"] = component_rows
+            if self._selected_components:
+                payload["saved_components"] = [
+                    {"id": key, "label": self._components[key].label,
+                     "feature": self._components[key].feature,
+                     "evidence_count": len(self._selected_components[key].evidence)}
+                    for key in self._order if key in self._selected_components
+                ]
         else:
             payload["instruction"] = (
                 "첫 라운드입니다. components 에 청구항 구성 분해를 넣고, "
@@ -1734,6 +1834,8 @@ class RetrievalAgent:
         results = []
         sources: dict[tuple, list] = {}
         for original in retained.values():
+            if original.get("component_id") in self._selected_components:
+                continue
             entry = copy.deepcopy(original)
             document = self._by_alias[entry['attachment']]
             rows = entry.get('pages') or entry['documents'][0]['hits']
@@ -2687,7 +2789,7 @@ class RetrievalAgent:
             if shown is not None:
                 page_entry["text_shown_in_this_round"] = shown
             else:
-                page_entry["text"] = "\n\n".join(row.text for row in rows)
+                page_entry["text"] = index.page_text(page)
             candidate_skipped = [value for value in skipped_chars if value != page]
             trial = make_payload([*served, page_entry], candidate_skipped)
             if json_size(trial) > budget_left:
@@ -2695,7 +2797,7 @@ class RetrievalAgent:
                 continue
             retained_page = {**page_entry, 'already_read': True,
                              'first_served_round': self._served_pages.get(page_key, round_no),
-                             'text': '\n\n'.join(row.text for row in rows)}
+                             'text': index.page_text(page)}
             retained_page.pop('text_shown_in_this_round', None)
             retained = {'action': ACTION_READ_PAGES, 'component_id': getattr(item, 'component_id', ''),
                         'attachment': document.alias, 'previously_reviewed': True,

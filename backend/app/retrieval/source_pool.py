@@ -6,6 +6,8 @@ no whitespace normalization, fuzzy matching, or cross-page sharing is allowed.
 
 from __future__ import annotations
 
+from .. import report_sources
+
 
 class SourcePool:
     def __init__(self, entries: list[tuple[str, int, str]]) -> None:
@@ -57,10 +59,14 @@ class SourcePool:
             "동일 문헌·페이지 안의 중복 원문은 한 번만 싣습니다. 각 근거의 S번호는",
             "아래 원문을 가리키며 [시작:끝]은 0부터 세는 문자 위치(끝 제외)입니다.",
             "참조된 발췌와 앞뒤 문맥도 이 원문에 그대로 포함되어 있습니다.",
+            "[원문 문장 …-T번호]는 프로그램이 붙인 선택 표식이며 원문 자체에는 포함되지 않습니다.",
+            "문자 위치는 선택 표식을 제외한 원문 기준입니다. 새 보고서는 T번호로 문장을 선택합니다.",
         ]
         for source in self.sources:
             lines += [
                 "", f"--- {source['id']} · {source['attachment']} · PDF {source['pdf_page']}쪽 · 원문 시작 ---",
-                source["text"], f"--- {source['id']} 원문 끝 ---",
+                report_sources.render_sentences(source['id'], source['attachment'],
+                                                source['pdf_page'], source['text']),
+                f"--- {source['id']} 원문 끝 ---",
             ]
         return lines

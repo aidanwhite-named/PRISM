@@ -5,78 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .enums import AttachmentRole, JobKind, PromptKind, RelationType
-
-
-class PromptBase(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    description: str = ""
-    body: str = Field(min_length=1)
-    accepted_file_types: list[str] = Field(default_factory=list)
-
-
-class PromptCreate(PromptBase):
-    # 만들 프롬프트의 종류. 생략하면 분석 프롬프트다 — 이 필드를 모르는 기존
-    # 클라이언트의 동작이 바뀌지 않아야 한다.
-    kind: str = PromptKind.ANALYSIS
-
-    @field_validator("kind")
-    @classmethod
-    def _check_kind(cls, value: str) -> str:
-        allowed = {item.value for item in PromptKind}
-        if value not in allowed:
-            raise ValueError(f"kind 는 {sorted(allowed)} 중 하나여야 합니다.")
-        return value
-
-
-class PromptUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = None
-    body: str | None = Field(default=None, min_length=1)
-    accepted_file_types: list[str] | None = None
-    enabled: bool | None = None
-
-
-class PromptOut(PromptBase):
-    id: str
-    enabled: bool
-    # 어느 작업의 프롬프트인가. 파일 메타데이터가 정하며 API 로 바꿀 수 없다 —
-    # 종류와 본문 계약이 함께 움직여야 한다.
-    kind: str = PromptKind.ANALYSIS
-    # 프롬프트 파일 메타데이터에서만 정한다. 본문과 출력 계약이 함께 움직여야
-    # 해서 API 로는 바꿀 수 없다.
-    capabilities: list[str] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class PromptCatalogOut(PromptOut):
-    """프롬프트 관리 화면에 표시하는 작업별 카탈로그 항목."""
-
-    editable: bool = True
-    deletable: bool = True
-
-
-class PromptImportItem(PromptBase):
-    # 내보내기가 적어 준 종류. 없으면 분석이다(옛 내보내기 파일 호환).
-    kind: str = PromptKind.ANALYSIS
-
-    @field_validator("kind")
-    @classmethod
-    def _check_kind(cls, value: str) -> str:
-        allowed = {item.value for item in PromptKind}
-        if value not in allowed:
-            raise ValueError(f"kind 는 {sorted(allowed)} 중 하나여야 합니다.")
-        return value
-
-
-class PromptImportRequest(BaseModel):
-    prompts: list[PromptImportItem]
-    replace_existing: bool = False
+from .enums import AttachmentRole, JobKind, RelationType
 
 
 class AttachmentAnalysis(BaseModel):
@@ -107,14 +38,22 @@ class UploadResponse(BaseModel):
     max_inline_chars: int | None = None
 
 
+class SearchComparisonCreate(BaseModel):
+    candidate_ids: list[str] = Field(min_length=1, max_length=5)
+
+
 class JobCreate(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def reject_prompt_override(cls, value):
+        if isinstance(value, dict) and value.get("prompt_id"):
+            raise ValueError("프롬프트 교체는 지원하지 않습니다. 내장 분석·검색 지침을 사용합니다.")
+        return value
+
     use_answer_library: bool = True
     # 작업 종류. 생략하면 기존 PDF 구성대비 분석이다. 기존 API 클라이언트가
     # 이 필드를 모르고 보내도 동작이 바뀌지 않아야 한다.
     job_kind: str = JobKind.PATENT_ANALYSIS
-    # 실행 화면은 이 값을 보내지 않고 Settings 의 기본값을 사용한다.
-    # 선택적 override 는 기존 API 클라이언트와 테스트 호환을 위해 유지한다.
-    prompt_id: str | None = None
     provider: str | None = None
     model: str | None = None
     claim_text: str = ""
@@ -142,6 +81,9 @@ class JobCreate(BaseModel):
     # 구성대비 결과에서 시작하는 미대응 구성 검색. source_job_id 와 함께 쓰며,
     # 일반 유사문헌 검색과 후속 분석에서는 비워 둔다.
     search_component_ids: list[str] = Field(default_factory=list)
+    search_mode: Literal["full", "dependent"] = "full"
+    dependent_claim_text: str = Field(default="", max_length=100000)
+    search_feature_text: str = Field(default="", max_length=100000)
     # 선택적 검색 기준일. 이 날짜까지 **공개된** 문헌만 대상으로 한다.
     #
     #   None / ""  날짜 조건 없음. 과거·최근·미래 공개문헌을 구분 없이 본다.
@@ -153,6 +95,12 @@ class JobCreate(BaseModel):
     # 유사문헌 검색은 발견·패밀리 확인까지 가능한 deep 실행만 새로 만든다.
     # 저장된 과거 작업의 값은 JobOut에서 문자열로 보존한다.
     search_depth: Literal["fast", "deep", "exhaustive"] = "deep"
+
+    @model_validator(mode="after")
+    def _search_input_kind(self):
+        if (self.search_mode != "full" or self.dependent_claim_text.strip() or self.search_feature_text.strip()) and self.job_kind != JobKind.SIMILARITY_SEARCH:
+            raise ValueError("종속항 검색 입력은 유사 문헌 검색에서만 사용할 수 있습니다.")
+        return self
 
     @field_validator("search_cutoff_date")
     @classmethod
@@ -182,6 +130,13 @@ class JobCreate(BaseModel):
         if value not in allowed:
             raise ValueError(f"job_kind 는 {sorted(allowed)} 중 하나여야 합니다.")
         return value
+
+
+class DependentSearchDraft(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    claim_text: str = Field(default="", max_length=100000)
+    dependent_claim_text: str = Field(min_length=1, max_length=100000)
 
 
 class JobAttachmentOut(BaseModel):

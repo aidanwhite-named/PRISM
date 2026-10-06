@@ -8,15 +8,23 @@ import pytest
 
 from .conftest import wait_for_job
 from .pdf_fixture import build_pdf, build_scanned_like_pdf
-from app.config import PATHS, PROMPT_DIR
+from app.config import PATHS
+from .conftest import _TEST_PROMPT_DIR
+from pathlib import Path
+PROMPT_DIR = Path(_TEST_PROMPT_DIR)
 
 
 @pytest.fixture()
-def prompt(client):
-    return client.post(
-        "/api/prompts",
-        json={"name": "테스트 프롬프트", "body": "자료를 요약하십시오.", "output_mode": "markdown"},
-    ).json()
+def prompt(client, monkeypatch):
+    # Isolate legacy response/numbering compatibility from staged V5 comparison.
+    # V5 rendering, persistence and semantic review are tested separately.
+    from dataclasses import asdict, replace
+    from app.task_instructions import ANALYSIS
+    from app.analysis_protocol import INSTRUCTIONS
+    from app.api import jobs
+    legacy = replace(ANALYSIS, body='청구항과 인용발명을 대비하십시오.\n' + INSTRUCTIONS)
+    monkeypatch.setattr(jobs, 'ANALYSIS', legacy)
+    return asdict(legacy)
 
 
 def citation_batch(client, filename: str = "citation.txt") -> str:
@@ -40,159 +48,20 @@ def test_health(client) -> None:
     assert client.get("/api/health").json()["status"] == "ok"
 
 
-def test_prompt_crud(client) -> None:
-    created = client.post(
-        "/api/prompts", json={"name": "CRUD", "body": "본문 1", "tags": ["t1"]}
-    ).json()
-    assert "version" not in created
-
-    updated = client.put(f"/api/prompts/{created['id']}", json={"body": "본문 2"}).json()
-    assert updated["body"] == "본문 2"
-
-    same = client.put(f"/api/prompts/{created['id']}", json={"body": "본문 2"}).json()
-    assert same["body"] == "본문 2"
-
-    assert client.get(f"/api/prompts/{created['id']}/versions").status_code == 404
-
-    assert client.delete(f"/api/prompts/{created['id']}").status_code == 204
-    assert client.get(f"/api/prompts/{created['id']}").status_code == 404
 
 
-def test_prompt_enable_and_disable(client, prompt) -> None:
-    disabled = client.put(
-        f"/api/prompts/{prompt['id']}", json={"enabled": False}
-    ).json()
-    assert disabled["enabled"] is False
-    assert prompt["id"] in [p["id"] for p in client.get("/api/prompts").json()]
-
-    enabled = client.put(
-        f"/api/prompts/{prompt['id']}", json={"enabled": True}
-    ).json()
-    assert enabled["enabled"] is True
 
 
-def test_prompt_search(client) -> None:
-    client.post("/api/prompts", json={"name": "고유검색어ABC", "body": "본문"})
-    found = client.get("/api/prompts?search=고유검색어ABC").json()
-    assert len(found) == 1
 
 
-def test_prompt_catalog_contains_analysis_and_search_prompts(client) -> None:
-    analysis = client.post(
-        "/api/prompts", json={"name": "분석 카탈로그 확인", "body": "분석 본문"}
-    ).json()
-    try:
-        regular_ids = {item["id"] for item in client.get("/api/prompts").json()}
-        assert "search_prompt.md" not in regular_ids
-
-        catalog = client.get("/api/prompts/catalog").json()
-        by_id = {item["id"]: item for item in catalog}
-        default_analysis = by_id["patent-analysis-master-prompt.md"]
-        assert default_analysis["kind"] == "analysis"
-        assert default_analysis["name"] == "보고서 생성"
-        assert default_analysis["deletable"] is False
-        assert by_id[analysis["id"]]["kind"] == "analysis"
-        assert by_id[analysis["id"]]["deletable"] is True
-        assert by_id["search_prompt.md"]["kind"] == "search"
-        assert by_id["search_prompt.md"]["name"] == "기본 검색 전략"
-        assert by_id["search_prompt.md"]["deletable"] is False
-    finally:
-        client.delete(f"/api/prompts/{analysis['id']}")
 
 
-def test_bundled_analysis_prompt_is_listed_editable_but_not_deletable(client) -> None:
-    prompt_id = "patent-analysis-master-prompt.md"
-    listed_ids = {item["id"] for item in client.get("/api/prompts").json()}
-    assert prompt_id in listed_ids
-
-    current = next(
-        item for item in client.get("/api/prompts/catalog").json()
-        if item["id"] == prompt_id
-    )
-    renamed = client.put(
-        f"/api/prompts/reserved/{prompt_id}",
-        json={"name": current["name"]},
-    )
-    assert renamed.status_code == 200
-    assert renamed.json()["deletable"] is False
-    assert client.delete(f"/api/prompts/{prompt_id}").status_code == 404
 
 
-def test_search_prompt_catalog_edit_validates_execution_contract(client) -> None:
-    """검색 전략 본문에는 요구하는 표시가 없다. 반쯤 옮긴 옛 본문만 거절한다.
-
-    데이터 구간(청구항·명세서·미대응 구성)은 PRISM 이 전략 본문 뒤에 붙인다.
-    그래서 전략만 적은 본문은 **정상**이다. 다만 옛 방식으로 placeholder 를
-    직접 든 본문은 경계까지 온전해야 한다 — 반쯤 옮겨 적은 본문으로 실행하면
-    청구항이 경계 밖에 놓인다.
-    """
-    current = next(
-        item
-        for item in client.get("/api/prompts/catalog").json()
-        if item["id"] == "search_prompt.md"
-    )
-    original_body = current["body"]
-    unchanged = client.put(
-        "/api/prompts/reserved/search_prompt.md", json={"name": current["name"]}
-    )
-    assert unchanged.status_code == 200
-
-    try:
-        strategy_only = client.put(
-            "/api/prompts/reserved/search_prompt.md",
-            json={"body": "핵심 특징을 중심으로 넓게 검색해줘."},
-        )
-        assert strategy_only.status_code == 200
-        assert strategy_only.json()["kind"] == "search"
-
-        half_migrated = client.put(
-            "/api/prompts/reserved/search_prompt.md",
-            json={"body": "경계 없이 {{CLAIM_TEXT}} 만 남긴 본문"},
-        )
-        assert half_migrated.status_code == 200
-        assert half_migrated.json()["body"] == "경계 없이 {{CLAIM_TEXT}} 만 남긴 본문"
-    finally:
-        # 이 파일은 세션 전체가 공유한다. 되돌리지 않으면 뒤따르는 테스트가
-        # 여기서 바꾼 본문으로 돌게 된다.
-        client.put(
-            "/api/prompts/reserved/search_prompt.md", json={"body": original_body}
-        )
-
-    assert (
-        client.get("/api/prompts/reserved/search_prompt.md/versions").status_code
-        == 404
-    )
 
 
-def test_prompt_file_is_the_live_source(client) -> None:
-    created = client.post(
-        "/api/prompts", json={"name": "파일 원본 확인", "body": "처음 본문"}
-    ).json()
-    target = PROMPT_DIR / created["id"]
-    assert target.is_file()
-
-    target.write_text("# 외부에서 수정한 프롬프트\n\n바뀐 본문", encoding="utf-8")
-    loaded = client.get(f"/api/prompts/{created['id']}").json()
-    assert loaded["body"] == "# 외부에서 수정한 프롬프트\n\n바뀐 본문"
-
-    assert client.delete(f"/api/prompts/{created['id']}").status_code == 204
 
 
-def test_prompt_export_import_roundtrip(client) -> None:
-    exported = client.get("/api/prompts/export").json()
-    assert exported["version"] == 1
-    payload = [
-        {"name": "가져온 프롬프트", "description": "", "body": "가져온 본문", "output_mode": "markdown"}
-    ]
-    result = client.post(
-        "/api/prompts/import", json={"prompts": payload, "replace_existing": False}
-    ).json()
-    assert result["created"] == 1
-    # 같은 이름을 다시 넣으면 건너뛴다.
-    again = client.post(
-        "/api/prompts/import", json={"prompts": payload, "replace_existing": False}
-    ).json()
-    assert again["created"] == 0
 
 
 # --------------------------------------------------------------- providers
@@ -268,7 +137,7 @@ def test_job_success_flow(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "batch_id": citation_batch(client),
@@ -276,7 +145,7 @@ def test_job_success_flow(client, prompt) -> None:
     ).json()
     final = wait_for_job(client, job["id"])
 
-    assert final["status"] == "SUCCEEDED"
+    assert final["status"] == "SUCCEEDED", final.get('errors')
     assert final["result_text"]
     assert final["final_prompt_sha256"]
     assert final["prompt_snapshot"] == prompt["body"]
@@ -296,7 +165,7 @@ def test_claim_and_document_roles_reach_final_prompt(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 전용 청구항 표식",
             "batch_id": upload["batch_id"],
@@ -317,23 +186,19 @@ def test_claim_and_document_roles_reach_final_prompt(client, prompt) -> None:
     assert "[인용발명 문헌]" in prompt_text
 
 
-def test_job_snapshot_survives_prompt_deletion(client) -> None:
-    p = client.post("/api/prompts", json={"name": "삭제될 프롬프트", "body": "원본 본문"}).json()
-    job = client.post(
-        "/api/jobs",
-        json={
-            "prompt_id": p["id"],
-            "provider": "test",
-            "claim_text": "청구항 1. 테스트 청구항",
-            "batch_id": citation_batch(client),
-        },
-    ).json()
-    wait_for_job(client, job["id"])
-    client.delete(f"/api/prompts/{p['id']}")
-
+def test_job_snapshot_survives_instruction_update(client, monkeypatch):
+    from dataclasses import replace
+    from app.api import jobs
+    from app.task_instructions import ANALYSIS
+    job = client.post('/api/jobs', json={
+        'provider': 'test', 'claim_text': '청구항 1. 테스트 청구항',
+        'batch_id': citation_batch(client),
+    }).json()
+    wait_for_job(client, job['id'])
+    monkeypatch.setattr(jobs, 'ANALYSIS', replace(ANALYSIS, body='new instructions'))
     stored = client.get(f"/api/history/{job['id']}").json()
-    assert stored["prompt_snapshot"] == "원본 본문"
-    assert stored["prompt_name"] == "삭제될 프롬프트"
+    assert stored['prompt_snapshot'] == ANALYSIS.body
+    assert stored['prompt_name'] == ANALYSIS.name
 
 
 @pytest.mark.parametrize(
@@ -349,7 +214,7 @@ def test_job_failure_paths(client, prompt, keyword, status, code) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": keyword,
             "batch_id": citation_batch(client),
@@ -369,7 +234,7 @@ def test_required_attachment_failure_fails_job(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "batch_id": upload["batch_id"],
@@ -395,7 +260,7 @@ def test_optional_attachment_failure_does_not_fail_job(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "batch_id": upload["batch_id"],
@@ -415,7 +280,7 @@ def test_attachment_content_reaches_final_prompt(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "batch_id": upload["batch_id"],
@@ -441,7 +306,7 @@ def test_input_too_large(client, prompt) -> None:
         job = client.post(
             "/api/jobs",
             json={
-                "prompt_id": prompt["id"],
+
                 "provider": "test",
                 "claim_text": "청구항 1.",
                 "batch_id": upload["batch_id"],
@@ -481,7 +346,7 @@ def test_inline_char_limit_defaults_to_unlimited(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1.",
             "batch_id": upload["batch_id"],
@@ -512,7 +377,7 @@ def test_provider_byte_budget_blocks_oversized_input(client, prompt, monkeypatch
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": huge_claim,
             "batch_id": citation_batch(client),
@@ -524,11 +389,10 @@ def test_provider_byte_budget_blocks_oversized_input(client, prompt, monkeypatch
     assert final["error_code"] == "INPUT_TOO_LARGE"
 
 
-def test_job_with_unknown_prompt_404(client) -> None:
-    response = client.post(
-        "/api/jobs", json={"prompt_id": "does-not-exist", "provider": "test"}
-    )
-    assert response.status_code == 404
+def test_job_rejects_custom_prompt(client):
+    response = client.post('/api/jobs', json={'prompt_id': 'custom.md', 'provider': 'test'})
+    assert response.status_code == 422
+    assert '프롬프트 교체는 지원하지 않습니다' in response.text
 
 
 def test_analysis_without_documents_is_rejected(client, prompt) -> None:
@@ -543,7 +407,7 @@ def test_analysis_without_documents_is_rejected(client, prompt) -> None:
 
     response = client.post(
         "/api/jobs",
-        json={"prompt_id": prompt["id"], "provider": "test", "claim_text": "청구항 1."},
+        json={"provider": "test", "claim_text": "청구항 1."},
     )
     assert response.status_code == 400
     assert "인용발명 문헌" in response.json()["detail"]
@@ -567,7 +431,7 @@ def test_analysis_without_claims_is_rejected(client, prompt) -> None:
         response = client.post(
             "/api/jobs",
             json={
-                "prompt_id": prompt["id"],
+
                 "provider": "test",
                 "claim_text": empty,
                 "batch_id": batch,
@@ -580,7 +444,7 @@ def test_analysis_without_claims_is_rejected(client, prompt) -> None:
     omitted = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "batch_id": batch,
         },
@@ -597,7 +461,7 @@ def test_batch_cannot_be_reused(client, prompt) -> None:
         "/api/uploads", files=[("files", ("a.txt", b"content", "text/plain"))]
     ).json()
     body = {
-        "prompt_id": prompt["id"],
+
         "provider": "test",
         "claim_text": "청구항 1. 테스트 청구항",
         "batch_id": upload["batch_id"],
@@ -612,7 +476,7 @@ def test_result_download_endpoint_is_removed(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "batch_id": citation_batch(client),
@@ -628,7 +492,7 @@ def test_cancel_finished_job_is_noop(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "batch_id": citation_batch(client),
@@ -645,7 +509,7 @@ def test_history_lists_and_deletes(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "batch_id": citation_batch(client),
@@ -671,7 +535,7 @@ def test_history_delete_all_clears_database_and_stored_files(client, prompt) -> 
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "batch_id": citation_batch(client),
@@ -825,7 +689,7 @@ def test_model_output_never_reaches_the_event_stream(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 이벤트 비노출 확인",
             "batch_id": citation_batch(client),
@@ -859,7 +723,7 @@ def test_completed_result_is_stored_and_served_clean(client, prompt) -> None:
     job = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 결과 저장 확인",
             "batch_id": citation_batch(client),

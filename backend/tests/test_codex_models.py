@@ -202,3 +202,19 @@ def test_failed_refresh_does_not_advertise_a_fixed_model_list(tmp_path, monkeypa
     assert note
 
 
+
+@pytest.mark.parametrize("key", ["reasoning_effort", "search_reasoning_effort"])
+def test_new_advertised_effort_can_be_saved(key, monkeypatch):
+    from app import settings_service
+    from app.providers import registry
+    from app.providers.base import ProbeResult
+
+    monkeypatch.setitem(registry._cache, "codex", ProbeResult(
+        provider="codex", display_name="Codex",
+        capabilities={"reasoning_efforts": ["future-effort"]},
+    ))
+    assert settings_service._coerce(key, {"codex": "future-effort"}) == {"codex": "future-effort"}
+    with pytest.raises(ValueError):
+        settings_service._coerce(key, {"codex": "made-up-effort"})
+    with pytest.raises(ValueError):
+        settings_service._coerce(key, {"claude": "future-effort"})

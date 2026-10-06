@@ -46,11 +46,25 @@ def main():
         guid = str(uuid.uuid4()).upper()
         common = ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS', '/CLI=skip']
 
-        def build(version):
+        # Exercise the previous release's prompt-file installation as well as
+        # the new installer, which now embeds instructions in application code.
+        legacy_definition = base / 'prism-installer-2.0.5.iss'
+        def isolate_mutexes(text):
+            # The fixture has its own AppId and must also avoid real application
+            # and installer mutexes when the user runs PRISM during this test.
+            return text.replace('Local\\PRISM-Running', f'Local\\PRISM-Fixture-Running-{guid}').replace(
+                'Local\\PRISM-Installer', f'Local\\PRISM-Fixture-Installer-{guid}')
+        legacy_definition.write_text(isolate_mutexes(subprocess.check_output(
+            ['git', 'show', '8b05341:scripts/prism-installer.iss'], cwd=ROOT).decode('utf-8')), encoding='utf-8')
+        current_definition = base / 'prism-installer-2.0.6.iss'
+        current_definition.write_text(isolate_mutexes(
+            (ROOT / 'scripts/prism-installer.iss').read_text(encoding='utf-8')), encoding='utf-8')
+
+        def build(version, definition=None):
             (app / 'version.txt').write_text(version)
             result = subprocess.run([str(Path(args.compiler).resolve()), f'/DSourceDir={source}',
                                      f'/DAppVersion={version}', f'/DAppGuid={guid}',
-                                     str(ROOT / 'scripts/prism-installer.iss')], capture_output=True, timeout=45)
+                                     str(definition or current_definition)], capture_output=True, timeout=45)
             assert result.returncode == 0, result.stdout + result.stderr
             return base / f'PRISM-{version}-Setup-x64.exe'
 
@@ -59,13 +73,17 @@ def main():
             logs = '\n'.join(p.read_text(encoding='utf-8-sig', errors='replace') for p in base.glob('*.log'))
             assert result.returncode == expected, (executable, result.returncode, expected, logs)
 
-        first = build('2.0.5')
+        first = build('2.0.5', legacy_definition)
         run(first, [*common, f'/DIR={install}', f'/LOG={base / "first.log"}'])
         assert (install / 'unins000.exe').exists()
         (install / 'app/prompt/search_prompt.md').write_text('my edited prompt')
         venv = install / 'app/backend/.venv'
         venv.mkdir()
         (venv / 'keep.txt').write_text('reuse environment')
+        # 2.0.6's release archive no longer contains a prompt directory.
+        for path in (app / 'prompt').iterdir():
+            path.unlink()
+        (app / 'prompt').rmdir()
         second = build('2.0.6')
         # No /DIR: the same AppId must discover and reuse the prior installation.
         run(second, [*common, f'/LOG={base / "update.log"}'])
@@ -95,6 +113,27 @@ def main():
             time.sleep(.1)
         assert not install.exists(), list(install.rglob('*'))
         print('PASS: actual uninstaller removes installed files, generated environment, data and registry; shared profiles survive', flush=True)
+        fresh = base / 'fresh 2.0.6'
+        run(second, [*common, f'/DIR={fresh}', f'/LOG={base / "fresh.log"}'])
+        assert (fresh / 'app/version.txt').read_text() == '2.0.6'
+        assert not (fresh / 'app/prompt').exists()
+        assert (fresh / 'unins000.exe').exists()
+        run(fresh / 'unins000.exe', ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', f'/LOG={base / "fresh-uninstall.log"}'])
+        assert (profile / '.codex/session.txt').exists()
+        # Inno may briefly keep its log open while its self-removal helper exits.
+        # Wait only on files within this isolated fixture before temp cleanup.
+        for log in base.glob('*.log'):
+            assert log.resolve().parent == base.resolve()
+            for _ in range(100):
+                try:
+                    log.unlink(missing_ok=True)
+                    break
+                except PermissionError:
+                    time.sleep(.1)
+            else:
+                raise AssertionError(f'Fixture uninstall log remains locked: {log}')
+        assert not fresh.exists()
+        print('PASS: fresh 2.0.6 install and generated uninstaller', flush=True)
 
 
 if __name__ == '__main__':

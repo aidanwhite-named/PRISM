@@ -78,12 +78,15 @@ def _split_long(block: str) -> list[str]:
     while start < len(block):
         end = min(len(block), start + MAX_CHUNK_CHARS)
         if end < len(block):
-            # 문장 경계에서 자를 수 있으면 그렇게 한다.
-            window = block.rfind("\n", start + MIN_CHUNK_CHARS, end)
+            # A boundary inside the overlap can move start by just one character,
+            # emitting the same short tail dozens of times. Only prefer boundaries
+            # in the latter half of a full chunk; otherwise use the full window.
+            boundary_start = start + max(MAX_CHUNK_CHARS // 2, CHUNK_OVERLAP_CHARS + 1)
+            window = block.rfind("\n", boundary_start, end)
             if window == -1:
-                window = block.rfind(". ", start + MIN_CHUNK_CHARS, end)
+                window = block.rfind(". ", boundary_start, end)
             if window == -1:
-                window = block.rfind("다. ", start + MIN_CHUNK_CHARS, end)
+                window = block.rfind("다. ", boundary_start, end)
             if window > start:
                 end = window + 1
         piece = block[start:end].strip()

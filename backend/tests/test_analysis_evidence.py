@@ -392,6 +392,17 @@ def test_report_rollback_preserves_model_output_without_review(client, monkeypat
     calls = []
     review = AsyncMock(side_effect=AssertionError('Automatic review must remain disabled'))
     monkeypatch.setattr(ae, 'run', review)
+    # Preserve the historical, unstructured-report path in isolation. The new
+    # claim/document preparation is tested separately with the V5 pipeline.
+    from app import comparison_review
+    from dataclasses import replace
+    from app.api import jobs
+    from app.task_instructions import ANALYSIS
+    from app.analysis_protocol import INSTRUCTIONS
+    monkeypatch.setattr(jobs, 'ANALYSIS', replace(ANALYSIS, body=INSTRUCTIONS))
+    async def prepare(provider, request, **kwargs):
+        return request, None, {'status': 'skipped', 'attempts': []}
+    monkeypatch.setattr(comparison_review, 'prepare', prepare)
     async def execute(self, request, emit):
         calls.append(request)
         from app.retrieval.prompts import AGENT_SYSTEM_PROMPT
@@ -418,14 +429,12 @@ def test_report_rollback_preserves_model_output_without_review(client, monkeypat
         draft += ae.OPEN + json.dumps({'components': [{**c, 'queries': ['pressure valve'], 'candidates': []}]}) + ae.CLOSE
         return ExecutionOutcome(result_text=draft, exit_code=0, usage={'input_tokens': 10, 'output_tokens': 10})
     monkeypatch.setattr(DeterministicTestProvider, 'execute', execute)
-    prompt = client.post('/api/prompts', json={'name': '근거 검토', 'body': '청구항을 구성별로 비교한다.'}).json()
     uploaded = client.post('/api/uploads', files=[
         ('files', ('wrong.pdf', build_pdf([WRONG]), 'application/pdf')),
         ('files', ('good.pdf', build_pdf([QUOTE]), 'application/pdf'))],
         data={'roles': json.dumps(['CITATION', 'CITATION'])})
     assert uploaded.status_code == 200, uploaded.text
-    response = client.post('/api/jobs', json={'provider': 'test', 'prompt_id': prompt['id'],
-        'claim_text': QUOTE, 'batch_id': uploaded.json()['batch_id']})
+    response = client.post('/api/jobs', json={'provider': 'test', 'claim_text': QUOTE, 'batch_id': uploaded.json()['batch_id']})
     assert response.status_code == 201, response.text
     job = wait_for_job(client, response.json()['id'])
     assert job['status'] == 'SUCCEEDED', job['errors']

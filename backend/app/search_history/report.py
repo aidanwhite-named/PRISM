@@ -13,6 +13,9 @@ REVIEW_LABELS = {"stop_reason": "종료 이유", "expansion_summary": "확장 �
 
 def render(manifest: dict) -> str:
     if manifest.get("engine"):
+        if manifest['engine'].get('mode') == 'autonomous':
+            from ..search_engine.report import render as render_autonomous
+            return render_autonomous(manifest['engine'])
         from .snapshot import render as render_engine
         return render_engine(manifest["engine"])
     data = view(manifest)

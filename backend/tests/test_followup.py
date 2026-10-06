@@ -19,15 +19,16 @@ from .conftest import wait_for_job
 
 
 @pytest.fixture()
-def prompt(client):
-    return client.post(
-        "/api/prompts",
-        json={
-            "name": "후속 분석 테스트 프롬프트",
-            "body": "청구항과 인용발명을 대비하십시오.",
-            "output_mode": "markdown",
-        },
-    ).json()
+def prompt(client, monkeypatch):
+    # Isolate legacy response/numbering compatibility from staged V5 comparison.
+    # V5 rendering, persistence and semantic review are tested separately.
+    from dataclasses import asdict, replace
+    from app.task_instructions import ANALYSIS
+    from app.analysis_protocol import INSTRUCTIONS
+    from app.api import jobs
+    legacy = replace(ANALYSIS, body='청구항과 인용발명을 대비하십시오.\n' + INSTRUCTIONS)
+    monkeypatch.setattr(jobs, 'ANALYSIS', legacy)
+    return asdict(legacy)
 
 
 def _upload(client, filename: str = "citation.txt", body: bytes = b"prior art body") -> str:
@@ -44,7 +45,7 @@ def _run(client, prompt, **extra) -> dict:
     created = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             # 구성대비 분석은 청구항이 필수다. 청구항 자체를 검증하지 않는
             # 테스트도 실행을 만들려면 한 줄은 넣어야 한다. 청구항을 다루는
@@ -182,7 +183,7 @@ def test_tampered_source_file_blocks_the_follow_up(client, prompt) -> None:
     response = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "source_job_id": parent["id"],
@@ -201,20 +202,20 @@ def test_lineage_fields_must_come_together(client, prompt) -> None:
 
     only_source = client.post(
         "/api/jobs",
-        json={"prompt_id": prompt["id"], "provider": "test", "source_job_id": parent["id"]},
+        json={"provider": "test", "source_job_id": parent["id"]},
     )
     assert only_source.status_code == 400
 
     only_relation = client.post(
         "/api/jobs",
-        json={"prompt_id": prompt["id"], "provider": "test", "relation_type": "CONTINUED"},
+        json={"provider": "test", "relation_type": "CONTINUED"},
     )
     assert only_relation.status_code == 400
 
     unknown_source = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "source_job_id": "does-not-exist",
             "relation_type": "CONTINUED",
@@ -225,7 +226,7 @@ def test_lineage_fields_must_come_together(client, prompt) -> None:
     bad_relation = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "source_job_id": parent["id"],
             "relation_type": "SOMETHING_ELSE",
@@ -241,7 +242,7 @@ def test_cannot_continue_from_a_run_without_a_report(client, prompt) -> None:
     response = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "source_job_id": failed["id"],
             "relation_type": "CONTINUED",
@@ -253,7 +254,7 @@ def test_cannot_continue_from_a_run_without_a_report(client, prompt) -> None:
     reanalyzed = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             "claim_text": "청구항 1. 테스트 청구항",
             "source_job_id": failed["id"],

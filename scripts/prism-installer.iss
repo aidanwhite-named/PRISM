@@ -37,8 +37,7 @@ RestartApplications=no
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Files]
-Source: "{#SourceDir}\app\*"; DestDir: "{app}\app"; Excludes: "prompt\*"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#SourceDir}\app\prompt\*"; DestDir: "{app}\app\prompt"; Flags: onlyifdoesntexist
+Source: "{#SourceDir}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceDir}\실행.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\설치.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\제거.cmd"; DestDir: "{app}"; Flags: ignoreversion
@@ -52,8 +51,6 @@ Name: "{group}\PRISM 제거"; Filename: "{uninstallexe}"
 var
   SetupFailed: Boolean;
   ExistingInstall: Boolean;
-  LegacyPage: TInputQueryWizardPage;
-  LegacyBrowseButton: TNewButton;
 
 function InitializeSetup(): Boolean;
 var Installed: String; InstalledVersion, NewVersion: Int64;
@@ -67,52 +64,10 @@ begin
     end;
 end;
 
-procedure BrowseLegacy(Sender: TObject);
-var Folder: String;
-begin
-  Folder := LegacyPage.Values[0];
-  if BrowseForFolder('이전 ZIP의 app 폴더 선택', Folder, False) then LegacyPage.Values[0] := Folder;
-end;
-
-procedure InitializeWizard();
-begin
-  LegacyPage := CreateInputQueryPage(wpSelectDir, '이전 ZIP에서 가져오기 (선택)',
-    '이전 버전에서 편집한 프롬프트가 있다면 app 폴더를 선택하세요.',
-    '히스토리와 설정은 기존 데이터 폴더에서 자동으로 이어집니다. 처음 설치하거나 프롬프트를 편집하지 않았다면 비워 두세요.');
-  LegacyPage.Add('이전 ZIP의 app 폴더:', False);
-  LegacyBrowseButton := TNewButton.Create(WizardForm);
-  LegacyBrowseButton.Parent := LegacyPage.Surface;
-  LegacyBrowseButton.Caption := '찾아보기...';
-  LegacyBrowseButton.SetBounds(0, LegacyPage.Edits[0].Top + LegacyPage.Edits[0].Height + ScaleY(10), ScaleX(100), ScaleY(25));
-  LegacyBrowseButton.OnClick := @BrowseLegacy;
-end;
-
-function ShouldSkipPage(PageID: Integer): Boolean;
-begin
-  Result := ExistingInstall and (PageID = LegacyPage.ID);
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-begin
-  Result := True;
-  if (CurPageID = LegacyPage.ID) and (LegacyPage.Values[0] <> '') then
-    if not FileExists(LegacyPage.Values[0] + '\prompt\search_prompt.md') then begin
-      MsgBox('prompt 폴더가 있는 이전 app 폴더를 선택하세요.', mbError, MB_OK);
-      Result := False;
-    end;
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var Code: Integer; Args: String;
 begin
   if CurStep = ssPostInstall then begin
-    if not ExistingInstall and (LegacyPage.Values[0] <> '') then begin
-      if not FileCopy(LegacyPage.Values[0] + '\prompt\search_prompt.md', ExpandConstant('{app}\app\prompt\search_prompt.md'), False) then
-        RaiseException('이전 검색 프롬프트를 복사하지 못했습니다.');
-      if FileExists(LegacyPage.Values[0] + '\prompt\patent-analysis-master-prompt.md') then
-        if not FileCopy(LegacyPage.Values[0] + '\prompt\patent-analysis-master-prompt.md', ExpandConstant('{app}\app\prompt\patent-analysis-master-prompt.md'), False) then
-          RaiseException('이전 분석 프롬프트를 복사하지 못했습니다.');
-    end;
     Args := '-NoProfile -STA -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\app\scripts\install-window.ps1') + '" -Managed';
     if WizardSilent then begin
       ForceDirectories(ExpandConstant('{app}\app\.setup'));

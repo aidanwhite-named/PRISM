@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from .. import (
     analysis_evidence,
     analysis_manifest,
+    analysis_protocol,
     citation_mapping,
     job_assembly,
     retrieval,
@@ -32,6 +33,11 @@ from .. import (
     search_manifest,
     search_prompt,
     settings_service,
+    structured_report,
+    report_repair,
+    report_consistency,
+    comparison_review,
+    comparison_generation,
 )
 from ..config import PATHS
 from ..db import session_scope
@@ -39,7 +45,6 @@ from ..enums import DeliveryPlan, ErrorCode, JobKind, JobStatus, RetrievalMode
 from ..evaluation.evaluator import Verdict, evaluate
 from ..ingestion.service import IngestedFile, preprocessing_versions
 from ..models import Attachment, ExecutionEvent, ExecutionJob, ResultArtifact
-from .. import prompt_store
 from ..prompt_assembly import InputTooLarge
 from ..patent_search import retention as evidence_retention
 from .. import analysis_completeness, report_symbols
@@ -525,6 +530,7 @@ class JobRunner:
             # 문장이 달라지면 같은 실행을 두 가지로 설명하게 된다.
             delivery_decision = assembly.decision
             retrieval_manifest: dict | None = None
+            report_bundle: dict | None = None
             retrieval_error: str | None = None
             retrieval_artifacts: list[tuple[str, Path]] = []
             retrieval_usage: dict = {}
@@ -569,6 +575,7 @@ class JobRunner:
                     is_cancelled=lambda: job_id in self._cancel_requested,
                 )
                 retrieval_manifest = found.manifest or None
+                report_bundle = found.bundle
                 retrieval_artifacts = list(found.artifacts)
                 retrieval_usage = found.usage
                 try:
@@ -705,10 +712,55 @@ class JobRunner:
                 reasoning_effort=reasoning_effort, timeout_seconds=timeout,
                 tool_policy=tool_policy, mcp_servers=mcp_servers,
             )
+            comparison_context = None
+            preparation_audit = None
+            structured_requested = not analysis_protocol.declares_blocks(master_prompt)
+            if job_kind is JobKind.PATENT_ANALYSIS and structured_requested:
+                request, comparison_context, preparation_audit = await comparison_review.prepare(
+                    provider, request, claim_text=claim_text, interpretation_instruction=followup_instruction,
+                    aliases=assembled.aliases,
+                    attachments=attachments, bundle=report_bundle, prior_mapping=prior_mapping,
+                    token_budget=assembly.decision.token_budget if assembly.decision else None,
+                    max_chars=max_chars, emit=emit, cancelled=lambda: job_id in self._cancel_requested,
+                    segmented=True)
+                if preparation_audit['status'] == 'cancelled' or job_id in self._cancel_requested:
+                    await self._cancelled(job_id)
+                    return
+                if preparation_audit['status'] == 'incomplete' and preparation_audit.get('partial_context', {}).get('components'):
+                    with session_scope() as session:
+                        job = session.get(ExecutionJob, job_id)
+                        if job is not None:
+                            job.usage = report_repair.merge_usage(None, preparation_audit, category='comparison_preparation')
+                            job.result_text = '# 구성대비 작성 미완료\n\n' + '\n'.join(preparation_audit['issues'])
+                    await self._fail(job_id, ErrorCode.INVALID_OUTPUT, '구성별 판단을 확정하지 못했습니다: ' +
+                                     ' '.join(preparation_audit['issues']))
+                    return
+                if comparison_context is not None:
+                    assembled.system_prompt = request.system_prompt
+                    assembled.user_message = request.user_message
+                    assembled.total_chars = len(request.system_prompt) + len(request.user_message)
+                    assembled.sha256 = hashlib.sha256(
+                        (request.system_prompt + '\n\x00\n' + request.user_message).encode('utf-8')).hexdigest()
+                    final_prompt_sha, final_prompt_chars = assembled.sha256, assembled.total_chars
+                    prompt_path.write_text(
+                        f'===== SYSTEM PROMPT =====\n{request.system_prompt}\n\n'
+                        f'===== USER MESSAGE =====\n{request.user_message}', encoding='utf-8')
+                    delivery_manifest = assembly.delivery_manifest(provider)
+                    delivery_manifest['comparison_preparation'] = preparation_audit['status']
+                    with session_scope() as session:
+                        job = session.get(ExecutionJob, job_id)
+                        if job is not None:
+                            job.system_prompt_snapshot = request.system_prompt
+                            job.final_prompt_sha256 = final_prompt_sha
+                            job.final_prompt_chars = final_prompt_chars
+                    await self._emit(job_id, 'prompt_ready', {'chars': final_prompt_chars,
+                        'sha256': final_prompt_sha, 'attachments': len(attachments)})
             await self._emit(
                 job_id, "stage", {"stage": "executing", "message": "Provider 실행 중"}
             )
             outcome = await provider.execute(request, emit)
+            if preparation_audit and preparation_audit['attempts']:
+                outcome.usage = report_repair.merge_usage(outcome.usage, preparation_audit, category='comparison_preparation')
             verdict = evaluate(outcome, attachments, fail_on_tool_use=fail_on_tool_use)
             if job_id in self._cancel_requested:
                 verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, list(verdict.errors))
@@ -726,16 +778,109 @@ class JobRunner:
 
             component_result: dict | None = None
             component_error: str | None = None
-            if expects_blocks:
+            structured = None
+            repair_artifacts = []
+            if preparation_audit is not None:
+                repair_artifacts.append(('comparison_preparation_audit', work_dir / 'comparison-review' / 'audit.json'))
+            structured_requested = not analysis_protocol.declares_blocks(master_prompt)
+            # Keep the exact response independently of stdout settings, including failures.
+            if expects_blocks and structured_requested:
+                if comparison_context and comparison_context.get('report_plan') and verdict.status == JobStatus.SUCCEEDED:
+                    (work_dir / 'writing-response.txt').write_text(outcome.result_text, encoding='utf-8')
+                    try:
+                        outcome.result_text = comparison_generation.publish(outcome.result_text, comparison_context['report_plan'])
+                    except (ValueError, TypeError, KeyError) as exc:
+                        verdict = Verdict(JobStatus.FAILED, ErrorCode.INVALID_OUTPUT, [*verdict.errors, str(exc)])
+                        outcome.result_text = '# 확정된 분석의 번역·요약 작성 미완료\n\n' + str(exc)
+                (work_dir / 'analysis-response.txt').write_text(outcome.result_text, encoding='utf-8')
+                legacy_response = (not outcome.result_text.lstrip().startswith(('{', '```json')) and
+                    (analysis_manifest._OPEN in outcome.result_text or citation_mapping._OPEN in outcome.result_text))
+                if not legacy_response:
+                    try:
+                        structured = structured_report.compile_report(
+                            outcome.result_text, assembled.aliases, attachments,
+                            prior_mapping=prior_mapping, bundle=report_bundle)
+                        if verdict.status == JobStatus.SUCCEEDED:
+                            structured, repair_audit = await report_repair.repair(
+                                provider, request, structured, aliases=assembled.aliases,
+                                attachments=attachments, prior_mapping=prior_mapping, bundle=report_bundle,
+                                token_budget=assembly.decision.token_budget if assembly.decision else None,
+                                max_chars=max_chars, emit=emit,
+                                cancelled=lambda: job_id in self._cancel_requested)
+                            if repair_audit['status'] != 'not_needed':
+                                structured[1]['report']['sentence_repair'] = repair_audit
+                                repair_artifacts.append(('sentence_repair_audit', work_dir / 'sentence-repair' / 'audit.json'))
+                                repaired_path = work_dir / 'sentence-repair' / 'repaired-analysis.json'
+                                if repaired_path.exists():
+                                    repair_artifacts.append(('repaired_analysis', repaired_path))
+                                if repair_audit['attempts']:
+                                    outcome.usage = report_repair.merge_usage(outcome.usage, repair_audit)
+                            if job_id in self._cancel_requested or repair_audit['status'] == 'cancelled':
+                                verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, list(verdict.errors))
+                        if verdict.status == JobStatus.SUCCEEDED:
+                            structured, consistency_audit = await report_consistency.repair(
+                                provider, request, structured, aliases=assembled.aliases,
+                                attachments=attachments, prior_mapping=prior_mapping, bundle=report_bundle,
+                                token_budget=assembly.decision.token_budget if assembly.decision else None,
+                                max_chars=max_chars, emit=emit,
+                                cancelled=lambda: job_id in self._cancel_requested)
+                            if consistency_audit['status'] != 'not_needed':
+                                structured[1]['report']['component_repair'] = consistency_audit
+                                repair_artifacts.append(('component_repair_audit', work_dir / 'component-repair' / 'audit.json'))
+                                corrected = work_dir / 'component-repair' / 'repaired-analysis.json'
+                                if corrected.exists():
+                                    repair_artifacts.append(('component_repaired_analysis', corrected))
+                                if consistency_audit['attempts']:
+                                    outcome.usage = report_repair.merge_usage(outcome.usage, consistency_audit, category='component_repair')
+                            if job_id in self._cancel_requested or consistency_audit['status'] == 'cancelled':
+                                verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, list(verdict.errors))
+                        if verdict.status == JobStatus.SUCCEEDED:
+                            structured, semantic_audit = await comparison_review.review(
+                                provider, request, structured, context=comparison_context,
+                                interpretation_instruction=followup_instruction,
+                                aliases=assembled.aliases, attachments=attachments, bundle=report_bundle,
+                                prior_mapping=prior_mapping,
+                                token_budget=assembly.decision.token_budget if assembly.decision else None,
+                                max_chars=max_chars, emit=emit, cancelled=lambda: job_id in self._cancel_requested)
+                            structured[1]['report']['semantic_review'] = semantic_audit
+                            if preparation_audit is not None:
+                                structured[1]['report']['comparison_preparation'] = preparation_audit
+                            repair_artifacts.append(('semantic_review_audit', work_dir / 'comparison-review' / 'semantic-audit.json'))
+                            if semantic_audit['attempts']:
+                                outcome.usage = report_repair.merge_usage(outcome.usage, semantic_audit, category='semantic_review')
+                            if job_id in self._cancel_requested or semantic_audit['status'] == 'cancelled':
+                                verdict = Verdict(JobStatus.CANCELLED, ErrorCode.CANCELLED, list(verdict.errors))
+                        outcome.result_text, component_result, _ = structured
+                        pending_review = []
+                        for key, label in (('comparison_preparation', '문헌별 선행 검토'), ('semantic_review', '기술적 대응 재검토')):
+                            audit = component_result['report'].get(key)
+                            if audit and audit['status'] == 'incomplete':
+                                pending_review.append(label + ': ' + ' '.join(audit.get('issues', [])))
+                        if pending_review:
+                            outcome.result_text += '\n## 구성 판단 검토 상태\n\n확인 가능한 결과를 보존했습니다. 다음 검토는 완료되지 않았습니다.\n\n' + '\n'.join('- ' + p for p in pending_review) + '\n'
+                        failed_evidence = [e for e in component_result['report']['evidence'].values() if not e['verified']]
+                        if failed_evidence:
+                            outcome.result_text = (f'> **근거 확인 미완료:** 원문 근거 {len(failed_evidence)}개의 검증에 실패했습니다. '
+                                '실행 완료와 근거 확인 상태는 다릅니다. 아래 점검 항목을 확인하십시오.\n\n' + outcome.result_text)
+                    except structured_report.ReportError as exc:
+                        component_error = str(exc)
+                        if verdict.status == JobStatus.SUCCEEDED:
+                            verdict = Verdict(JobStatus.FAILED, ErrorCode.INVALID_OUTPUT, [*verdict.errors, str(exc)])
+                        outcome.result_text = '# 분석 결과 형식 확인 필요\n\n' + str(exc)
+                else:
+                    # Some older providers keep returning the previous contract.
+                    # Parse it without another paid call, but never claim app-owned formatting.
+                    outcome.result_text = '> 이전 보고서 형식으로 반환되었습니다. 발췌·번역 순서는 자동 조립하지 못했습니다.\n\n' + outcome.result_text
+            if expects_blocks and not structured and not component_error:
                 try:
                     component_result = analysis_manifest.parse(outcome.result_text)
                 except analysis_manifest.ComponentAnalysisError as exc:
                     component_error = str(exc)
                 outcome.result_text = analysis_manifest.strip_block(outcome.result_text)
 
-            mapping: dict | None = None
+            mapping: dict | None = structured[2] if structured else None
             mapping_error: str | None = None
-            if expects_blocks:
+            if expects_blocks and not structured:
                 try:
                     mapping = citation_mapping.parse(
                         outcome.result_text, assembled.aliases
@@ -779,7 +924,13 @@ class JobRunner:
 
             # --- 저장 -----------------------------------------------------
             completed = _utcnow()
-            artifacts: list[tuple[str, Path]] = list(retrieval_artifacts)
+            artifacts: list[tuple[str, Path]] = [*retrieval_artifacts, *repair_artifacts]
+            if expects_blocks and structured_requested:
+                artifacts.append(('analysis_response', work_dir / 'analysis-response.txt'))
+            if structured:
+                structured_path = work_dir / 'structured-report.json'
+                structured_path.write_text(json.dumps(component_result['report'], ensure_ascii=False, indent=2), encoding='utf-8')
+                artifacts.append(('structured_report', structured_path))
             if retrieval_usage:
                 # 로컬 검색 라운드도 사용량을 쓴다. 최종 호출분만 남기면 이
                 # 실행이 실제로 얼마를 썼는지가 기록에서 빠진다.

@@ -3,17 +3,16 @@ import type {
   CredentialCheck,
   HistoryItem,
   Job,
+  SearchComparison,
   JobKind,
   Preflight,
-  Prompt,
-  PromptCatalogItem,
-  PromptKind,
   ProviderInfo,
   ProviderLoginSession,
   ProviderLogoutResult,
   AttachmentRole,
   RelationType,
   UploadResponse,
+  ReportChatTurn,
 } from "./types";
 import type { AnswerCase, AnswerCaseSummary, AnswerContent } from "./answers";
 
@@ -52,6 +51,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  reportChat: (id: string) => request<ReportChatTurn[]>(`/api/jobs/${id}/chat`),
+  askReport: (id: string, question: string, request_id: string) => request<ReportChatTurn>(`/api/jobs/${id}/chat`,
+    { method: "POST", body: JSON.stringify({ question, request_id }) }),
+  cancelReportAnswer: (id: string, turnId: string) => request<ReportChatTurn>(`/api/jobs/${id}/chat/${turnId}/cancel`,
+    { method: "POST" }),
+  searchComparisons: (id: string) => request<SearchComparison[]>(`/api/jobs/${id}/comparisons`),
+  compareSearchCandidates: (id: string, candidate_ids: string[]) =>
+    request<SearchComparison>(`/api/jobs/${id}/comparisons`, { method: "POST", body: JSON.stringify({ candidate_ids }) }),
   answerCases: () => request<AnswerCaseSummary[]>("/api/answers"),
   answerCase: (id: string) => request<AnswerCase>(`/api/answers/${id}`),
   registerAnswer: (body: FormData) => request<AnswerCase>("/api/answers", {method: "POST", body}),
@@ -66,48 +73,6 @@ export const api = {
   answerStyle: () => request<{text: string; path: string; max_chars: number; token_budget: number}>("/api/answers/style"),
   saveAnswerStyle: (text: string) => request<{text: string; path: string}>("/api/answers/style", {method: "PUT", body: JSON.stringify({text})}),
   health: () => request<{ status: string; version: string }>("/api/health"),
-
-  /**
-   * 실행 화면의 프롬프트 선택 목록. 종류를 반드시 지정한다 — 분석 화면이
-   * 검색 전략 프롬프트를 고를 수 있게 되면 그 본문이 분석 기준으로 나간다.
-   */
-  listPrompts: (params: { search?: string; kind?: PromptKind } = {}) => {
-    const query = new URLSearchParams();
-    if (params.search) query.set("search", params.search);
-    query.set("kind", params.kind ?? "analysis");
-    const suffix = query.toString();
-    return request<Prompt[]>(`/api/prompts${suffix ? `?${suffix}` : ""}`);
-  },
-  listPromptCatalog: (params: { search?: string } = {}) => {
-    const query = new URLSearchParams();
-    if (params.search) query.set("search", params.search);
-    const suffix = query.toString();
-    return request<PromptCatalogItem[]>(
-      `/api/prompts/catalog${suffix ? `?${suffix}` : ""}`,
-    );
-  },
-  getPrompt: (id: string) => request<Prompt>(`/api/prompts/${id}`),
-  createPrompt: (body: Partial<Prompt>) =>
-    request<Prompt>("/api/prompts", { method: "POST", body: JSON.stringify(body) }),
-  updatePrompt: (id: string, body: Partial<Prompt>) =>
-    request<Prompt>(`/api/prompts/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-    }),
-  updateReservedPrompt: (id: string, body: Partial<Prompt>) =>
-    request<PromptCatalogItem>(`/api/prompts/reserved/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-    }),
-  deletePrompt: (id: string) =>
-    request<void>(`/api/prompts/${id}`, { method: "DELETE" }),
-  exportPrompts: () =>
-    request<{ version: number; prompts: unknown[] }>("/api/prompts/export"),
-  importPrompts: (prompts: unknown[], replaceExisting: boolean) =>
-    request<{ created: number; updated: number }>("/api/prompts/import", {
-      method: "POST",
-      body: JSON.stringify({ prompts, replace_existing: replaceExisting }),
-    }),
 
   listProviders: () =>
     request<{ providers: ProviderInfo[] }>("/api/providers").then((r) => r.providers),
@@ -158,9 +123,11 @@ export const api = {
   },
 
   createJob: (body: {
+    search_mode?: "full" | "dependent";
+    dependent_claim_text?: string;
+    search_feature_text?: string;
     use_answer_library?: boolean;
     job_kind?: JobKind;
-    prompt_id?: string | null;
     provider?: string | null;
     model?: string | null;
     claim_text?: string;
@@ -184,9 +151,11 @@ export const api = {
   /** 실행하지 않고 최종 조립 프롬프트의 크기만 받아 온다. 작업을 만들지 않고
    *  Provider 도 부르지 않는다. */
   preflight: (body: {
+    search_mode?: "full" | "dependent";
+    dependent_claim_text?: string;
+    search_feature_text?: string;
     use_answer_library?: boolean;
     job_kind?: JobKind;
-    prompt_id?: string | null;
     provider?: string | null;
     claim_text?: string;
     batch_id?: string | null;
@@ -200,6 +169,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  dependentSearchDraft: (body: { provider?: string | null; model?: string | null;
+    claim_text: string; dependent_claim_text: string }) =>
+    request<{ search_feature_text: string; explanation: string; warnings: string[]; draft_id: string }>(
+      "/api/jobs/dependent-search-draft", { method: "POST", body: JSON.stringify(body) }),
   getJob: (id: string) => request<Job>(`/api/jobs/${id}`),
   continueSearch: (id: string) => request<Job>(`/api/jobs/${id}/continue-search`, { method: "POST" }),
   cancelJob: (id: string) =>

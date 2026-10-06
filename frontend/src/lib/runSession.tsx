@@ -27,6 +27,7 @@ import {
 import { api } from "./api";
 import type { InclusionMap } from "./attachmentSelection";
 import type {
+  DependentSearchInput,
   CitationMapping,
   Job,
   JobAttachment,
@@ -52,6 +53,9 @@ export type Lineage = {
 };
 
 const STORAGE_KEY = "prism.run-session.v1";
+export const EMPTY_DEPENDENT_SEARCH: DependentSearchInput = {
+  enabled: false, dependentText: "", featureText: "", explanation: "", warnings: [],
+};
 const STORAGE_DEBOUNCE_MS = 250;
 const TERMINAL: JobStatus[] = ["SUCCEEDED", "FAILED", "CANCELLED"];
 
@@ -83,6 +87,7 @@ type Persisted = {
   jobKind: JobKind;
   claimText: string;
   searchClaimText: string;
+  dependentSearch: DependentSearchInput;
   searchCutoffDate: string;
   followupInstruction: string;
   lineage: Lineage | null;
@@ -109,6 +114,8 @@ export interface RunSession {
    *  모드를 오갈 때 한쪽 입력이 다른 쪽에 덮여 쓰이면 안 된다. */
   searchClaimText: string;
   setSearchClaimText: Dispatch<SetStateAction<string>>;
+  dependentSearch: DependentSearchInput;
+  setDependentSearch: Dispatch<SetStateAction<DependentSearchInput>>;
   /** 선택적 검색 기준일(YYYY-MM-DD). 빈 문자열이 기본값이고 그것은 **날짜
    *  조건 없음**을 뜻한다. 비었다고 오늘 날짜를 채우지 않는다 — 채우면 같은
    *  청구항의 검색 범위가 실행한 날에 따라 달라진다. */
@@ -203,6 +210,13 @@ function readStored(): Persisted | null {
         typeof parsed.searchCutoffDate === "string"
           ? parsed.searchCutoffDate
           : "",
+      dependentSearch: parsed.dependentSearch && typeof parsed.dependentSearch === "object"
+        ? { enabled: parsed.dependentSearch.enabled === true,
+            dependentText: typeof parsed.dependentSearch.dependentText === "string" ? parsed.dependentSearch.dependentText : "",
+            featureText: typeof parsed.dependentSearch.featureText === "string" ? parsed.dependentSearch.featureText : "",
+            explanation: typeof parsed.dependentSearch.explanation === "string" ? parsed.dependentSearch.explanation : "",
+            warnings: Array.isArray(parsed.dependentSearch.warnings) ? parsed.dependentSearch.warnings.filter(w => typeof w === "string") : [] }
+        : EMPTY_DEPENDENT_SEARCH,
       followupInstruction:
         typeof parsed.followupInstruction === "string"
           ? parsed.followupInstruction
@@ -277,6 +291,7 @@ export function RunSessionProvider({ children }: { children: ReactNode }) {
   const [searchCutoffDate, setSearchCutoffDate] = useState(
     initial?.searchCutoffDate ?? "",
   );
+  const [dependentSearch, setDependentSearch] = useState<DependentSearchInput>(initial?.dependentSearch ?? EMPTY_DEPENDENT_SEARCH);
   const [lineage, setLineage] = useState<Lineage | null>(initial?.lineage ?? null);
   const [followupInstruction, setFollowupInstruction] = useState(
     initial?.followupInstruction ?? "",
@@ -371,6 +386,7 @@ export function RunSessionProvider({ children }: { children: ReactNode }) {
         jobKind,
         claimText,
         searchClaimText,
+        dependentSearch,
         searchCutoffDate,
         followupInstruction,
         lineage,
@@ -390,6 +406,7 @@ export function RunSessionProvider({ children }: { children: ReactNode }) {
     jobKind,
     claimText,
     searchClaimText,
+    dependentSearch,
     searchCutoffDate,
     followupInstruction,
     lineage,
@@ -417,6 +434,8 @@ export function RunSessionProvider({ children }: { children: ReactNode }) {
       setClaimText,
       searchClaimText,
       setSearchClaimText,
+      dependentSearch,
+      setDependentSearch,
       searchCutoffDate,
       setSearchCutoffDate,
       lineage,
@@ -449,6 +468,7 @@ export function RunSessionProvider({ children }: { children: ReactNode }) {
       jobKind,
       claimText,
       searchClaimText,
+      dependentSearch,
       searchCutoffDate,
       lineage,
       followupInstruction,

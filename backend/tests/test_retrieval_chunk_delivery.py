@@ -88,6 +88,7 @@ def test_chunk_reference_can_locate_the_page_source_in_actual_results(agent, mon
     target = replace(index.chunk(request.chunk_id), text="Original source\n  exact spacing. " * 50)
     monkeypatch.setattr(index, "chunk", lambda key: target if key == target.chunk_id else None)
     monkeypatch.setattr(index, "page_rows", lambda page: [target])
+    monkeypatch.setattr(index, "page_text", lambda page: target.text)
     monkeypatch.setattr(index, "neighbours", lambda *a, **kw: ("", ""))
     page = ReadPage(action="read_page", component_id=request.component_id,
                     attachment=request.attachment, page=target.page_number)

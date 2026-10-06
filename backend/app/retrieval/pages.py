@@ -59,8 +59,7 @@ def page_list(pages) -> str:
 
 
 def _page_text(document, page: int) -> str:
-    rows = document.index.page_rows(page)
-    return "\n".join(row.text for row in rows if row.text)
+    return document.index.page_text(page)
 
 
 def build(

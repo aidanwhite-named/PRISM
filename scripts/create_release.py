@@ -15,7 +15,6 @@ FILES = (
     'backend/requirements.txt',
     'backend/scripts/prepare_tokenizer.py',
 )
-PROMPTS = ('patent-analysis-master-prompt.md', 'search_prompt.md')
 
 
 def release_entries(root: Path) -> dict[str, bytes]:
@@ -45,10 +44,6 @@ def release_entries(root: Path) -> dict[str, bytes]:
             if path.suffix not in {'.html', '.js', '.css', '.svg', '.png', '.ico', '.webp', '.woff', '.woff2', '.txt'}:
                 raise ValueError(f'Review unexpected frontend asset: {path}')
             entries[path.relative_to(root).as_posix()] = path.read_bytes()
-    # Prompt edits are user data. Ship committed defaults, not local edited templates.
-    for name in PROMPTS:
-        relative = f'prompt/{name}'
-        entries[relative] = subprocess.check_output(['git', 'show', f'HEAD:{relative}'], cwd=root)
     # Two entry points at the top; implementation stays in app/.
     packed = {f'app/{name}': content for name, content in entries.items()}
     packed['설치.cmd'] = (root / '설치.cmd').read_bytes().replace(b'%~dp0scripts', b'%~dp0app\\scripts')

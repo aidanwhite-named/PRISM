@@ -46,10 +46,11 @@ def engine(tmp_path, provider=None, **kwargs):
         inference=SearchSession(provider, 'test'), values={'search_timeout_seconds': 5}, **kwargs)
 
 
-def test_one_session_no_strategy_budgets_or_classification(tmp_path):
+def test_single_session_preserves_context_and_sources(tmp_path):
     e = engine(tmp_path, specification='context ' * 2000)
     asyncio.run(e.run())
     request, = e.inference.provider.requests
+    assert request.timeout_seconds <= 125
     assert not hasattr(request.tool_policy, 'max_tool_calls')
     assert not request.tool_policy.required_tools
     assert 'save_findings' in str(request.mcp_servers) or request.tool_policy.mcp_tools
@@ -59,17 +60,36 @@ def test_one_session_no_strategy_budgets_or_classification(tmp_path):
     assert snapshot['mode'] == 'autonomous' and snapshot['stop_reason'] == 'model_complete'
     assert 'classification' not in snapshot
     assert 'X분류' not in render(snapshot)
-    assert manifest(snapshot, claim=e.claim, provider='codex')['status'] == 'complete'
+    assert manifest(snapshot, claim=e.claim, provider='codex')['status'] == 'verification_incomplete'
 
 
-def test_streamed_findings_do_not_hide_final_explanation(tmp_path):
+def test_streamed_findings_preserve_model_explanation_as_audit_only(tmp_path):
     async def action(request, emit):
         await emit('result_stream', {'delta': json.dumps({'records': [finding()]})})
         return ExecutionOutcome(result_text='문헌의 입력과 출력 관계가 유사합니다.', exit_code=0,
                                 tool_calls=[{'name': 'web_search'}])
     e = engine(tmp_path, Provider(action))
     asyncio.run(e.run())
-    assert e.records and e.snapshot()['summary'] == '문헌의 입력과 출력 관계가 유사합니다.'
+    assert e.records and e.snapshot()['model_summary'] == '문헌의 입력과 출력 관계가 유사합니다.'
+    assert '근거 확인 미완료 1건' in e.snapshot()['summary']
+
+
+def test_resolved_events_and_final_summary_do_not_double_count_tools(tmp_path):
+    from app.search_manifest import observed
+    async def action(request, emit):
+        await emit('tool_use', {'id': 'read-1', 'name': 'web_search', 'input': {'url': 'https://example.org'}})
+        await emit('tool_use_resolved', {'id': 'read-1', 'name': 'web_search', 'ok': True})
+        autonomous_store.merge(tmp_path, [finding()])
+        return ExecutionOutcome(result_text='Saved source', exit_code=0,
+            tool_calls=[{'name': 'web_search'}, {'id': 'read-1', 'name': 'web_search', 'ok': True,
+                        'result': 'Captured source', 'input': {}}])
+    e = engine(tmp_path, Provider(action))
+    asyncio.run(e.run())
+    counts = observed(e.native_calls)['tool_call_counts']
+    assert counts == {'web_search': 2}
+    call = next(call for call in e.native_calls if call.get('id') == 'read-1')
+    assert call['ok'] and call['result'] == 'Captured source'
+    assert call['input'] == {'url': 'https://example.org'}
 
 
 def test_autonomous_source_response_does_not_truncate_original_text():
@@ -122,10 +142,8 @@ def test_findings_have_no_count_or_reason_length_cap_and_keep_model_order(tmp_pa
 def test_source_validation_does_not_erase_saved_findings(tmp_path):
     tools = SearchTools(work_dir=tmp_path, values={})
     tools.call('save_findings', {'records': [finding()]})
-    with pytest.raises(ValueError):
-        tools.call('save_findings', {'records': [finding(2, url='javascript:alert(1)')]})
-    with pytest.raises(ValueError):
-        tools.call('save_findings', {'records': [finding(2, url='https://patents.google.com/patent/US123A1', document_number='US456A1')]})
+    assert tools.call('save_findings', {'records': [finding(2, url='javascript:alert(1)')]})['failed_findings']
+    assert tools.call('save_findings', {'records': [finding(2, url='https://patents.google.com/patent/US123A1', document_number='US456A1')]})['failed_findings']
     assert len(autonomous_store.load(tmp_path)) == 1
 
 

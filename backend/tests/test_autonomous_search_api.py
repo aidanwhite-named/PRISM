@@ -26,26 +26,28 @@ def autonomous_runtime(monkeypatch):
 
 
 @pytest.mark.parametrize('old_flag', [True, False])
-def test_all_new_searches_use_single_autonomous_session(client, monkeypatch, autonomous_runtime, old_flag):
+def test_new_searches_refine_unchecked_findings_in_same_job(client, monkeypatch, autonomous_runtime, old_flag):
     monkeypatch.setitem(DEFAULTS, 'progressive_search_enabled', old_flag)
     monkeypatch.setitem(DEFAULTS, 'progressive_search_limits', {'deep': {'queries': 1, 'llm_calls': 1, 'pool': 1}})
     payload = {'job_kind': 'similarity_search', 'provider': 'test-search', 'claim_text': 'A controls B using C'}
     ahead = client.post('/api/jobs/preflight', json=payload)
     assert ahead.status_code == 200, ahead.text
-    assert '300초' in ahead.json()['message']
+    assert '360초' in ahead.json()['message']
     created = client.post('/api/jobs', json=payload)
     assert created.status_code == 201, created.text
     job = wait_for_job(client, created.json()['id'])
     assert job['status'] == 'SUCCEEDED', job['errors']
-    request, = autonomous_runtime
+    assert len(autonomous_runtime) == 1
+    request = autonomous_runtime[0]
+    assert json.loads(request.user_message)['claim'] == payload['claim_text']
     assert not hasattr(request.tool_policy, 'max_tool_calls')
     assert job['search_manifest']['engine']['mode'] == 'autonomous'
     assert job['search_manifest']['reported']['candidates'][0]['title'] == finding()['title']
-    assert job['search_manifest']['status'] == 'complete'
+    assert job['search_manifest']['status'] == 'verification_incomplete'
     assert 'X분류' not in job['result_text']
 
 
-def test_timeout_is_partial_result_without_classification_retry(client, monkeypatch, autonomous_runtime):
+def test_session_timeout_preserves_partial_findings(client, monkeypatch, autonomous_runtime):
     original = DeterministicSearchProvider.execute
     async def execute(self, request, emit):
         result = await original(self, request, emit)
@@ -91,31 +93,26 @@ def test_historical_scope_is_refreshed_on_read_without_rewriting_saved_report(cl
 
 
 def test_selected_strategy_is_delivered_and_continuation_keeps_findings(client, autonomous_runtime):
-    prompt = client.post('/api/prompts', json={'name': '자율 검색 테스트', 'kind': 'search',
-        'body': 'Prioritize the relationship of A and B.', 'description': '', 'accepted_file_types': []}).json()
-    try:
-        created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
-            'claim_text': 'A controls B', 'prompt_id': prompt['id']}).json()
-        source = wait_for_job(client, created['id'])
-        assert source['status'] == 'SUCCEEDED', source['errors']
-        assert json.loads(autonomous_runtime[0].user_message)['search_strategy'] == prompt['body']
-        response = client.post(f"/api/jobs/{source['id']}/continue-search")
-        assert response.status_code == 201, response.text
-        child = wait_for_job(client, response.json()['id'])
-        assert child['status'] == 'SUCCEEDED', child['errors']
-        assert json.loads(autonomous_runtime[1].user_message)['previous_findings']
-        assert len(autonomous_runtime) == 2
-        assert client.post(f"/api/jobs/{source['id']}/continue-search").json()['id'] == child['id']
-        # A continuation can itself be continued; no artificial exhaustive-stage stop.
-        assert child['search_manifest']['engine']['can_continue']
-    finally:
-        client.delete('/api/prompts/' + prompt['id'])
+    from app.task_instructions import SEARCH
+    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
+        'claim_text': 'A controls B'}).json()
+    source = wait_for_job(client, created['id'])
+    assert source['status'] == 'SUCCEEDED', source['errors']
+    assert json.loads(autonomous_runtime[0].user_message)['search_strategy'] == SEARCH.body
+    previous_count = len(autonomous_runtime)
+    response = client.post(f"/api/jobs/{source['id']}/continue-search")
+    assert response.status_code == 201, response.text
+    child = wait_for_job(client, response.json()['id'])
+    assert child['status'] == 'SUCCEEDED', child['errors']
+    assert json.loads(autonomous_runtime[previous_count].user_message)['previous_findings']
+    assert client.post(f"/api/jobs/{source['id']}/continue-search").json()['id'] == child['id']
+    assert child['search_manifest']['engine']['can_continue']
 
 
 def test_time_setting_is_the_only_search_budget_in_preflight(client):
     from app.db import session_scope
     from app.models import AppSetting
-    key = 'search_timeout_seconds'
+    key = 'search_total_seconds'
     with session_scope() as session:
         old = session.get(AppSetting, key)
         old_value = old.value if old else None

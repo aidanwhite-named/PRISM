@@ -94,18 +94,23 @@ def test_full_inline_api_report_and_metadata_agree_on_missing_input_component(cl
             + '{"items":[{"citation_number":1,"attachment":"ATT-01","document_number":"문헌번호 확인 불가"}]}'
             + '\n[/PRISM_CITATION_MAPPING_V1]')
     monkeypatch.setattr(DeterministicTestProvider, 'execute', execute)
-    prompt = client.post('/api/prompts', json={'name': '입력 구성 확인', 'body': '청구항을 대비하십시오.'}).json()
-    try:
-        created = client.post('/api/jobs', json={'prompt_id': prompt['id'], 'provider': 'test',
-            'claim_text': '청구항 1.\n(A) 신호 수신\n(B) 수신 전에 검증',
-            'batch_id': _upload(client)}).json()
-        job = wait_for_job(client, created['id'])
-        assert job['status'] == 'SUCCEEDED', job['errors']
-        assert job['retrieval_manifest'] is None
-        assert job['analysis_completeness']['missing_components'] == ['청구항 1 (B)']
-        assert '청구항 1 (B)' in job['result_text']
-        assert len(requests) == 1
-        assert '[PRISM 입력 구성 식별자]' in requests[0].user_message
-        assert job['analysis_manifest']['items'][0]['similarity'] == 90
-    finally:
-        client.delete('/api/prompts/' + prompt['id'])
+    created = client.post('/api/jobs', json={'provider': 'test',
+        'claim_text': '청구항 1.\n(A) 신호 수신\n(B) 수신 전에 검증',
+        'batch_id': _upload(client)}).json()
+    job = wait_for_job(client, created['id'])
+    assert job['status'] == 'SUCCEEDED', job['errors']
+    assert job['retrieval_manifest'] is None
+    assert job['analysis_completeness']['missing_components'] == ['청구항 1 (B)']
+    assert '청구항 1 (B)' in job['result_text']
+    assert requests
+    assert '[PRISM 입력 구성 식별자]' in requests[-1].user_message
+    assert job['analysis_manifest']['items'][0]['similarity'] == 90
+
+
+def test_input_coverage_does_not_hide_report_issues():
+    result = analysis_completeness.check(claim_text='청구항 1.\n(A) 수신',
+        retrieval_manifest=None, analysis_manifest={'items': [item()],
+            'report': {'issues': ['원문 근거 확인 필요']}})
+    assert not result['missing_components']
+    assert result['report_issues'] == ['원문 근거 확인 필요']
+    assert not result['complete']

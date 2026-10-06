@@ -19,9 +19,11 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Index,
     String,
     Text,
     UniqueConstraint,
+    text as sql_text,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -279,3 +281,28 @@ class AppSetting(Base):
     updated_at = Column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
+
+
+class ReportChatTurn(Base):
+    """A report-scoped question and its audited answer, independent of rewriting."""
+    __tablename__ = 'report_chat_turns'
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    job_id = Column(String(36), ForeignKey('execution_jobs.id', ondelete='CASCADE'), nullable=False, index=True)
+    request_id = Column(String(36), nullable=False)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, default='queued')
+    provider = Column(String(30), nullable=False)
+    model = Column(String(160), nullable=True)
+    context_scope = Column(String(30), nullable=False)
+    execution_manifest = Column(JSON, nullable=False, default=dict)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (UniqueConstraint('job_id', 'request_id', name='uq_report_chat_request'),)
+
+
+# Enforce one pending answer per report even across browser tabs/processes.
+Index('uq_report_chat_pending', ReportChatTurn.job_id, unique=True,
+      sqlite_where=sql_text("status IN ('queued', 'running')"))

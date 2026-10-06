@@ -106,9 +106,20 @@ class ArticleHTML(HTMLParser):
         self.in_title = False
         self.title = ''
         self.abstract_page = False
+        self.in_head = False
+        self.metadata = {}
+        self.document_links = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if tag == 'head':
+            self.in_head = True
+        if self.in_head and tag == 'meta':
+            name = attrs.get('name', '').lower()
+            if name.startswith('citation_'):
+                self.metadata[name] = attrs.get('content', '')
+        if self.in_head and tag == 'link' and 'canonical' in attrs.get('rel', '').lower().split():
+            self.document_links.append(attrs.get('href', ''))
         if tag in ('script', 'style', 'nav', 'footer', 'noscript', 'iframe'):
             self.ignored += 1
         if tag == 'title':
@@ -121,6 +132,8 @@ class ArticleHTML(HTMLParser):
             self.pdf_links.append(attrs['href'])
 
     def handle_endtag(self, tag):
+        if tag == 'head':
+            self.in_head = False
         if tag in ('script', 'style', 'nav', 'footer', 'noscript', 'iframe'):
             self.ignored = max(0, self.ignored - 1)
         if tag == 'title':

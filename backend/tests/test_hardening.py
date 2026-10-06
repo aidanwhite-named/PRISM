@@ -15,9 +15,9 @@ from app.providers.base import ExecutionOutcome, ProbeResult
 
 
 def test_mutating_request_without_client_header_is_rejected(client) -> None:
-    response = client.post(
-        "/api/prompts",
-        json={"name": "csrf", "body": "x"},
+    response = client.put(
+        "/api/settings",
+        json={"values": {"default_timeout_seconds": 600}},
         headers={"X-PRISM-Client": ""},
     )
     assert response.status_code == 403
@@ -33,9 +33,9 @@ def test_smoke_test_endpoint_requires_client_header(client) -> None:
 
 
 def test_cross_origin_mutating_request_is_rejected(client) -> None:
-    response = client.post(
-        "/api/prompts",
-        json={"name": "evil", "body": "x"},
+    response = client.put(
+        "/api/settings",
+        json={"values": {"default_timeout_seconds": 600}},
         headers={"Origin": "https://evil.example.com"},
     )
     assert response.status_code == 403
@@ -43,26 +43,24 @@ def test_cross_origin_mutating_request_is_rejected(client) -> None:
 
 
 def test_loopback_origin_with_header_is_allowed(client) -> None:
-    response = client.post(
-        "/api/prompts",
-        json={"name": "loopback ok", "body": "본문"},
+    response = client.put(
+        "/api/settings",
+        json={"values": {"default_timeout_seconds": 600}},
         headers={"Origin": "http://127.0.0.1:8765"},
     )
-    assert response.status_code == 201
-
-
-def test_get_requests_are_not_blocked(client) -> None:
-    response = client.get("/api/prompts", headers={"X-PRISM-Client": ""})
     assert response.status_code == 200
 
 
-def test_delete_requires_header(client) -> None:
-    created = client.post("/api/prompts", json={"name": "삭제대상", "body": "x"}).json()
-    blocked = client.delete(
-        f"/api/prompts/{created['id']}", headers={"X-PRISM-Client": ""}
-    )
-    assert blocked.status_code == 403
-    assert client.delete(f"/api/prompts/{created['id']}").status_code == 204
+def test_get_requests_are_not_blocked(client) -> None:
+    response = client.get("/api/health", headers={"X-PRISM-Client": ""})
+    assert response.status_code == 200
+
+
+def test_delete_requires_header(client):
+    # Header checking precedes lookup, even for a nonexistent history entry.
+    path = '/api/history/nonexistent'
+    assert client.delete(path, headers={'X-PRISM-Client': ''}).status_code == 403
+    assert client.delete(path).status_code == 404
 
 
 # ------------------------------------------------------------- 도구 정책
@@ -220,11 +218,8 @@ def test_all_providers_probe_without_error(client, provider_id) -> None:
 
 
 def test_removed_mock_provider_cannot_create_jobs(client) -> None:
-    prompt = client.post(
-        "/api/prompts", json={"name": "제거된 Provider 확인", "body": "요약하십시오."}
-    ).json()
     response = client.post(
-        "/api/jobs", json={"prompt_id": prompt["id"], "provider": "mock"}
+        "/api/jobs", json={"provider": "mock"}
     )
     assert response.status_code == 400
     assert client.get("/api/providers/mock").status_code == 404
@@ -240,27 +235,23 @@ def test_agy_uses_its_cli_name(client) -> None:
 
 
 def test_execution_defaults_are_editable(client) -> None:
-    prompt = client.post(
-        "/api/prompts", json={"name": "기본 설정", "body": "요약"}
-    ).json()
     data = client.put(
         "/api/settings",
         json={
             "values": {
-                "default_prompt_id": prompt["id"],
+
                 "default_provider": "agy",
                 "default_models": {"agy": "gemini-3.7-flash-high"},
             }
         },
     ).json()
-    assert data["values"]["default_prompt_id"] == prompt["id"]
     assert data["values"]["default_provider"] == "agy"
     assert data["values"]["default_models"]["agy"] == "gemini-3.7-flash-high"
     client.put(
         "/api/settings",
         json={
             "values": {
-                "default_prompt_id": "",
+
                 # 기본값은 빈 문자열이다. 제한된 안전성 Provider 를 기본으로 남겨두면
                 # 다른 테스트가 그것을 자동 선택하게 된다.
                 "default_provider": "",
@@ -317,10 +308,7 @@ def test_agy_resolver_does_not_fall_back_to_gemini(monkeypatch) -> None:
 def test_no_provider_and_no_default_refuses_instead_of_auto_selecting(client) -> None:
     """안전 정책을 만족한 Provider 가 없으면 자동 선택하지 않는다."""
     client.put("/api/settings", json={"values": {"default_provider": ""}})
-    prompt = client.post(
-        "/api/prompts", json={"name": "자동선택 금지", "body": "요약하십시오."}
-    ).json()
-    response = client.post("/api/jobs", json={"prompt_id": prompt["id"]})
+    response = client.post("/api/jobs", json={})
     assert response.status_code == 400
     assert "Settings 에서 기본" in response.json()["detail"]
 
@@ -535,11 +523,7 @@ def test_each_job_kind_resolves_its_own_default_tool(client, monkeypatch) -> Non
         )
         assert search.status_code == 400
         assert "claude 로그인이 필요합니다" in search.json()["detail"]
-
-        prompt = client.post(
-            "/api/prompts", json={"name": "도구 분리", "body": "요약하십시오."}
-        ).json()
-        analysis = client.post("/api/jobs", json={"prompt_id": prompt["id"]})
+        analysis = client.post("/api/jobs", json={})
         assert analysis.status_code == 400
         assert "agy 로그인이 필요합니다" in analysis.json()["detail"]
         assert probe_calls == ["claude", "agy"]

@@ -24,7 +24,9 @@ from app.citation_mapping import (
     render,
     strip_block,
 )
-from app.config import PROMPT_DIR
+from .conftest import _TEST_PROMPT_DIR
+from pathlib import Path
+PROMPT_DIR = Path(_TEST_PROMPT_DIR)
 
 from .conftest import wait_for_job
 
@@ -56,17 +58,29 @@ def _write_prompt(filename: str, content: str) -> str:
 
 
 @pytest.fixture()
-def capable_prompt(client):
-    prompt_id = _write_prompt("mapping-capable.md", CAPABLE_PROMPT)
-    yield client.get(f"/api/prompts/{prompt_id}").json()
-    (PROMPT_DIR / prompt_id).unlink(missing_ok=True)
+def capable_prompt(client, monkeypatch):
+    # Isolate legacy response/numbering compatibility from staged V5 comparison.
+    # V5 rendering, persistence and semantic review are tested separately.
+    from dataclasses import asdict, replace
+    from app.task_instructions import ANALYSIS
+    from app.analysis_protocol import INSTRUCTIONS
+    from app.api import jobs
+    legacy = replace(ANALYSIS, body='청구항과 인용발명을 대비하십시오.\n' + INSTRUCTIONS)
+    monkeypatch.setattr(jobs, 'ANALYSIS', legacy)
+    return asdict(legacy)
 
 
 @pytest.fixture()
-def plain_prompt(client):
-    prompt_id = _write_prompt("mapping-plain.md", PLAIN_PROMPT)
-    yield client.get(f"/api/prompts/{prompt_id}").json()
-    (PROMPT_DIR / prompt_id).unlink(missing_ok=True)
+def plain_prompt(client, monkeypatch):
+    # Isolate legacy response/numbering compatibility from staged V5 comparison.
+    # V5 rendering, persistence and semantic review are tested separately.
+    from dataclasses import asdict, replace
+    from app.task_instructions import ANALYSIS
+    from app.analysis_protocol import INSTRUCTIONS
+    from app.api import jobs
+    legacy = replace(ANALYSIS, body='청구항과 인용발명을 대비하십시오.\n' + INSTRUCTIONS)
+    monkeypatch.setattr(jobs, 'ANALYSIS', legacy)
+    return asdict(legacy)
 
 
 def _upload(client, *names: str) -> str:
@@ -86,7 +100,7 @@ def _run(client, prompt, **extra) -> dict:
     created = client.post(
         "/api/jobs",
         json={
-            "prompt_id": prompt["id"],
+
             "provider": "test",
             # 구성대비 분석은 청구항이 필수다. 청구항 자체를 검증하지 않는
             # 테스트도 실행을 만들려면 한 줄은 넣어야 한다. 청구항을 다루는
@@ -165,7 +179,7 @@ def test_existing_report_mapping_is_recovered_for_history_and_followup(client, c
     loaded = client.get(f"/api/history/{parent['id']}").json()
     assert loaded["citation_mapping_error"] is None
     assert len(loaded["citation_mapping"]["items"]) == 2
-    preview = client.post("/api/jobs/preflight", json={"prompt_id": capable_prompt["id"], "provider": "test", "source_job_id": parent["id"], "relation_type": "MAPPED", "claim_text": "청구항 2. 추가 구성"})
+    preview = client.post("/api/jobs/preflight", json={"provider": "test", "source_job_id": parent["id"], "relation_type": "MAPPED", "claim_text": "청구항 2. 추가 구성"})
     assert preview.status_code == 200, preview.text
     assert not preview.json()["blocked"]
     child = _run(client, capable_prompt, source_job_id=parent["id"], relation_type="MAPPED", claim_text="청구항 2. 제1항에 있어서, 추가 구성")
@@ -425,7 +439,7 @@ def test_mapping_is_read_from_a_prompt_that_declares_nothing(
     assert job["status"] == "SUCCEEDED"
 
     # 선언하지 않은 프롬프트에도 규칙이 붙었고, 그 결과가 읽혔다.
-    assert "PRISM_CITATION_MAPPING_V1" in _final_prompt(client, job["id"])
+    assert "PRISM_COMPONENT_ANALYSIS_V1" in _final_prompt(client, job["id"])
     assert job["citation_mapping_error"] is None
     mapping = job["citation_mapping"]
     assert mapping is not None
@@ -451,7 +465,7 @@ def test_unreadable_mapping_keeps_the_run_successful(
     refused = client.post(
         "/api/jobs",
         json={
-            "prompt_id": capable_prompt["id"],
+
             "provider": "test",
             "source_job_id": job["id"],
             "relation_type": "MAPPED",
@@ -496,7 +510,7 @@ def test_dependent_only_followups_keep_ancestor_claims(client, capable_prompt) -
                   batch_id=_upload(client, "c1.txt"))
     child = _run(client, capable_prompt, claim_text="청구항 13. 제12항에 있어서, 한정.",
                  source_job_id=parent["id"], relation_type="MAPPED")
-    payload = {"prompt_id": capable_prompt["id"], "provider": "test",
+    payload = {"provider": "test",
                "claim_text": "청구항 14. 제13항에 있어서, 추가 한정.",
                "source_job_id": child["id"], "relation_type": "MAPPED"}
     preflight = client.post("/api/jobs/preflight", json=payload)

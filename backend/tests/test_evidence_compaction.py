@@ -4,6 +4,7 @@ from copy import deepcopy
 import pytest
 
 from app.retrieval import evidence, pages
+from app import report_sources
 from app.retrieval.agent import RetrievalBudget
 from app.retrieval.source_pool import SourcePool
 from .test_delivery_modes import _FakeDocument
@@ -48,10 +49,17 @@ def test_full_page_excerpts_context_and_identity_share_exact_source():
     snapshot = deepcopy(bundle)
     rendered = evidence.render(bundle)
     assert bundle == snapshot
-    assert rendered.count(page) == 1
+    pool = evidence.source_pool(bundle)
+    assert [source['text'] for source in pool.sources] == [page]
+    source = pool.sources[0]
+    encoded = report_sources.render_sentences(source['id'], source['attachment'], source['pdf_page'], page)
+    assert rendered.count(encoded) == 1
     assert len(evidence.source_pool(bundle).sources) == 1
     assert rendered.count("chunk_id: P0001-002") == 2
-    assert "구성별 판단" in rendered and "다른 구성 판단" in rendered
+    # The report receives original source facts, while preliminary AI relevance
+    # stays in the audit bundle to avoid anchoring the independent comparison.
+    assert "구성별 판단" not in rendered and "다른 구성 판단" not in rendered
+    assert bundle['components'][0]['findings'][0]['ai_relevance'] == '구성별 판단'
     assert "서지사항 원문 발췌 · PDF 1쪽" in rendered
     _assert_references(bundle)
 
@@ -76,8 +84,11 @@ def test_removing_page_or_first_component_cannot_leave_a_dangling_reference():
     bundle["components"][0]["findings"] = []
     _assert_references(bundle)
     rendered = evidence.render(bundle)
+    pool = evidence.source_pool(bundle)
+    for source in pool.sources:
+        assert report_sources.render_sentences(source['id'], source['attachment'], source['pdf_page'], source['text']) in rendered
     for key in ("source_text", "context_before", "context_after"):
-        assert bundle["components"][1]["findings"][0][key] in rendered
+        assert any(bundle['components'][1]['findings'][0][key] in source['text'] for source in pool.sources)
 
 
 def test_partial_page_never_substitutes_for_unincluded_source_or_claims_full_review():

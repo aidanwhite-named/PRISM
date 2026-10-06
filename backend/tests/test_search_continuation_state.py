@@ -144,3 +144,25 @@ def test_source_result_arriving_during_emit_is_published_next_time(tmp_path):
     asyncio.run(exercise())
     assert len(emitted) == 2
     assert emitted[1]['source_calls'][0]['id'] == 'read-1'
+
+
+def test_continuation_keeps_description_and_page_metadata(tmp_path, monkeypatch):
+    capture = capture_checkpoint(tmp_path, section='description')
+    store = ArtifactStore(PATHS.evidence_dir)
+    capture.update(capture_version=2, scope='description',
+                   page_spans=[{'page': 1, 'start': 0, 'end': len(capture['text'])}])
+    artifact = store.put(json.dumps(capture).encode())
+    call = receipt(arguments={'url': capture['url'], 'section': 'description'},
+                   result={'capture_artifact_id': artifact})
+    write_json(tmp_path / 'resume-search.json', {'version': 2, 'snapshot': {'source_calls': [call]}})
+    def no_network(*args):
+        pytest.fail('A description capture must be reused with its original metadata')
+    monkeypatch.setattr('app.search_engine.fetcher.SafeFetcher.get', no_network)
+    result = source_fetch(SearchTools(work_dir=tmp_path, values={}),
+                          {'url': capture['url'], 'section': 'description', 'max_chars': 1000})
+    assert result['capture_origin'] == 'continuation'
+    assert result['capture_version'] == 2
+    assert result['records'][0]['fields']['description'] == capture['text'][:1000]
+    assert result['page_spans'] == capture['page_spans']
+    state = search_state({'source_calls': [receipt(result=result)]})
+    assert state['obtained_sources'][0]['window']['chars'] == 1000
