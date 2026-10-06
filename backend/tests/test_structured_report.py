@@ -760,9 +760,14 @@ def test_primary_reference_gap_does_not_require_a_positive_quote(report_input, p
 
 def test_difference_separator_is_added_for_each_claim(report_input):
     row = report_input[0]['components'][0]
-    report_input[0]['components'].append({**row, 'claim': '청구항 2'})
+    row['difference'] = '청구항 1의 추가 조건은 확인되지 않습니다.'
+    report_input[0]['components'].append({**row, 'claim': '청구항 2',
+                                        'difference': '청구항 2의 추가 조건은 확인되지 않습니다.'})
     report, _, _ = compile_input(report_input)
     assert report.count('\n\n---\n\n#### [차이점]') == 2
+    previous_claim, next_claim = report.split('\n\n---\n\n### 청구항 2')
+    assert '청구항 1의 추가 조건은 확인되지 않습니다.' in previous_claim.split('#### [차이점]')[1]
+    assert '청구항 2의 추가 조건은 확인되지 않습니다.' in next_claim.split('#### [차이점]')[1]
 
 
 def test_each_supplement_gets_a_paragraph_and_connected_sentence(report_input, tmp_path):

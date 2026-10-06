@@ -26,14 +26,26 @@ def patch(row, **changes):
 def test_blank_symbols_get_unique_labels_without_changing_user_symbols(multi_input):
     data = multi_input[0]
     row = data['components'][0]
-    data['components'] = [{**row, 'symbol': ''}, {**row, 'symbol': '(자동 구분 1)'}, row]
+    data['components'] = [{**row, 'symbol': ''}, {**row, 'symbol': '(구성 1)'}, row]
     original = copy.deepcopy(data)
     report, manifest, _ = compile_input(multi_input)
-    assert [r['symbol'] for r in manifest['items']] == ['(자동 구분 2)', '(자동 구분 1)', '(A)']
+    assert [r['symbol'] for r in manifest['items']] == ['(구성 2)', '(구성 1)', '(A)']
     assert manifest['report']['data'] == original
     assert not manifest['report']['issues']
     assert manifest['report']['normalizations'][0]['field'] == 'symbol'
     assert '구성 기호가 비어' not in report
+
+
+def test_blank_symbols_are_numbered_within_each_claim(multi_input):
+    data = multi_input[0]
+    row = data['components'][0]
+    data['components'] = [{**row, 'claim': claim, 'symbol': ''}
+                          for claim in ['청구항 1', '청구항 1', '청구항 1', '청구항 2']]
+    report, manifest, _ = compile_input(multi_input)
+    assert [item['symbol'] for item in manifest['items']] == [
+        '(구성 1)', '(구성 2)', '(구성 3)', '(구성 1)']
+    assert '**(구성 3)' in report
+    assert not manifest['report']['issues']
 
 
 def test_only_explicit_verified_evidence_reference_is_relinked(multi_input):
@@ -274,7 +286,7 @@ def test_runner_reviews_only_inconsistent_components_and_preserves_original(clie
     assert len(calls) == 2
     assert job['status'] == ('CANCELLED' if mode == 'cancelled' else 'SUCCEEDED')
     manifest = job['analysis_manifest']
-    assert manifest['items'][0]['symbol'] == '(자동 구분 1)'
+    assert manifest['items'][0]['symbol'] == '(구성 1)'
     if mode == 'repaired':
         assert not manifest['report']['issues']
         assert manifest['items'][0]['similarity'] == (0 if defect == 'score' else 70)

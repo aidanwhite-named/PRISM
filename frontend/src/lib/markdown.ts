@@ -83,6 +83,7 @@ export function renderMarkdown(source: string): string {
 
 const COMPONENT_TITLE = /^\((?:[A-Z](?:-?\d+)?|전제부)\)\s+\S/;
 const REPORT_LABEL = /^(?:→\s*)?(?:대응 정도|유사도 기준 문헌|근거|대응|차이점|도출 용이성|보완|결합 동기 및 가능성|결합 결과|결합 후 남는 차이점|결합 후 도출 용이성|대응 결론)\s*[:：]/;
+const CLAIM_TITLE = /^청구항\s*\d+(?:\s|$|[.(:：])/;
 
 // `인용발명 3` 형태의 표식. 줄바꿈은 건너뛰어 문단 사이를 묶지 않는다.
 const CITATION = /인용발명[ \t]?\d+/g;
@@ -159,6 +160,22 @@ export function renderReportMarkdown(source: string): string {
       paragraph.prepend(title);
     }
   });
+  // Stored reports also get a visible boundary before each subsequent claim.
+  // Newly generated reports already contain a Markdown rule; reuse that rule.
+  let seenClaim = false;
+  for (const heading of template.content.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+    if (heading.parentNode !== template.content || !CLAIM_TITLE.test(heading.textContent?.trim() ?? "")) continue;
+    heading.classList.add("report-claim-title");
+    if (seenClaim) {
+      let separator = heading.previousElementSibling;
+      if (separator?.tagName !== "HR") {
+        separator = document.createElement("hr");
+        heading.before(separator);
+      }
+      separator.classList.add("report-claim-separator");
+    }
+    seenClaim = true;
+  }
   // 문단 정리가 끝난 뒤에 붙인다. 코드 서식을 벗기는 위 단계가 문단의 자식을
   // 통째로 갈아 끼우므로, 먼저 달면 그 표식이 사라진다.
   markCitations(template.content);

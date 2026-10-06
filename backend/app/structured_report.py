@@ -34,7 +34,7 @@ language는 ko 또는 foreign이다. foreign이면 선택한 전체 범위의 �
 각 구성은 claim, symbol, feature, similarity(0~100 정수 또는 판단 불가 시 null), basis(direct/inferred),
 evidence(실제로 설명에 사용하는 근거 ID 목록), evidence_uses(근거 ID별 support/contrast 용도), reference_roles(미대응·확인 불가 문헌의 검토 결과), reasoning(한정별 대응 이유와 범위), difference(복수 문헌 대비 후 잔존 차이)를 한 번씩 기록한다.
 feature는 사용자의 구성 문언을 한정 생략 없이 그대로 보존한다.
-symbol은 비울 수 없다. 기호 없는 전제부는 (전제부), 다른 미표기 구성은 (분석 1) 등으로 표시하되 사용자의 (A), (B) 기호를 변경하지 않는다.
+symbol은 비울 수 없다. 기호 없는 전제부는 (전제부), 다른 미표기 구성은 각 청구항 안에서 등장 순서대로 (구성 1), (구성 2), (구성 3) 등으로 표시한다. 사용자의 (A), (B) 등 기존 구성 기호는 변경하지 않는다.
 구성대비 evidence와 reasoning에는 주 문헌과 남은 한정을 실제로 보완하는 데 필요한 최소 인용발명만 사용한다. 문헌별로 실제 대응하는 한정과 근거 ID를 구분한다.
 유사도만 인용발명 1 자체를 기준으로 평가한다. 다른 문헌의 대응 근거를 점수에 합산하지 않는다. 주 문헌의 부족한 한정은 reasoning의 대응 범위 설명에 포함한다.
 difference는 복수 문헌으로 대비해도 대응되지 않는 부분만 한 문장으로 쓰며, 없으면 빈 문자열이다. 이 필드는 생략하지 않는다.
@@ -705,9 +705,9 @@ def compile_report(raw, aliases, attachments, *, prior_mapping=None, bundle=None
         if multi_comparison and not text(row.get('symbol')) and (
                 row.get('symbol') is None or isinstance(row.get('symbol'), str)):
             number = 1
-            while (text(row.get('claim')), f'(자동 구분 {number})') in occupied_labels:
+            while (text(row.get('claim')), f'(구성 {number})') in occupied_labels:
                 number += 1
-            row['symbol'] = f'(자동 구분 {number})'
+            row['symbol'] = f'(구성 {number})'
             occupied_labels.add((text(row.get('claim')), row['symbol']))
             normalizations.append({'component_index': index, 'field': 'symbol',
                                    'original': original_row.get('symbol'), 'value': row['symbol']})
@@ -760,6 +760,7 @@ def compile_report(raw, aliases, attachments, *, prior_mapping=None, bundle=None
             if current_claim is not None:
                 lines += ['', '---', '', '#### [차이점]', *(differences or ['', '확인된 차이점이 없습니다.'])]
                 differences = []
+                lines += ['', '---']
             lines += ['', '### ' + prose(claim)]
             lines += ['', '유사도 기준 문헌: ' + reference(main), '', '#### [구성요소]']
             current_claim = claim

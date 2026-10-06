@@ -1410,6 +1410,15 @@ tbody tr:hover { background: rgba(230, 237, 238, 0.43); }
 .result h2 { margin-top: 24px; border-bottom: 1px solid var(--border); padding-bottom: 5px; font-size: 17px; border-bottom-color: rgba(83, 104, 101, 0.13); }
 .result h3 { margin-top: 18px; font-size: 15px; }
 .result hr { margin: 30px 0 18px; border: 0; border-top: 1px solid var(--border); }
+.result .report-claim-separator { margin: 40px 0 22px; border-top-width: 2px; }
+.result .report-claim-title {
+  margin: 24px 0 18px;
+  padding: 10px 14px;
+  border-left: 3px solid currentColor;
+  font-size: 17px;
+  font-weight: 700;
+  break-after: avoid;
+}
 .result .report-component-title {
   margin: 30px 0 14px;
   padding-top: 18px;

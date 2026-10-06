@@ -9,6 +9,28 @@ function fragment(html: string) {
 }
 
 describe("보고서 가독성", () => {
+  it.each([false, true])("청구항 사이를 구분하고 기존 구분선을 중복하지 않는다 (구분선: %s)", (hasRule) => {
+    const source = [
+      "### 청구항 1", "#### [구성요소]", "첫 구성의 설명",
+      "---", "#### [차이점]", "첫 청구항의 차이점",
+      ...(hasRule ? ["---"] : []),
+      "### 청구항 2", "#### [구성요소]", "다음 구성의 설명",
+      "---", "#### [차이점]", "둘째 청구항의 차이점",
+      "## 3. 종합 분석 요약", "### 청구항 전체의 관계와 잔존 차이",
+    ].join("\n\n");
+    const result = fragment(renderReportMarkdown(source));
+    const claims = [...result.querySelectorAll(".report-claim-title")];
+    expect(claims.map(node => node.textContent)).toEqual(["청구항 1", "청구항 2"]);
+    expect(claims[0].previousElementSibling).toBeNull();
+    const separator = claims[1].previousElementSibling;
+    expect(separator?.tagName).toBe("HR");
+    expect(separator?.className).toBe("report-claim-separator");
+    expect(separator?.previousElementSibling?.textContent).toBe("첫 청구항의 차이점");
+    expect(result.querySelectorAll("hr")).toHaveLength(3);
+    expect(result.querySelectorAll(".report-claim-separator")).toHaveLength(1);
+    expect(result.textContent).toBe(fragment(renderMarkdown(source)).textContent);
+  });
+
   it("차이점 구분선과 인용발명별 문단을 유지한다", () => {
     const source = [
       "**(A) 일부 차이 🟡 (70%)**", '"주 문헌의 발췌" (단락 [0010])',
