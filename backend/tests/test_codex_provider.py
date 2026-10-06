@@ -21,11 +21,7 @@ import asyncio
 from types import SimpleNamespace
 
 from app.providers.base import CODEX_WEB_SEARCH, NO_TOOLS, ExecutionRequest
-from app.providers.codex_cli import (
-    MODEL_DEFAULT_REASONING_EFFORTS,
-    MODEL_REASONING_EFFORTS,
-    CodexCliProvider,
-)
+from app.providers.codex_cli import CodexCliProvider
 from app.providers.codex_stream import (
     TOOL_ITEM_TYPES,
     CodexStreamParser,
@@ -606,16 +602,3 @@ def test_reasoning_effort_is_passed_only_when_chosen(tmp_path: Path) -> None:
     assert args[index - 1] == "-c"
     # 모델 인수와 섞이지 않는다.
     assert "-m" not in args[index - 1 : index + 1]
-
-
-def test_reasoning_effort_catalog_is_model_specific() -> None:
-    assert MODEL_DEFAULT_REASONING_EFFORTS["gpt-5.6-sol"] == "low"
-    assert MODEL_DEFAULT_REASONING_EFFORTS["gpt-5.6-luna"] == "medium"
-    assert "ultra" in MODEL_REASONING_EFFORTS["gpt-5.6-sol"]
-    assert "ultra" not in MODEL_REASONING_EFFORTS["gpt-5.6-luna"]
-    assert MODEL_REASONING_EFFORTS["gpt-5.5"] == (
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-    )

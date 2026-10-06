@@ -50,7 +50,6 @@ from pathlib import Path
 from ..enums import AuthState
 from ..execution import process as proc
 from .base import (
-    REASONING_EFFORTS,
     CODEX_WEB_SEARCH,
     EmitFn,
     ExecutionOutcome,
@@ -58,6 +57,7 @@ from .base import (
     ProbeResult,
     Provider,
 )
+from .codex_models import capabilities as model_capabilities, discover
 from .codex_stream import CodexStreamParser
 from .env import build_child_env
 from .resolver import ResolvedExecutable, resolve_simple
@@ -80,38 +80,6 @@ RISKS = (
     "포함됩니다. 첨부 문서와 같은 층위라 프롬프트 인젝션 방어가 약합니다.",
     "신뢰할 수 없는 출처의 문서 분석에는 사용하지 마십시오.",
 )
-
-# 실행 파일에서 확인한 모델 slug. 계정별 모델 목록을 반환하는 명령이 없어서
-# CLI 가 아는 이름만 노출한다.
-MODELS = (
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.6-luna",
-    "gpt-5.6-pro",
-    "gpt-5.5",
-    "gpt-5.4",
-)
-
-# Codex CLI 0.149.0 이 로컬 모델 카탈로그에서 광고하는 모델별 추론강도다.
-# API 의 reasoning.effort 목록과 CLI Agent 의 목록은 같지 않다. 예를 들어
-# Codex Agent 의 ultra 는 자동 작업 분할까지 포함하는 CLI 단계이고, luna 에는
-# 없다. UI 가 전역 합집합만 보여 주면 luna + ultra 같은 실행 불가능한 조합을
-# 저장하게 되므로 모델별 목록을 함께 내린다.
-MODEL_REASONING_EFFORTS: dict[str, tuple[str, ...]] = {
-    "gpt-5.6-sol": ("low", "medium", "high", "xhigh", "max", "ultra"),
-    "gpt-5.6-terra": ("low", "medium", "high", "xhigh", "max", "ultra"),
-    "gpt-5.6-luna": ("low", "medium", "high", "xhigh", "max"),
-    "gpt-5.5": ("low", "medium", "high", "xhigh"),
-    "gpt-5.4": ("low", "medium", "high", "xhigh"),
-}
-
-MODEL_DEFAULT_REASONING_EFFORTS: dict[str, str] = {
-    "gpt-5.6-sol": "low",
-    "gpt-5.6-terra": "medium",
-    "gpt-5.6-luna": "medium",
-    "gpt-5.5": "medium",
-    "gpt-5.4": "medium",
-}
 
 
 class CodexCliProvider(Provider):
@@ -158,23 +126,13 @@ class CodexCliProvider(Provider):
                 "web_search": True,
                 "search_tool_control": "detect_only",
                 "model_select": True,
-                # 고를 수 있는 레벨. 비워 두면 모델 기본값이며, 그 값이 무엇인지
-                # PRISM 은 알 수 없다 — CLI 가 명령으로 알려주지 않는다.
                 "reasoning_effort_select": True,
-                "reasoning_efforts": list(REASONING_EFFORTS),
-                "reasoning_efforts_by_model": {
-                    model: list(efforts)
-                    for model, efforts in MODEL_REASONING_EFFORTS.items()
-                },
-                "reasoning_defaults_by_model": dict(
-                    MODEL_DEFAULT_REASONING_EFFORTS
-                ),
+                **model_capabilities([]),
                 "cancellable": True,
                 "browser_login": True,
                 # 세션 파일을 디스크에 남기지 않고 실행할 수 있다.
                 "ephemeral_session": True,
                 "native_pdf": False,
-                "models": list(MODELS),
             },
         )
 
@@ -220,6 +178,10 @@ class CodexCliProvider(Provider):
         result.auth_state, note = self._interpret_auth(auth_run)
         if note:
             result.notes.append(note)
+        catalog, catalog_note = await discover(resolved, env)
+        result.capabilities.update(catalog)
+        if catalog_note:
+            result.notes.append(catalog_note)
         return result
 
     def _interpret_auth(self, run: proc.ProcessResult) -> tuple[str, str]:

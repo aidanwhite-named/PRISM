@@ -101,9 +101,8 @@ function ToolFields({
   const modelOptions = Array.isArray(selectedProvider?.capabilities.models)
     ? (selectedProvider.capabilities.models as string[])
     : [];
-  const selectedModel = modelOptions.includes(models[provider])
-    ? models[provider]
-    : "";
+  const selectedModel = models[provider] ?? "";
+  const savedModelMissing = Boolean(selectedModel) && !modelOptions.includes(selectedModel);
   const providerEffortOptions = Array.isArray(
     selectedProvider?.capabilities.reasoning_efforts,
   )
@@ -126,13 +125,13 @@ function ToolFields({
       ? (defaultsByModelValue as Record<string, string>)
       : {};
   const effortOptionsForModel = (model: string) => {
-    const options = effortsByModel[model];
+    const defaultModel = selectedProvider?.capabilities.default_model;
+    const options = effortsByModel[model || (typeof defaultModel === "string" ? defaultModel : "")];
     return Array.isArray(options) ? options : providerEffortOptions;
   };
   const effortOptions = effortOptionsForModel(selectedModel);
-  const selectedEffort = effortOptions.includes(efforts[provider])
-    ? efforts[provider]
-    : "";
+  const selectedEffort = efforts[provider] ?? "";
+  const savedEffortMissing = Boolean(selectedEffort) && !effortOptions.includes(selectedEffort);
   const modelDefaultEffort = defaultsByModel[selectedModel] ?? "";
   const searchTool =
     searchProvider !== undefined
@@ -206,6 +205,9 @@ function ToolFields({
             }}
           >
             <option value="">CLI 기본 모델</option>
+            {savedModelMissing && (
+              <option value={selectedModel}>{selectedModel} · 저장된 선택 (목록에서 확인되지 않음)</option>
+            )}
             {modelOptions.map((model) => (
               <option key={model} value={model}>{model}</option>
             ))}
@@ -217,7 +219,7 @@ function ToolFields({
           </span>
         </div>
       )}
-      {!inherits && effortOptions.length > 0 && (
+      {!inherits && (effortOptions.length > 0 || savedEffortMissing) && (
         <div className="field">
           <label htmlFor={`${idPrefix}-effort`}>추론강도</label>
           <select
@@ -234,6 +236,9 @@ function ToolFields({
             }
           >
             <option value="">모델 기본값</option>
+            {savedEffortMissing && (
+              <option value={selectedEffort}>{selectedEffort} · 저장된 선택 (목록에서 확인되지 않음)</option>
+            )}
             {effortOptions.map((level) => (
               <option key={level} value={level}>{level}</option>
             ))}

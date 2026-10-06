@@ -526,7 +526,12 @@ async def _resolve_provider(
 
     if selected_model and provider_info is not None:
         available_models = provider_info.capabilities.get("models", [])
-        if available_models and selected_model not in available_models:
+        # A failed Codex refresh can leave an older picker catalogue. Let the CLI
+        # validate saved models in that case instead of rejecting newly added ones.
+        catalog_current = provider_id != "codex" or (
+            provider_info.capabilities.get("model_catalog_source") == "codex"
+        )
+        if catalog_current and available_models and selected_model not in available_models:
             raise HTTPException(
                 400,
                 f"{provider_id} 에서 사용할 수 없는 모델입니다: {selected_model}",

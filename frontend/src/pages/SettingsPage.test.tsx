@@ -442,4 +442,26 @@ describe("대용량 인용발명 전달 방식", () => {
       expect(card.textContent).toContain("OpenAlex 에 키 없이 연결했습니다."),
     );
   });
+  it("keeps saved model and effort visible when model discovery fails", async () => {
+    const { api } = await import("../lib/api");
+    vi.mocked(api.settings).mockResolvedValueOnce({
+      ...settingsResponse,
+      values: { ...settingsResponse.values, default_provider: "codex",
+        default_models: { codex: "gpt-6.1-sol" }, reasoning_effort: { codex: "medium" } },
+    } as never);
+    vi.mocked(api.listProviders).mockResolvedValueOnce(providersResponse.map((p) =>
+      p.provider === "codex" ? { ...p, capabilities: { models: [], reasoning_efforts: [],
+        reasoning_efforts_by_model: {}, reasoning_defaults_by_model: {} } } : p
+    ) as never);
+    render(<SettingsPage />);
+    await screen.findByRole("heading", { name: "AI 실행 도구", level: 2 });
+    expect((screen.getByRole("combobox", { name: "구성대비 분석 모델" }) as HTMLSelectElement).value)
+      .toBe("gpt-6.1-sol");
+    expect((screen.getByRole("combobox", { name: "구성대비 분석 추론강도" }) as HTMLSelectElement).value)
+      .toBe("medium");
+    fireEvent.click(screen.getByRole("button", { name: "실행 도구 저장" }));
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      default_models: { codex: "gpt-6.1-sol" }, reasoning_effort: { codex: "medium" },
+    })));
+  });
 });
