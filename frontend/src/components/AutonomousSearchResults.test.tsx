@@ -5,6 +5,26 @@ import type { ProgressiveSearchSnapshot } from "../lib/types";
 
 afterEach(cleanup);
 
+it("separates promising blocked leads without counting them as verified groups", () => {
+  const data = { candidates: [
+    { id: "ordinary", title: "일반 보류", search_review: { status: "unavailable" } },
+    { id: "sigma", title: "SIGMA", triage_status: "promising",
+      triage_reason: "공식 초록의 전체 흐름과 점유 정합 관계가 근접합니다.",
+      difference: "사전학습 입력은 본문 확인 필요", search_review: { status: "unavailable" } },
+    { id: "verified", title: "확인 문헌", search_review: { status: "source_checked", group: "Y" } },
+    { id: "missing", title: "근거 없는 표식", triage_status: "promising" },
+  ].map(c => ({ ...c, url: `https://example.org/${c.id}`, date_status: "no_date_limit" })),
+  phase: "complete", elapsed_seconds: 1, queries: [], warnings: [] } as unknown as ProgressiveSearchSnapshot;
+  render(<AutonomousResults data={data} />);
+  expect(screen.getByText("원문 근거 검증을 통과한 분류: X 0건, Y 1건, Z 0건")).toBeTruthy();
+  expect(screen.getByText("유력 후보 · 분류 보류 1건")).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "유력 후보 · 분류 보류" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "2. [유력 후보 · 분류 보류] SIGMA" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "3. [미분류] 일반 보류" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "4. [미분류] 근거 없는 표식" })).toBeTruthy();
+  expect(screen.getByText(/사전학습 입력은 본문 확인 필요/)).toBeTruthy();
+});
+
 it("shows verified groups and X early stop without classifying unchecked leads", () => {
   const candidates = [
     { id: "1", title: "X 문헌", search_review: { status: "source_checked", verdict: "strong", group: "X" } },

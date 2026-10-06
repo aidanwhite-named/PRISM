@@ -42,6 +42,11 @@ cutoff가 없으면 임의의 날짜 제한을 적용하지 마십시오. 있으
 구성의 단순 일치 개수가 아니라 청구항의 핵심 기능·구성 사이의 관계를 기준으로
 대비할 가치가 있는 후보를 triage_status="candidate"로 두십시오. 중요한 부분 구성만 대응하는
 문헌도 후보가 될 수 있습니다. 판단 자료가 부족하면 triage_status="hold"로 두고 단정하지 마십시오.
+초록·공식 소개 등 확인된 자료에서 전체 처리 흐름과 식별력 높은 핵심 관계가 함께 매우 가깝지만
+청구항·본문 검증이 끝나지 않은 문헌은 triage_status="promising"으로 저장하십시오.
+이는 '유력 후보 · 분류 보류'이며 X/Y/Z 확정이 아닙니다. 단어 일치나 접근 실패만으로 지정하지 마십시오.
+triage_reason에 실제 확인한 자료와 근접한 관계를, difference에 아직 확인하지 못한 차이를 기록하십시오.
+원문 접근이 실패해도 이 잠정 관련성 판단을 유지하고 review에는 실제 확보·검증 상태를 저장하십시오.
 폭넓은 탐색 단계에서 모든 후보의 상세 구성대비표를 만들 필요는 없습니다. 관련성이 높은 최종 후보는 실제 원문을 확인하고 search_strategy에 따른 대응표를 작성하십시오.
 선별은 잠정 판단입니다. 본문을 읽었다는 사실만으로 구성대비 완료나 모든 구성의 대응을 선언하지 마십시오.
 정밀 조회가 끝난 후보는 review_stage="full_text" 또는 "core_components"로 표시하고,
@@ -85,6 +90,16 @@ save_findings가 반환한 pending_source_checks와 search_gaps를 다음 행동
 주장하지 마십시오. 제한시간에 남은 미확인 후보와 실제 확인한 후보를 구분해 마무리하십시오.
 논문의 발행사·ResearchGate·DOI 주소가 차단되면 literature_fetch(doi, constituent="full_text")로
 OpenAlex의 공개 PDF·저장소 사본을 찾고 captured_source의 실제 원문과 passage_options를 사용하십시오.
+OpenAlex 검색 0건·DOI 미등록·한도 소진·공개 사본 없음은 다른 저장소의 문헌 부재를 뜻하지 않습니다.
+유력 논문의 본문을 얻지 못하면 OpenAlex를 반복 호출하며 끝내지 말고 반환된 fallback_searches를
+참고하여 arXiv 전용 검색과 OpenReview 전용 검색, 웹의 CVF·ACL Anthology·CORE·기관/저자 저장소에서
+독립적으로 찾아보십시오. 정확한 제목을 먼저 사용하고 저자·특징적인 방법명으로 확장할 수 있습니다.
+논문 발견 자체가 부족한 경우에도 기술 분야에 맞는 이 공개 저장소들을 독립 탐색에 활용하십시오.
+Semantic Scholar를 필수 경로로 사용하지 마십시오. CORE API 인증이 없으면 웹 검색을 사용하십시오.
+실제로 확인한 원문 링크를 source_fetch로 읽고, arXiv 식별자가 있으면 literature_fetch의 full_text로
+OpenAlex와 독립적인 공식 HTML/PDF를 확보할 수 있습니다. 링크를 추측해서 PDF 주소를 만들지 마십시오.
+다른 DOI의 프리프린트·저널판은 제목 유사성만으로 합치지 말고 원문 식별자·저자·공식 버전 연결을
+확인하십시오. 확보한 사본의 버전과 확인 범위, 실패한 경로 및 남은 확인 사항을 기록하십시오.
 특허 페이지가 차단되면 사용 가능한 epo_fetch의 claims/description을 요청하고 실제 반환된 원문 근거를 사용하십시오.
 서지정보·초록·원문 링크만 확보한 것은 본문 확인이 아닙니다. 사본의 버전과 확인 범위를 구분하십시오.
 '''
@@ -264,6 +279,7 @@ class AutonomousSearch:
             review = row.get('search_review') or {}
             checked = review.get('status') == 'source_checked'
             triage = ('rejected' if review.get('verdict') == 'mismatch' else 'detailed') if checked else (
+                'promising' if row.get('triage_status') == 'promising' else
                 'hold' if review.get('status') == 'unavailable' else row.get('triage_status', 'unreviewed'))
             observation = candidate_observation(row, self.source_calls)
             body_observed = any(scope in ('claims', 'description', 'full_text')

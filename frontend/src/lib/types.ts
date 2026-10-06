@@ -390,7 +390,7 @@ export interface ProgressiveSearchSnapshot {
       reason?: string; difference?: string; reported_scope?: string; authors?: string;
       observed_scope?: string; observed_scopes?: string[];
       source_urls?: string[]; review_pending_reason?: string;
-      triage_status?: "unreviewed" | "candidate" | "hold" | "rejected" | "detailed";
+      triage_status?: "unreviewed" | "candidate" | "promising" | "hold" | "rejected" | "detailed";
       triage_reason?: string; core_matches?: string; review_stage?: "metadata" | "core_components" | "full_text";
       search_review?: { status: string; verdict?: "strong" | "partial" | "mismatch" | "unavailable";
         group?: "X" | "Y" | "Z";

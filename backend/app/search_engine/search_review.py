@@ -245,6 +245,15 @@ def summary_counts(rows, focus=None):
     return result
 
 
+def promising_candidate(row):
+    """Explicit preliminary relevance, never an inferred or verified X/Y/Z."""
+    review = row.get('search_review') or {}
+    return (row.get('triage_status') == 'promising'
+            and bool(str(row.get('triage_reason') or '').strip())
+            and review.get('status') != 'source_checked'
+            and review.get('verdict') != 'mismatch')
+
+
 def summary_text(rows, focus=None):
     counts = summary_counts(rows, focus)
     if 'components' in counts:
@@ -254,7 +263,9 @@ def summary_text(rows, focus=None):
             for c in counts['components'])
     return (f"저장된 후보 {counts['candidate_count']}건 · 원문 근거 검증을 통과한 분류: "
             f"X {counts['X']}건, Y {counts['Y']}건, Z {counts['Z']}건 · "
-            f"근거 확인 미완료 {counts['pending']}건 · 원문 확인 불가 {counts['unavailable']}건")
+            f"근거 확인 미완료 {counts['pending']}건 · 원문 확인 불가 {counts['unavailable']}건" +
+            (f" · 유력 후보 · 분류 보류 {sum(promising_candidate(row) for row in rows)}건"
+             if any(promising_candidate(row) for row in rows) else ''))
 
 
 def prioritize(rows):
@@ -270,5 +281,7 @@ def prioritize(rows):
             return 1
         if review.get('status') == 'source_checked':
             return {'strong': 3, 'partial': 3, 'mismatch': 6}.get(review.get('verdict'), 5)
+        if promising_candidate(row):
+            return 3
         return 6 if row.get('triage_status') == 'rejected' else 4 if row.get('triage_status') == 'candidate' else 5
     return sorted(rows, key=rank)

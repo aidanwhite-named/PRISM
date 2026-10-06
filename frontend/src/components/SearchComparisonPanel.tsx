@@ -40,7 +40,7 @@ export default function SearchComparisonPanel({ job }: { job: Job }) {
   const recommend = () => {
     // A convenience selection, not an exclusion rule. Held/partial matches remain selectable.
     const available = candidates.filter(c => !analyzed.has(c.id));
-    const preferred = available.filter(c => ["candidate", "detailed"].includes(c.triage_status ?? ""));
+    const preferred = available.filter(c => ["candidate", "promising", "detailed"].includes(c.triage_status ?? ""));
     setSelected((preferred.length ? preferred : available.filter(c => c.triage_status !== "rejected")).slice(0, 3).map(c => c.id));
   };
   const start = async () => {
@@ -72,7 +72,7 @@ export default function SearchComparisonPanel({ job }: { job: Job }) {
           onChange={event => setSelected(old => event.target.checked ? [...old, c.id] : old.filter(id => id !== c.id))} />
         {searchCandidateLabel(c)}
         {analyzed.has(c.id) ? " · 구성대비 이력 있음" : ""}
-        {c.triage_status === "hold" ? " · 자료 부족" : c.triage_status === "rejected" ? " · 관련성 낮음(재검토 가능)" : ""}
+        {c.triage_status === "promising" ? " · 유력 후보 · 분류 보류" : c.triage_status === "hold" ? " · 자료 부족" : c.triage_status === "rejected" ? " · 관련성 낮음(재검토 가능)" : ""}
       </label>)}
     </fieldset>
     {selected.length === 5 && <p role="status">한 번에 분석할 수 있는 5건을 선택했습니다. 다른 문헌을 선택하려면 기존 선택을 해제하세요.</p>}

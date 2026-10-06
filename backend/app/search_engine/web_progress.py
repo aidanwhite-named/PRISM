@@ -38,7 +38,7 @@ def finding(value):
             'snippet': value.get('snippet') if isinstance(value.get('snippet'), str) else '',
             'feature': value.get('feature') if isinstance(value.get('feature'), str) else 'context',
             'triage_status': value.get('triage_status') if value.get('triage_status') in
-                ('unreviewed', 'candidate', 'hold', 'rejected', 'detailed') else 'unreviewed',
+                ('unreviewed', 'candidate', 'promising', 'hold', 'rejected', 'detailed') else 'unreviewed',
             'review_stage': value.get('review_stage') if value.get('review_stage') in
                 ('metadata', 'core_components', 'full_text') else 'metadata'}
 

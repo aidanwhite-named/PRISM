@@ -328,6 +328,12 @@ class LiteratureClient:
         url = f"{CROSSREF_BASE}/works?" + urllib.parse.urlencode(params)
         return self._send(url, source=SOURCE_CROSSREF, kind="search")
 
+    def search_openreview(self, query: str, *, rows: int = 10, mode: str = 'title_terms') -> LiteratureCall:
+        params = {'term': query, 'type': 'exact' if mode == 'exact_title' else 'terms', 'content': 'title',
+                  'limit': str(_clamp_rows(rows))}
+        return self._send('https://api2.openreview.net/notes/search?' + urllib.parse.urlencode(params),
+                          source='openreview', kind='search')
+
     def fetch_crossref(self, doi: str) -> LiteratureCall:
         """DOI 하나의 등록 서지를 받는다."""
         key = normalize_doi(doi)

@@ -3,7 +3,7 @@ from ..search_channels import cell
 from ..search_format import _link
 from .. import search_manifest, search_dates
 from .source_observations import with_observations
-from .search_review import GROUPS, verified_group, summary_counts, summary_text
+from .search_review import GROUPS, verified_group, summary_counts, summary_text, promising_candidate
 STOPS = {'running': '검색 중', 'deadline': '시간 종료 · 확보한 후보 보존',
          'cancelled': '사용자 중단 · 확보한 후보 보존', 'engine_error': '오류 · 확보한 후보 보존',
          'model_complete': '검색 완료',
@@ -40,6 +40,11 @@ def render(snapshot):
     focus = snapshot.get('search_focus')
     gap = bool(focus and focus.get('mode') == 'gap')
     candidates = [c for c in snapshot['candidates'] if c['date_status'] != 'after_cutoff']
+    promising = [c for c in candidates if promising_candidate(c)] if not gap else []
+    if promising:
+        classified = [c for c in candidates if verified_group(c)]
+        candidates = [*classified, *promising,
+                      *[c for c in candidates if not verified_group(c) and not promising_candidate(c)]]
     dependent = bool(focus and focus.get('origin') == 'dependent_claims')
     lines = ['# 종속항만 따로 검색 결과' if dependent else '# 미대응 구성 검색 결과' if gap else '# 유사 문헌 검색 결과', '',
              f"{STOPS.get(snapshot['stop_reason'], snapshot['stop_reason'])} · {snapshot['elapsed_seconds']:.1f}초", '',
@@ -50,18 +55,28 @@ def render(snapshot):
             *[cell(c['feature']) + '\n' for c in focus.get('components', [])],
             *(['종속항 원문에서 모델이 추가·한정된 특징을 파악하여 검색합니다.', ''] if automatic else []),
             '선택한 추가 특징의 대응 문헌을 찾은 결과입니다. 종속항 전체의 대응 여부와 구분합니다.', '']
+    previous_section = None
     for i, c in enumerate(candidates, 1):
+        section = ('promising' if promising_candidate(c) else 'classified' if verified_group(c) else 'other')
+        if promising and section != previous_section:
+            if section == 'promising':
+                lines += ['## 유력 후보 · 분류 보류', '',
+                    '초기 자료에서 전체 구조와 핵심 관계가 매우 가까운 후보입니다. 본문 검증이 미완료이며 X/Y/Z로 확정한 문헌은 아닙니다.', '']
+            elif section == 'other':
+                lines += ['## 기타 미분류 후보', '']
+        previous_section = section
         group = None if gap else verified_group(c)
         review = c.get('search_review') or {}
         reason = review.get('reason') or c.get('reason', '')
         difference = review.get('gaps') or c.get('difference', '')
         provisional = 'AI 잠정 판단 (원문 근거 검증 미완료): ' if review.get('status') == 'needs_review' else ''
-        lines += [f"## {i}. " + ('' if gap else f"[{group or '미분류'}] ") + cell(c['title']), '', _link(c['url']), '',
+        label = '유력 후보 · 분류 보류' if c in promising else group or '미분류'
+        lines += [f"## {i}. " + ('' if gap else f"[{label}] ") + cell(c['title']), '', _link(c['url']), '',
                   cell(c['document_number']) + ' · 공개일 ' + cell(c['publication_date'] or '미확인'), '',
                   provisional + cell(reason), '']
         if difference:
             lines += ['남은 차이·확인 사항: ' + cell(difference), '']
-        triage = {'candidate': '우선 검토', 'hold': '자료 부족', 'rejected': '관련성 낮음',
+        triage = {'candidate': '우선 검토', 'promising': '유력 후보 · 분류 보류', 'hold': '자료 부족', 'rejected': '관련성 낮음',
                   'detailed': '본문 검토 후보'}.get(c.get('triage_status'), '미검토')
         scope = {'core_components': '일부 구성', 'full_text': '본문'}.get(c.get('review_stage'), '서지·검색 결과')
         lines += ['잠정 선별: ' + triage + ' · 검색 단계 확인 범위: ' + scope + ' (AI 보고)', '']
@@ -93,7 +108,8 @@ def render(snapshot):
                               cell(passage['translation']), '', cell(location), '']
         label = {'strong': '강한 유사성', 'partial': '일부 핵심 대응', 'mismatch': '기대한 대응과 다름'}.get(review.get('verdict'), '원문 미확인')
         if not gap:
-            lines += ['검색 중 원문 대조: ' + (label + ' (AI 판단 · 발췌 일치 확인)' if review.get('status') == 'source_checked' else '근거 확인 미완료'), '']
+            lines += ['검색 중 원문 대조: ' + (label + ' (AI 판단 · 발췌 일치 확인)' if review.get('status') == 'source_checked' else
+                '원문 확보·확인 불가' if review.get('status') == 'unavailable' else '근거 확인 미완료'), '']
         if review.get('issues'):
             lines += ['검증 미완료 사유: ' + cell(' '.join(dict.fromkeys(review['issues']))), '']
         elif c.get('review_pending_reason'):

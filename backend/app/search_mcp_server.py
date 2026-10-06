@@ -318,6 +318,11 @@ class SearchTools:
 
     def _plain_search(self, backend_id, arguments):
         query = arguments["query"]
+        if backend_id == 'literature' and arguments.get('source') == 'openreview':
+            if arguments.get('cites_doi'):
+                raise ValueError('cites_doi_requires_openalex')
+            from .search_engine.paper_repositories import openreview_search
+            return openreview_search(self, arguments)
         # OpenAlex and arXiv search concurrently; initialize shared resources once.
         with self._lock:
             backend = self._backend(backend_id)
@@ -593,21 +598,32 @@ _LITERATURE_SOURCES = {
 _LITERATURE_SEARCH = _tool(
     "literature_search",
     "Search literature. Omit source to query Crossref, Europe PMC and OpenAlex together. source=crossref_epmc searches only Crossref and Europe PMC; source=openalex searches only OpenAlex (broad coverage incl. IEEE/Elsevier abstracts and arXiv); source=arxiv searches arXiv preprints with arXiv query syntax. openalex_mode=search matches full-text index (broad, noisy); title_and_abstract restricts to titles/abstracts (narrow). cites_doi=<DOI> searches only works that cite that DOI (OpenAlex citation expansion; query narrows within them). HTTP 429 from OpenAlex means daily quota exhausted, not absence of literature. Metadata/abstract is not PDF full text.",
-    {"query": {"type": "string", "minLength": 1, "maxLength": 500}, "max_results": {"type": "integer", "minimum": 1, "maximum": 20}, "source": {"type": "string", "enum": ["crossref_epmc", "openalex", "arxiv"]}, "openalex_mode": {"type": "string", "enum": ["search", "title_and_abstract"]}, "cites_doi": {"type": "string", "minLength": 1, "maxLength": 200}},
+    {"query": {"type": "string", "minLength": 1, "maxLength": 500}, "max_results": {"type": "integer", "minimum": 1, "maximum": 20}, "source": {"type": "string", "enum": ["crossref_epmc", "openalex", "arxiv", "openreview"]}, "openalex_mode": {"type": "string", "enum": ["search", "title_and_abstract"]}, "cites_doi": {"type": "string", "minLength": 1, "maxLength": 200}},
     ["query"],
 )
+_LITERATURE_SEARCH['description'] += (' source=openreview searches public paper titles through the OpenReview API without Semantic Scholar. '
+    'openreview_mode=exact_title searches an identified full title; default title_terms is broader and may match only some query terms. '
+    'Returns the paper note and its own PDF/HTML links; read chosen PDFs using source_fetch. '
+    'If OpenAlex has no record or usable body, search arXiv/OpenReview and public conference/author repositories; API failure is not absence.')
+_LITERATURE_SEARCH['inputSchema']['properties']['openreview_mode'] = {
+    'type': 'string', 'enum': ['title_terms', 'exact_title']}
 _LITERATURE_FETCH = _tool(
     "literature_fetch",
     "Fetch evidence for an exact DOI. abstract uses Europe PMC, then OpenAlex, then Crossref; biblio uses Crossref/OpenAlex. arXiv IDs are accepted as 10.48550/arXiv.<id>, arXiv:<id> or arxiv.org/abs/<id> (version suffix ignored for identity). Mismatched identities are rejected. full_text uses OpenAlex public copy locations as described below.",
     {"doi": {"type": "string"}, "constituent": {"type": "string", "enum": ["abstract", "biblio", "full_text"]},
      "find": {"type": "string", "minLength": 1, "maxLength": 200},
+     "title": {"type": "string", "minLength": 1, "maxLength": 500},
      "max_chars": {"type": "integer", "minimum": 1000, "maximum": 24000}},
     ["doi"],
 )
 _LITERATURE_FETCH['description'] += (' constituent=full_text resolves the exact DOI via OpenAlex best_oa_location/locations, '
     'then tries up to four public HTTPS copies within the remaining budget, using source_fetch. '
     'Use this when publisher/ResearchGate/DOI access fails. captured_source contains capture_artifact_id and passage_options '
-    'for observed body evidence; public_copies alone and metadata/abstract are not body evidence.')
+    'for observed body evidence; public_copies alone and metadata/abstract are not body evidence. '
+    'For arXiv identifiers it reads official arXiv HTML/PDF directly, independently of OpenAlex. '
+    'Optional title helps independent discovery if OpenAlex cannot resolve the DOI. '
+    'When body acquisition fails, follow fallback_searches using your web search or literature_search tools, '
+    'confirm each candidate identity/version, and keep distinct preprint/journal DOI records distinct until explicit source evidence links them.')
 _EPO_FETCH['description'] += (' Actual returned claims/description include capture_artifact_id and passage_options for '
     'save_findings review, so OPS body text can be used directly if a Google Patents page is blocked. '
     'Exact publication identity is preserved; another family publication is a separate candidate.')
@@ -624,6 +640,9 @@ _SAVE_FINDINGS = _tool('save_findings',
 _SAVE_FINDINGS['annotations'].update(readOnlyHint=False, openWorldHint=False)
 _finding_fields = _SAVE_FINDINGS['inputSchema']['properties']['records']['items']['properties']
 _finding_fields.update({key: {'type': 'string'} for key in ('triage_status', 'triage_reason', 'core_matches', 'review_stage')})
+_finding_fields['triage_status'] = {'type': 'string',
+    'enum': ['unreviewed', 'candidate', 'promising', 'hold', 'rejected', 'detailed'],
+    'description': 'promising: 확인한 초기 자료에서 전체 구조와 핵심 관계가 매우 가깝지만 본문 검증이 미완료인 유력 후보. X/Y/Z와 별도의 잠정 판단.'}
 _finding_fields['review'] = {'type': 'object', 'additionalProperties': False,
     'required': ['verdict', 'reason', 'gaps', 'queries', 'passages'], 'properties': {
         'verdict': {'type': 'string', 'enum': ['strong', 'partial', 'mismatch', 'unavailable']},
