@@ -186,6 +186,59 @@ def test_tool_failure_is_not_saved_as_answer(client, chat_job):
     assert result['status'] == 'failed' and result['answer'] is None and result['error']
 
 
+@pytest.mark.parametrize('provider_id', ['codex', 'agy'])
+@pytest.mark.parametrize('uses_tools', [False, True])
+def test_cli_without_tool_disabling_can_answer_but_tool_calls_still_fail(
+        client, chat_job, monkeypatch, provider_id, uses_tools):
+    from app.providers.registry import build_provider
+
+    job_id, _ = chat_job
+    provider = build_provider(provider_id)
+    assert not provider.supports_tool_policy(NO_TOOLS)
+    requests = []
+
+    async def resolve(payload, _values):
+        assert payload.provider == provider_id and payload.model == 'report-model'
+        return provider_id, payload.model
+
+    async def execute(request, emit):
+        requests.append(request)
+        return ExecutionOutcome(result_text='현재 보고서의 근거를 확인했습니다.', exit_code=0,
+            terminal_reason='completed', tools_must_be_disabled=False,
+            tools_uncontrollable=True, tools_advertised=['shell'],
+            tool_uses=['shell'] if uses_tools else [])
+
+    monkeypatch.setattr(chat_api, '_resolve_provider', resolve)
+    monkeypatch.setattr(report_chat, 'build_provider', lambda *_: provider)
+    monkeypatch.setattr(provider, 'execute', execute)
+    with session_scope() as session:
+        job = session.get(ExecutionJob, job_id)
+        job.provider, job.model = provider_id, 'report-model'
+
+    response = ask(client, job_id)
+    assert response.status_code == 202, response.text
+    asyncio.run(report_chat._run(response.json()['id']))
+    stored = client.get(f'/api/jobs/{job_id}/chat').json()[0]
+    assert len(requests) == 1
+    assert requests[0].model == 'report-model' and requests[0].tool_policy == NO_TOOLS
+    assert requests[0].mcp_servers == {}
+    if uses_tools:
+        assert stored['status'] == 'failed' and stored['answer'] is None and stored['error']
+    else:
+        assert stored['status'] == 'succeeded' and stored['answer']
+    with session_scope() as session:
+        assert session.get(ExecutionJob, job_id).result_text == '현재 보고서 인용발명 1 근거 E1'
+
+
+def test_unknown_provider_is_rejected_before_creating_a_turn(client, chat_job, monkeypatch):
+    job_id, _ = chat_job
+    monkeypatch.setattr(report_chat, 'build_provider', lambda *_: None)
+    response = ask(client, job_id)
+    assert response.status_code == 422
+    assert '현재 AI 도구로 보고서 대화를 실행할 수 없습니다.' in response.json()['detail']
+    assert client.get(f'/api/jobs/{job_id}/chat').json() == []
+
+
 def test_restart_marks_unfinished_answers_and_preserves_completed_history(client, chat_job):
     job_id, _ = chat_job
     turn = ask(client, job_id).json()

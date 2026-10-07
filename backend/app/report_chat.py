@@ -111,7 +111,9 @@ def create_turn(session, job, question, request_id, provider_id, model, values):
             ReportChatTurn.status.in_(['queued', 'running'])).first():
         raise ValueError('이 보고서의 답변을 작성 중입니다. 답변이 끝난 뒤 질문해 주세요.')
     provider = build_provider(provider_id, values.get('provider_paths') or {})
-    if provider is None or not provider.supports_tool_policy(NO_TOOLS):
+    # Match report generation: Codex/agy can answer without using tools even
+    # though their CLIs cannot disable every tool. Actual calls are checked below.
+    if provider is None:
         raise ValueError('현재 AI 도구로 보고서 대화를 실행할 수 없습니다.')
     payload = context(job, turns(session, job.id), question)
     # Keep the report, question and completed dialogue in full. Only source scope
@@ -160,7 +162,7 @@ async def _run(turn_id):
             root = directory(job, turn.id)
             values = settings_service.get_all(session)
             provider = build_provider(turn.provider, values.get('provider_paths') or {})
-            if provider is None or not provider.supports_tool_policy(NO_TOOLS):
+            if provider is None:
                 raise ValueError('보고서 대화에 사용할 AI 도구를 확인할 수 없습니다.')
             request = ExecutionRequest(job_id=turn.id, work_dir=root,
                 system_prompt=(root / 'system.txt').read_text(encoding='utf-8'),
