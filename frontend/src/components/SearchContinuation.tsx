@@ -10,7 +10,8 @@ export default function SearchContinuation({ job, disabled, onContinued }: {
   const [error, setError] = useState("");
   const engine = job.search_manifest?.engine as ProgressiveSearchSnapshot | undefined;
   const eligible = (job.status === "SUCCEEDED" ||
-    (job.status === "FAILED" && engine?.stop_reason === "classification_incomplete")) && engine?.can_continue === true;
+    (job.status === "FAILED" && (engine?.stop_reason === "classification_incomplete" ||
+      job.error_code === "SEARCH_REVIEW_INCOMPLETE"))) && engine?.can_continue === true;
   const dismissedKey = `prism.search-continuation.${job.id}`;
   useEffect(() => {
     if (eligible && !disabled && engine?.verified_match === false && !sessionStorage.getItem(dismissedKey)) {
@@ -43,7 +44,8 @@ export default function SearchContinuation({ job, disabled, onContinued }: {
       onCancel={event => { event.preventDefault(); if (!pending) dismiss(); }}
       style={{ maxWidth: 520, padding: 24, borderRadius: 12, border: "1px solid #888" }}>
       <h3 id="search-continuation-title">추가로 검색할까요?</h3>
-      <p>{engine?.mode === "autonomous" ? "저장된 문헌과 출처를 이어받아 설정한 제한시간 동안 추가로 검색합니다." :
+      <p>{job.error_code === "SEARCH_REVIEW_INCOMPLETE" ? "저장된 문헌과 원문을 이어받아 선택 구성의 미완료 검토를 보완합니다." :
+        engine?.mode === "autonomous" ? "저장된 문헌과 출처를 이어받아 설정한 제한시간 동안 추가로 검색합니다." :
         engine?.stop_reason === "classification_incomplete" ? "분류 응답을 모두 확보하지 못했습니다. 저장된 후보와 부분 분류를 이어받을 수 있습니다." :
         engine?.verified_match ? "더 넓은 범위에서 문헌을 검토할 수 있습니다." :
         "기본 검색 범위에서 원문 근거가 확인된 X·Y 문헌을 찾지 못했습니다."}</p>

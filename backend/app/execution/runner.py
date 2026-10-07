@@ -732,7 +732,8 @@ class JobRunner:
                         if job is not None:
                             job.usage = report_repair.merge_usage(None, preparation_audit, category='comparison_preparation')
                             job.result_text = '# 구성대비 작성 미완료\n\n' + '\n'.join(preparation_audit['issues'])
-                    await self._fail(job_id, ErrorCode.INVALID_OUTPUT, '구성별 판단을 확정하지 못했습니다: ' +
+                    await self._fail(job_id, preparation_audit.get('error_code') or ErrorCode.INVALID_OUTPUT,
+                                     '구성별 판단을 확정하지 못했습니다: ' +
                                      ' '.join(preparation_audit['issues']))
                     return
                 if comparison_context is not None:

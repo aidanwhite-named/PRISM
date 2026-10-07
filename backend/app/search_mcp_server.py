@@ -54,6 +54,10 @@ def error_response(exc, name, arguments, secrets=()):
     value = {"error_code": getattr(exc, "fault_code", "") or type(exc).__name__,
              "detail": scrub(str(exc), *secrets)[:500]}
     args = arguments if isinstance(arguments, dict) else {}
+    if name == 'kiwee_search':
+        value['not_evidence_of_absence'] = True
+        value['http_status'] = getattr(exc, 'http_status', None)
+        value['recovery'] = {'next_step': 'Check the Kiwee trial search in Settings for TLS, client certificate, permissions or query compatibility. Continue with other available sources; a failed request is not zero results.'}
     if name == "epo_search":
         value["not_evidence_of_absence"] = True
         value["recovery"] = {
@@ -113,7 +117,7 @@ class SearchTools:
         self.values = values
         self.backends = {}
         self._lock = threading.RLock()
-        self._source_locks = {name: threading.RLock() for name in ('epo', 'literature', 'kipris', 'arxiv')}
+        self._source_locks = {name: threading.RLock() for name in ('epo', 'literature', 'kipris', 'kiwee', 'arxiv')}
         self.disabled_sources = {}
         openalex_key = str(values.get("literature_openalex_api_key") or "").strip()
         self.secrets = (
@@ -164,7 +168,7 @@ class SearchTools:
     def tool_definitions(self):
         statuses = self.statuses()
         return [_CAPABILITIES, _SAVE_FINDINGS, _SOURCE_FETCH, _CITATION_SEARCH] + [
-            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIPRIS_SEARCH)
+            tool for tool in (_EPO_SEARCH, _EPO_FETCH, _LITERATURE_SEARCH, _LITERATURE_FETCH, _KIPRIS_SEARCH, _KIWEE_SEARCH)
             if statuses[tool['name'].split('_')[0]]['status'] == 'available']
 
     def call(self, name: str, arguments: dict) -> dict:
@@ -343,18 +347,30 @@ class SearchTools:
         elif backend_id == 'kipris':
             response = backend.search(PatentSearchQuery(query, arguments.get('max_results', 20)),
                                       begin=arguments.get('begin', 1))
+        elif backend_id == 'kiwee':
+            response = backend.search(PatentSearchQuery(query, arguments.get('max_results', 10)),
+                begin=arguments.get('begin', 1), query_mode=arguments.get('query_mode', 'keywords'))
         else:
             response = backend.search(PatentSearchQuery(query, arguments.get("max_results", 10)))
         result = {**_response(response, scope="bibliographic_search"), "query": query,
                   "publication_cutoff": self.cutoff or None}
-        if backend_id == 'kipris':
-            page, size = arguments.get('begin', 1), arguments.get('max_results', 20)
+        if backend_id in ('kipris', 'kiwee'):
+            page, size = arguments.get('begin', 1), arguments.get('max_results', 20 if backend_id == 'kipris' else 10)
             first = (page - 1) * size + 1
             count = len(response.records)
             more = page * size < response.total_found
             result['coverage'].update(page=page, page_size=size,
                 result_range=f'{first}-{first + count - 1}' if count else None,
                 more_results_available=more, next_page=page + 1 if more else None)
+            if backend_id == 'kiwee':
+                from .patent_search.kiwee_client import build_query
+                result['solr_query'] = build_query(query, arguments.get('query_mode', 'keywords'))
+                raw_count = response.source_stats[0]['returned_records']
+                result['coverage']['server_records_in_page'] = raw_count
+                result['coverage']['result_range'] = f'{first}-{first + raw_count - 1}' if raw_count else None
+                result['coverage']['source_stats'][0]['result_range'] = result['coverage']['result_range']
+                if raw_count and not count:
+                    result['coverage']['status'] = 'unidentified_records'
         return result
 
     def _fetch(self, backend_id, arguments, identifier_key):
@@ -568,6 +584,14 @@ def _query_schema(depth=0):
 
 _QUERY_SCHEMA = {**_query_schema(), "description":
     'Include type=term for field/value, type=group for op/items (AND/OR/NOT), or type=date_range for pd/begin/end (YYYYMMDD). Missing type is accepted only when the shape is unambiguous. NOT needs exactly two items. Maximum nesting: 3. Date filtering can omit unknown publication dates; consider a separate unrestricted search.'}
+_KIWEE_SEARCH = _tool(
+    'kiwee_search',
+    'Experimental Kiwee Solr gateway search. keywords mode ANDs words, each across title(tl), abstract(ab), claims(cl). solr mode sends native Lucene syntax, NOT Kiwee UI syntax. begin is a 1-based page number; use coverage.next_page. Defaults to configured country shards (initially KR). Returned fields have unverified source/translation status. Authentication or TLS errors are not zero results. Use source_fetch or other sources to verify full text.',
+    {'query': {'type': 'string', 'maxLength': 2000},
+     'query_mode': {'type': 'string', 'enum': ['keywords', 'solr']},
+     'max_results': {'type': 'integer', 'minimum': 1, 'maximum': 50},
+     'begin': {'type': 'integer', 'minimum': 1, 'maximum': 10000}}, ['query'])
+
 _KIPRIS_SEARCH = _tool(
     'kipris_search',
     'Search Korean patents and utility models in KIPRIS Plus. Prefer short Korean technical keyword queries. Returns bibliographic metadata and abstracts, not claims/full text. Each page costs one of 1000 monthly requests. begin is a 1-based page number.',
@@ -657,22 +681,25 @@ _finding_fields['review']['properties']['component_matches'] = {
     'type': 'array', 'items': {'type': 'object', 'additionalProperties': False,
         'required': ['component_id', 'verdict', 'reason', 'gaps', 'passage_indices'],
         'properties': {'component_id': {'type': 'string'},
-            'verdict': {'type': 'string', 'enum': ['strong', 'partial', 'mismatch', 'unavailable']},
+            'verdict': {'type': 'string', 'enum': ['strong', 'partial', 'mismatch', 'not_found', 'unavailable']},
             'reason': {'type': 'string'}, 'gaps': {'type': 'string'},
+            'reviewed_capture_ids': {'type': 'array', 'items': {'type': 'string'},
+                'description': 'For not_found, exact capture_artifact_id values of inspected candidate body text. Absence is limited to these inspected windows.'},
             'passage_indices': {'type': 'array', 'items': {'type': 'integer', 'minimum': 0, 'maximum': 11}}}}}
-_SAVE_FINDINGS['description'] += (' Save document reviews frequently and inspect saved_reviews. A failed review does not prevent other searches, reads or reviews. Save review with exact '
+_SAVE_FINDINGS['description'] += (' Reviews use exact '
     'capture_artifact_id and passage_id selected from source_fetch.passage_options (preferred), '
     'or one exact continuous quote. Never use ellipses, paraphrase, case changes or joined sentences in quote. '
-    'Translate the entire selected passage. Use repair_options to correct pending_source_checks when worthwhile; '
-    'reuse those observed passages rather than fetching again. Compare technical features AND relations/conditions. '
-    'Use partial/mismatch and gap-driven queries to refine the search; unavailable is not mismatch. '
+    'Translate the entire selected passage. repair_options contains observed passages available for optional correction of pending_source_checks. '
+    'Reviews compare technical features AND relations/conditions; unavailable is not mismatch. '
     'Set review.group to X (strong overall structure and core), Y (different overall structure but strong core), '
     'or Z (similar overall structure, partial core). Omit group for unverified or irrelevant sources. '
     'X/Y use verdict=strong; Z uses partial. Explain both structure and core relations in reason. '
     'X/Y/Z are output groups, not search-order requirements or automatic stop conditions. '
     'The response returns pending source checks and search gaps. Quote validation is not semantic certification.')
 _SAVE_FINDINGS['description'] += (' For gap search (focus.mode=gap), omit group and save component_matches '
-    'for selected component IDs with independent verdict/reason/gaps and zero-based passage_indices into review.passages. '
+    'for the selected components actually reviewed, with independent verdict/reason/gaps and zero-based passage_indices into review.passages. '
+    'Omitted components remain unreviewed and do not require another run. not_found requires reviewed_capture_ids for actual inspected body windows, '
+    'a scope-limited reason and missing limitations in gaps; unavailable is only for actual inability to obtain/read sources, never skipped review. '
     'The whole claim is context, not a requirement that every component match. Observed source evidence remains required per component.')
 
 _SOURCE_FETCH = _tool('source_fetch',

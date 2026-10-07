@@ -396,8 +396,10 @@ export interface ProgressiveSearchSnapshot {
         group?: "X" | "Y" | "Z";
         reason?: string; gaps?: string; issues?: string[];
         component_matches?: { component_id: string; symbol: string; feature: string;
-          status: string; verdict?: "strong" | "partial" | "mismatch" | "unavailable";
+          status: string; review_status?: "unreviewed" | "reviewed" | "unavailable";
+          verdict?: "strong" | "partial" | "mismatch" | "not_found" | "unavailable";
           reason?: string; gaps?: string; issues?: string[];
+          reviewed_sources?: { capture_artifact_id: string; url: string; scope: string; start: number; end: number }[];
           passages?: { feature: string; relation: string; quote: string; translation: string;
             url: string; scope: string; start: number; end: number; pages: number[] }[] }[];
         passages?: { feature: string; relation: string; quote: string; translation: string;
@@ -728,6 +730,11 @@ export interface AppSettings {
     epo_integration_enabled: boolean;
     kipris_integration_enabled?: boolean;
     kipris_api_key?: string;
+    kiwee_integration_enabled?: boolean;
+    kiwee_endpoint?: string;
+    kiwee_shards?: string;
+    kiwee_ca_file?: string;
+    kiwee_certificate_thumbprint?: string;
     epo_consumer_key: string;
     /**
      * 응답에서는 **항상 빈 문자열**이다. 저장은 되지만 되돌려주지 않는다.
@@ -810,6 +817,20 @@ export interface CredentialCheck {
   detail: string;
   http_status: number | null;
   expires_in: number | null;
+}
+
+export interface KiweeTrialResult {
+  ok: boolean;
+  detail: string;
+  error_code: string | null;
+  http_status: number | null;
+  solr_query: string;
+  total_found: number | null;
+  returned: number;
+  records: { document_number: string; fields: Record<string, string> }[];
+  returned_fields: string[];
+  notes: string[];
+  next_page: number | null;
 }
 
 export interface StreamEvent {

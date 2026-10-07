@@ -194,6 +194,7 @@ PRISM_MCP_TOOL_NAMES = (
     "epo_fetch",
     "literature_search",
     "literature_fetch",
+    "kiwee_search",
 )
 PRISM_MCP_TOOLS = tuple(
     f"mcp__prism-search__{name}" for name in PRISM_MCP_TOOL_NAMES

@@ -14,7 +14,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import report_sources, structured_report, report_repair, report_consistency
-from .enums import AttachmentRole, DeliveryMode, JobStatus
+from .enums import AttachmentRole, DeliveryMode, ErrorCode, JobStatus
 from .evaluation.evaluator import evaluate
 from .providers.base import NO_TOOLS
 from .providers.model_limits import estimate_tokens
@@ -365,6 +365,12 @@ def validate_selection(data, documents, required=None):
     return data
 
 
+class ReviewExecutionError(ValueError):
+    def __init__(self, message, error_code):
+        super().__init__(message)
+        self.error_code = error_code
+
+
 def _fits(provider, system, message, token_budget, max_chars):
     return not ((max_chars and len(system) + len(message) > max_chars) or
                 (getattr(provider, 'max_input_bytes', None) and
@@ -379,7 +385,7 @@ async def _call(provider, request, stage, system, payload, audit, *, token_budge
         raise asyncio.CancelledError
     message = _json(payload)
     if not _fits(provider, system, message, token_budget, max_chars):
-        raise ValueError(f'{stage}: 기술 검토 입력이 전달 한도를 초과했습니다.')
+        raise ReviewExecutionError(f'{stage}: 기술 검토 입력이 전달 한도를 초과했습니다.', ErrorCode.INPUT_TOO_LARGE)
     directory = request.work_dir / 'comparison-review' / stage
     directory.mkdir(parents=True, exist_ok=True)
     (directory / 'input.json').write_text(message, encoding='utf-8')
@@ -398,13 +404,15 @@ async def _call(provider, request, stage, system, payload, audit, *, token_budge
     except asyncio.TimeoutError:
         await provider.cancel(request.job_id)
         call['status'] = 'timeout'
-        raise ValueError(f'{stage}: 기술 검토 시간이 초과되었습니다.')
+        call['error_code'] = ErrorCode.TIMED_OUT
+        raise ReviewExecutionError(f'{stage}: 기술 검토 시간이 초과되었습니다.', ErrorCode.TIMED_OUT)
     except asyncio.CancelledError:
         call['status'] = 'cancelled'
         raise
     except Exception as exc:
         call['status'] = 'provider_error'
-        raise ValueError(f'{stage}: 기술 검토 실행 오류 ({type(exc).__name__})') from exc
+        call['error_code'] = ErrorCode.PROCESS_ERROR
+        raise ReviewExecutionError(f'{stage}: 기술 검토 실행 오류 ({type(exc).__name__})', ErrorCode.PROCESS_ERROR) from exc
     call['usage'] = result.usage or {}
     (directory / 'response.txt').write_text(result.result_text or '', encoding='utf-8')
     (directory / 'stdout.log').write_text(result.raw_stdout or '', encoding='utf-8')
@@ -415,7 +423,10 @@ async def _call(provider, request, stage, system, payload, audit, *, token_budge
         raise asyncio.CancelledError
     if verdict.status != JobStatus.SUCCEEDED or result.tool_calls or result.tool_uses:
         call['status'] = 'provider_rejected'
-        raise ValueError(f'{stage}: 기술 검토 실행이 완료되지 않았습니다.')
+        code = verdict.error_code or ErrorCode.TOOL_POLICY_VIOLATION
+        details = verdict.errors or ['실행 중 도구가 호출되었습니다.']
+        call.update(error_code=code, errors=details)
+        raise ReviewExecutionError(f'{stage}: 기술 검토 실행이 완료되지 않았습니다. ' + ' '.join(details), code)
     try:
         raw = result.result_text.strip().removesuffix('</final>')
         if raw.startswith('```json') and raw.endswith('```'):
@@ -541,6 +552,8 @@ selection.primary_attachment를 주 인용발명으로 사용하고 document_ord
         return request, None, audit
     except Exception as exc:
         audit.update(status='incomplete', issues=[str(exc)], partial_context=context)
+        if isinstance(exc, ReviewExecutionError):
+            audit['error_code'] = exc.error_code
         return request, None, audit
     finally:
         _save(request, audit)

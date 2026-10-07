@@ -139,11 +139,11 @@ def _acquire_copies(tools, arguments, result, metadata):
             queue = [link for link in fetched.get('pdf_urls', []) if link not in seen] + queue
         except Exception as exc:
             attempts.append({'url': url, 'error': str(exc)})
-    result['scope_note'] += ' Full text was not obtained; keep the candidate unverified. Try another public copy if valuable.'
+    result['scope_note'] += ' Full text was not obtained. The candidate remains unverified; failed access does not establish absence or irrelevance.'
     result['fallback_searches'] = fallback_searches(metadata.get('title'), metadata['document_number'])
-    result['next_action'] = ('Search other repositories using fallback_searches. Use exact title first, then author/core-method terms. '
-        'Confirm identifiers, authors and version on source pages before linking a preprint to the journal paper. '
-        'A similar title or topic alone does not make it the same document. Preserve promising leads if body remains inaccessible.')
+    result['scope_note'] += (' fallback_searches lists optional alternative routes. '
+        'Identifiers, authors and source-owned version links establish whether a preprint and journal paper are the same work; '
+        'a similar title or topic alone does not.')
     return result
 
 

@@ -149,7 +149,8 @@ def test_source_validation_does_not_erase_saved_findings(tmp_path):
 
 def test_tool_page_size_is_not_forced_to_four(tmp_path, monkeypatch):
     tools = SearchTools(work_dir=tmp_path, values={})
-    monkeypatch.setattr(tools, 'statuses', lambda: {'epo': {'status': 'disabled'}, 'kipris': {'status': 'available'}, 'literature': {'status': 'disabled'}})
+    monkeypatch.setattr(tools, 'statuses', lambda: {'epo': {'status': 'disabled'}, 'kipris': {'status': 'available'},
+                                                  'literature': {'status': 'disabled'}, 'kiwee': {'status': 'disabled'}})
     seen = []
     monkeypatch.setattr(tools, '_execute', lambda name, args: seen.append(args) or {'records': []})
     tools.call('kipris_search', {'query': 'sensor', 'max_results': 40})

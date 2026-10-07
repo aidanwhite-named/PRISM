@@ -67,6 +67,7 @@ from .epo_quota import (
     Throttled,
 )
 from .kipris_backend import KiprisBackend
+from .kiwee_backend import KiweeBackend
 from .literature_backend import (
     BACKEND_ID as LITERATURE_BACKEND_ID,
     CONSTITUENTS as LITERATURE_CONSTITUENTS,
@@ -107,15 +108,17 @@ _ENABLE_KEYS: dict[str, str] = {
     "epo": EPO_SETTING_ENABLED,
     "literature": LITERATURE_SETTING_ENABLED,
     "kipris": "kipris_integration_enabled",
+    "kiwee": "kiwee_integration_enabled",
 }
 
 # 화면이 상태를 보여 줄 백엔드 전체. 등록 순서가 표시 순서다.
-BACKEND_IDS = ("epo", "literature", "kipris")
+BACKEND_IDS = ("epo", "literature", "kipris", "kiwee")
 
 _REGISTRY: dict[str, Callable[[], PatentSearchBackend]] = {
     "epo": EpoOpsBackend,
     "literature": LiteratureBackend,
     "kipris": KiprisBackend,
+    "kiwee": KiweeBackend,
 }
 
 __all__ = [

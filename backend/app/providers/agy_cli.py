@@ -451,7 +451,7 @@ class AgyCliProvider(Provider):
         if version_run.exit_code == 0 and version_run.stdout:
             outcome.cli_version = version_run.stdout.strip().splitlines()[0]
 
-        parser = AgyStreamParser()
+        parser = AgyStreamParser(structured_output=request.response_schema is not None)
         policy = request.tool_policy
         search_policy = (
             policy if policy is not None and policy.name == AGY_WEB_SEARCH.name else None

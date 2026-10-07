@@ -113,4 +113,4 @@ def source_fetch(tools, arguments):
             'pdf_urls': capture['pdf_urls'],
             'document_links': capture.get('document_links', []),
             'page_spans': capture.get('page_spans', []),
-            'scope_note': 'Save document reviews frequently; search, reading and saving may be interleaved. Select a passage_id from passage_options with this capture_artifact_id, feature, relation and its Korean translation. Never join or paraphrase quoted text. Only labelled article bodies, patent sections and PDFs qualify as body evidence; generic landing pages do not.'}
+            'scope_note': 'passage_options provides exact source spans for review with this capture_artifact_id, passage_id, feature, relation and Korean translation. Only labelled article bodies, patent sections and PDFs qualify as body evidence; generic landing pages do not.'}

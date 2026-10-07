@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.providers.agy_stream import AgyStreamParser, build_stdin_message
 
 INIT = {
@@ -227,6 +229,34 @@ def test_benign_steps_are_not_tool_uses() -> None:
     parser = AgyStreamParser()
     feed(parser, [INIT, STEP_USER, STEP_CHECKPOINT, STEP_RESPONSE])
     assert parser.state.tool_uses == []
+
+
+@pytest.mark.parametrize('structured_output', [False, True])
+def test_schema_finish_is_exempt_only_for_structured_output(structured_output):
+    parser = AgyStreamParser(structured_output=structured_output)
+    events = feed(parser, [
+        {'event': 'step_update', 'step_update': {'step_index': 2, 'state': 'ACTIVE',
+         'step_type': 'tool', 'tool_name': 'finish',
+         'tool_info': {'name': 'finish', 'parameters': {'attachment': 'ATT-02'}}}},
+        {'event': 'step_update', 'step_update': {'step_index': 2, 'state': 'DONE', 'step_type': 'finish'}},
+        {'event': 'result', 'result': {'status': 'SUCCESS', 'response': '{"attachment":"ATT-02"}'}},
+    ])
+    assert parser.state.saw_result and not parser.state.is_error
+    assert json.loads(parser.state.final_text) == {'attachment': 'ATT-02'}
+    assert parser.state.tool_uses == ([] if structured_output else ['finish'])
+    assert any(kind == 'tool_use' for kind, _ in events) is (not structured_output)
+
+
+@pytest.mark.parametrize('tool_name,parameters,expected', [
+    ('run_command', {'command': 'example'}, 'run_command'),
+    ('call_mcp_tool', {'ServerName': 'external', 'ToolName': 'finish', 'Arguments': {}}, 'mcp__external__finish'),
+])
+def test_schema_finish_does_not_exempt_real_tools(tool_name, parameters, expected):
+    parser = AgyStreamParser(structured_output=True)
+    feed(parser, [{'event': 'step_update', 'step_update': {'step_index': 3, 'state': 'DONE',
+        'step_type': 'tool', 'tool_name': tool_name, 'tool_info': {'parameters': parameters}}}])
+    assert parser.state.tool_uses == [expected]
+    assert parser.state.tool_calls[0]['ok'] is True
 
 
 def test_plain_text_warning_line_is_preserved() -> None:

@@ -77,8 +77,6 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, values,
         engine.phase = 'complete'
         engine.refresh()
         snapshot = engine.snapshot()
-        if not snapshot['candidates'] and snapshot['warnings'] and not cancelled():
-            error = error or '검색 후보를 확보하지 못했습니다. 채널·질의 계획 오류를 확인하십시오.'
         if error and not cancelled():
             engine.stop_reason = 'engine_error'
             snapshot = engine.snapshot()
@@ -89,6 +87,8 @@ async def run_job(runner, provider, *, job_id, work_dir, claim, cutoff, values,
         write_json(work_dir / 'checkpoint.json', engine.checkpoint())
         write_json(work_dir / 'search_manifest.json', data)
         (work_dir / 'result.md').write_text(text, encoding='utf-8')
+        # Completion of the run and completion of every candidate review are
+        # separate. Unreviewed findings remain visible in the manifest and report.
         status = JobStatus.CANCELLED if cancelled() else JobStatus.FAILED if error else JobStatus.SUCCEEDED
         code = ErrorCode.CANCELLED if cancelled() else error_code if error else None
         with session_scope() as session:

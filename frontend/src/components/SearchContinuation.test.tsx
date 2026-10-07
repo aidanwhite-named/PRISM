@@ -22,6 +22,16 @@ it("allows a classification failure to continue using retained candidates", () =
   expect(api.continueSearch).not.toHaveBeenCalled();
 });
 
+it("allows incomplete component reviews to continue without starting automatically", () => {
+  const failed = { ...job, status: "FAILED", error_code: "SEARCH_REVIEW_INCOMPLETE", search_manifest: {
+    engine: { mode: "autonomous", can_continue: true, stop_reason: "component_review_incomplete" },
+  } } as unknown as Job;
+  render(<SearchContinuation job={failed} disabled={false} onContinued={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "검색 이어서 진행" }));
+  expect(screen.getByText(/선택 구성의 미완료 검토를 보완합니다/)).toBeTruthy();
+  expect(api.continueSearch).not.toHaveBeenCalled();
+});
+
 it("offers precision only after basic completion and dismisses without executing", () => {
   const { rerender } = render(<SearchContinuation job={{ ...job, status: "RUNNING" }} disabled onContinued={vi.fn()} />);
   expect(screen.queryByRole("dialog")).toBeNull();

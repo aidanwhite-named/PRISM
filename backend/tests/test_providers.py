@@ -145,6 +145,43 @@ def test_describe_filtering_shape() -> None:
     assert isinstance(info["removed_count"], int)
 
 
+@pytest.mark.parametrize('structured', [False, True])
+async def test_agy_schema_finish_reaches_evaluator_as_completion(monkeypatch, tmp_path, structured):
+    from app.enums import ErrorCode, JobStatus
+    from app.evaluation.evaluator import evaluate
+
+    fake = tmp_path / 'agy.exe'
+    fake.write_bytes(b'stub')
+
+    async def capture(*args, **kwargs):
+        return proc.ProcessResult(exit_code=0, stdout='1.2.2\n')
+
+    async def streaming(**kwargs):
+        rows = [
+            {'event': 'step_update', 'step_update': {'step_index': 2, 'state': 'ACTIVE',
+             'step_type': 'tool', 'tool_name': 'finish', 'tool_info': {'parameters': {'answer': 'ok'}}}},
+            {'event': 'step_update', 'step_update': {'step_index': 2, 'state': 'DONE', 'step_type': 'finish'}},
+            {'event': 'result', 'result': {'status': 'SUCCESS', 'response': '{"answer":"ok"}'}},
+        ]
+        raw = '\n'.join(json.dumps(row) for row in rows)
+        for line in raw.splitlines():
+            await kwargs['on_stdout_line'](line)
+        assert kwargs['completion_signal'].is_set()
+        return proc.ProcessResult(exit_code=0, stdout=raw)
+
+    async def emit(*args):
+        pass
+
+    monkeypatch.setattr(proc, 'run_capture', capture)
+    monkeypatch.setattr(proc, 'run_streaming', streaming)
+    request = ExecutionRequest(job_id='schema-finish', work_dir=tmp_path, system_prompt='', user_message='report',
+                               response_schema={'type': 'object'} if structured else None)
+    outcome = await AgyCliProvider(executable_override=str(fake)).execute(request, emit)
+    verdict = evaluate(outcome)
+    assert verdict.status == (JobStatus.SUCCEEDED if structured else JobStatus.FAILED)
+    assert verdict.error_code == (None if structured else ErrorCode.TOOL_POLICY_VIOLATION)
+
+
 # --------------------------------------------------------------- 실행 파일
 
 

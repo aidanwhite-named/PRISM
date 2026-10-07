@@ -173,7 +173,7 @@ def test_known_input_fetch_is_skipped_before_network_or_provider_backend(tmp_pat
     e = engine(tmp_path, specification=SPEC)
     e.prepare_input_documents()
     tools = SearchTools(work_dir=tmp_path, values={})
-    monkeypatch.setattr(tools, 'statuses', lambda: {s: {'status': 'available'} for s in ('epo', 'literature', 'kipris')})
+    monkeypatch.setattr(tools, 'statuses', lambda: {s: {'status': 'available'} for s in ('epo', 'literature', 'kipris', 'kiwee')})
     def unexpected(*_):
         raise AssertionError('Input document must not trigger a source request')
     monkeypatch.setattr(tools, '_execute', unexpected)
@@ -185,7 +185,7 @@ def test_search_filters_self_hit_and_learns_publisher_url_for_later_fetch(tmp_pa
     e = engine(tmp_path, specification=SPEC)
     e.prepare_input_documents()
     tools = SearchTools(work_dir=tmp_path, values={})
-    monkeypatch.setattr(tools, 'statuses', lambda: {s: {'status': 'available'} for s in ('epo', 'literature', 'kipris')})
+    monkeypatch.setattr(tools, 'statuses', lambda: {s: {'status': 'available'} for s in ('epo', 'literature', 'kipris', 'kiwee')})
     alias = {**SELF, 'url': 'https://publisher.org/article'}
     calls = []
     monkeypatch.setattr(tools, '_execute', lambda name, args: calls.append(name) or {'records': [alias, finding()]})

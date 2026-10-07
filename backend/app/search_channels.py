@@ -133,7 +133,7 @@ def web_evidence(tool_calls, tool_names, *, cli_version: str = "",
 def availability(values: dict, provider: str = "claude") -> dict:
     result = {"web": {"status": "available", "detail": "Provider 기본 웹 도구"}}
     registration = None
-    for name in ("epo", "literature", "kipris"):
+    for name in ("epo", "literature", "kipris", "kiwee"):
         status = describe(values, name)
         code = "available"
         if not status.enabled:
@@ -211,10 +211,10 @@ def unusable_channel_message(statuses: dict) -> str:
 def available_mcp_names(statuses: dict) -> tuple[str, ...]:
     names = ["mcp__prism-search__" + name for name in
              ("search_capabilities", "save_findings", "source_fetch", "citation_search")]
-    for name in ("epo", "literature", "kipris"):
+    for name in ("epo", "literature", "kipris", "kiwee"):
         if statuses.get(name, {}).get("status") == "available":
             names.append(f"mcp__prism-search__{name}_search")
-            if name != 'kipris':
+            if name not in ('kipris', 'kiwee'):
                 names.append(f"mcp__prism-search__{name}_fetch")
     return tuple(names)
 

@@ -19,6 +19,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from . import __version__
 from .api import answers, history, jobs, providers, settings, report_chat as report_chat_api
+from .api import kiwee
 from . import answer_extraction, report_chat
 from .config import HOST, PATHS, PORT
 from .db import init_engine
@@ -115,6 +116,7 @@ app.include_router(providers.router)
 app.include_router(jobs.router)
 app.include_router(history.router)
 app.include_router(settings.router)
+app.include_router(kiwee.router)
 app.include_router(answers.router)
 app.include_router(report_chat_api.router)
 

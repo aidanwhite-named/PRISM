@@ -5,6 +5,40 @@ import type { ProgressiveSearchSnapshot } from "../lib/types";
 
 afterEach(cleanup);
 
+it("shows a normal finish without suggesting that zero findings prove absence", () => {
+  const data = { candidates: [], phase: "complete", stop_reason: "model_complete", elapsed_seconds: 2,
+    limits: { seconds: 600 }, queries: [], warnings: [] } as unknown as ProgressiveSearchSnapshot;
+  render(<AutonomousResults data={data} />);
+  expect(screen.getByText(/검색과 후보 검토를 마무리했습니다/)).toBeTruthy();
+  expect(screen.getByText(/이번 검색 범위에서 제시할 유사 문헌을 확보하지 못했습니다/)).toBeTruthy();
+  expect(screen.getByText(/유사 문헌이 존재하지 않는다는 뜻은 아닙니다/)).toBeTruthy();
+});
+
+it("separates completed, attempted, skipped, absent and inaccessible component reviews", () => {
+  const components = ["A", "B", "C", "D", "E"].map((symbol, i) => ({
+    id: `C00${i + 1}`, symbol: `(${symbol})`, feature: `선택 구성 ${symbol}`,
+  }));
+  const data = { search_focus: { mode: "gap", components }, candidates: [{ id: "1", title: "검토 문헌",
+    url: "https://example.org/1", date_status: "no_date_limit", search_review: { status: "needs_review",
+      reason: "문헌의 구성별 판단", component_matches: [
+        { component_id: "C001", status: "source_checked", verdict: "strong", reason: "직접 대응합니다." },
+        { component_id: "C002", status: "needs_review", verdict: "partial", reason: "판단은 했지만 발췌 대조가 필요합니다." },
+        { component_id: "C004", status: "source_checked", verdict: "not_found", reason: "검토한 본문에는 없습니다.",
+          reviewed_sources: [{ scope: "description", start: 10, end: 70 }] },
+        { component_id: "C005", status: "unavailable", verdict: "unavailable", reason: "본문 접근이 거부되었습니다." },
+      ] } }], phase: "complete", stop_reason: "component_review_incomplete", elapsed_seconds: 3, queries: [], warnings: [],
+  } as unknown as ProgressiveSearchSnapshot;
+  render(<AutonomousResults data={data} />);
+  expect(screen.getByRole("heading", { name: "(A) · 검토 완료 · 강한 대응" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "(B) · 검토함 · 근거 검증 필요" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "(C) · 미검토" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "(D) · 검토 완료 · 검토 범위 내 대응 근거 없음" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "(E) · 검토 불가 · 원문 확인 불가" })).toBeTruthy();
+  expect(screen.getByText("검토 범위: description · 문자 10–70")).toBeTruthy();
+  expect(screen.getByText(/선택 구성의 검토를 모두 마치지 못했습니다/)).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: /미확인/ })).toBeNull();
+});
+
 it("separates promising blocked leads without counting them as verified groups", () => {
   const data = { candidates: [
     { id: "ordinary", title: "일반 보류", search_review: { status: "unavailable" } },

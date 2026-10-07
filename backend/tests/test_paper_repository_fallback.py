@@ -90,7 +90,7 @@ def test_openreview_search_preserves_metadata_and_own_pdf_without_openalex(tmp_p
         return HttpResponse(status=200, headers={}, body=body)
     client = LiteratureClient(transport=transport)
     tools = SearchTools(values={}, work_dir=tmp_path)
-    monkeypatch.setattr(tools, 'statuses', lambda: {s: {'status': 'available'} for s in ('epo', 'literature', 'kipris')})
+    monkeypatch.setattr(tools, 'statuses', lambda: {s: {'status': 'available'} for s in ('epo', 'literature', 'kipris', 'kiwee')})
     monkeypatch.setattr(tools, '_backend', lambda _: SimpleNamespace(_require_client=lambda: client))
     result = tools.call('literature_search', {'source': 'openreview', 'query': 'Gaussian articulated', 'max_results': 5})
     first, unsafe, missing = result['records']

@@ -212,6 +212,11 @@ DEFAULTS: dict[str, object] = {
     "epo_quota_state": {},
     "kipris_integration_enabled": False,
     "kipris_api_key": "",
+    "kiwee_integration_enabled": False,
+    "kiwee_endpoint": "https://gateway.kiwee.or.kr/solr/select",
+    "kiwee_shards": "shd_kr",
+    "kiwee_ca_file": "",
+    "kiwee_certificate_thumbprint": "",
     "kipris_quota_state": {},
     # Provider 웹 검색 도구의 실측 도달성. epo_quota_state 와 같은 이유로
     # EDITABLE_KEYS 밖이다 — PRISM 이 관측해 적는 값이고, 사용자가 PUT 으로

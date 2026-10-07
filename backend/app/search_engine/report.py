@@ -4,9 +4,11 @@ from ..search_format import _link
 from .. import search_manifest, search_dates
 from .source_observations import with_observations
 from .search_review import GROUPS, verified_group, summary_counts, summary_text, promising_candidate
+from .review_context import component_label
 STOPS = {'running': '검색 중', 'deadline': '시간 종료 · 확보한 후보 보존',
          'cancelled': '사용자 중단 · 확보한 후보 보존', 'engine_error': '오류 · 확보한 후보 보존',
          'model_complete': '검색 완료',
+         'component_review_incomplete': '검색 종료 · 구성 검토 미완료',
          'x_found': '원문 근거가 확인된 X 후보 확보 · 추가 검증 종료',
          'deadline_reserve': '시간 종료 · 확보한 후보 보존'}
 
@@ -49,6 +51,8 @@ def render(snapshot):
     lines = ['# 종속항만 따로 검색 결과' if dependent else '# 미대응 구성 검색 결과' if gap else '# 유사 문헌 검색 결과', '',
              f"{STOPS.get(snapshot['stop_reason'], snapshot['stop_reason'])} · {snapshot['elapsed_seconds']:.1f}초", '',
              summary_text(candidates, focus), '']
+    if snapshot.get('phase', 'complete') == 'complete' and snapshot['stop_reason'] == 'model_complete' and not candidates:
+        lines += ['이번 검색 범위에서 제시할 유사 문헌을 확보하지 못했습니다. 유사 문헌이 존재하지 않는다는 뜻은 아닙니다.', '']
     if dependent:
         automatic = focus.get('target_source') == 'dependent_claim'
         lines += ['## 검색할 종속항 원문' if automatic else '## 사용자가 확인한 검색 대상', '',
@@ -69,7 +73,7 @@ def render(snapshot):
         review = c.get('search_review') or {}
         reason = review.get('reason') or c.get('reason', '')
         difference = review.get('gaps') or c.get('difference', '')
-        provisional = 'AI 잠정 판단 (원문 근거 검증 미완료): ' if review.get('status') == 'needs_review' else ''
+        provisional = 'AI 잠정 판단 (원문 근거 검증 미완료): ' if not gap and review.get('status') == 'needs_review' else ''
         label = '유력 후보 · 분류 보류' if c in promising else group or '미분류'
         lines += [f"## {i}. " + ('' if gap else f"[{label}] ") + cell(c['title']), '', _link(c['url']), '',
                   cell(c['document_number']) + ' · 공개일 ' + cell(c['publication_date'] or '미확인'), '',
@@ -92,15 +96,15 @@ def render(snapshot):
             saved = {m['component_id']: m for m in review.get('component_matches', [])}
             for component in focus.get('components', []):
                 match = saved.get(component['id'], {})
-                degree = ({'strong': '강한 대응', 'partial': '부분 대응', 'mismatch': '대응하지 않음'}
-                    .get(match.get('verdict'), '미확인') if match.get('status') == 'source_checked' else
-                    '원문 확인 불가' if match.get('status') == 'unavailable' else '미확인')
+                degree = component_label(match)
                 lines += ['### ' + cell(component.get('symbol') or component['id']) + ' · ' + degree,
-                    '', cell(component['feature']), '', cell(match.get('reason') or '구성별 대응 판정이 저장되지 않았습니다.'), '']
+                    '', cell(component['feature']), '', cell(match.get('reason') or '이 구성은 아직 검토하지 않았습니다.'), '']
                 if match.get('gaps'):
                     lines += ['남은 차이: ' + cell(match['gaps']), '']
                 if match.get('issues'):
                     lines += ['확인 미완료 사유: ' + cell(' '.join(dict.fromkeys(match['issues']))), '']
+                for source in match.get('reviewed_sources', []):
+                    lines += [f"검토 범위: {cell(source['scope'])} · 문자 {source['start']}–{source['end']}", '']
                 for passage in match.get('passages', []):
                     location = ('PDF ' + ', '.join(map(str, passage['pages'])) + '쪽' if passage['pages'] else
                                 f"{passage['scope']} · 문자 {passage['start']}–{passage['end']}")

@@ -48,6 +48,11 @@ EDITABLE_KEYS = frozenset(
         "epo_consumer_key",
         "kipris_integration_enabled",
         "kipris_api_key",
+        "kiwee_integration_enabled",
+        "kiwee_endpoint",
+        "kiwee_shards",
+        "kiwee_ca_file",
+        "kiwee_certificate_thumbprint",
         "epo_consumer_secret",
         "epo_hourly_quota_bytes",
         "literature_integration_enabled",
@@ -590,7 +595,7 @@ def get(session: Session, key: str) -> Any:
 
 
 def _coerce(key: str, value: Any) -> Any:
-    if key in ('kipris_integration_enabled',):
+    if key in ('kipris_integration_enabled', 'kiwee_integration_enabled'):
         if not isinstance(value, bool):
             raise ValueError(f'{key} 는 true 또는 false여야 합니다.')
         return value
@@ -625,6 +630,19 @@ def _coerce(key: str, value: Any) -> Any:
         return bool(value)
     if key in _CREDENTIAL_KEYS:
         return _coerce_credential(key, value)
+    if key.startswith('kiwee_'):
+        from .patent_search.kiwee_client import validate_endpoint, validate_shards, validate_thumbprint
+        if key == 'kiwee_endpoint':
+            return validate_endpoint(value)
+        if key == 'kiwee_shards':
+            return validate_shards(value)
+        if key == 'kiwee_certificate_thumbprint':
+            return validate_thumbprint(value)
+        if key == 'kiwee_ca_file':
+            text = str(value or '').strip()
+            if len(text) > 1000 or any(ord(c) < 32 for c in text):
+                raise ValueError('CA 인증서 파일 경로를 확인하세요.')
+            return text
     if key == "retrieval_mode":
         text = str(value).strip().lower()
         # 폐기한 값은 뜻이 가장 가까운 쪽으로 옮긴다. 거절하면 그 값이 저장된

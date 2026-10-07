@@ -95,12 +95,13 @@ def _merge(directory, records, *, ranked=False, failures=None):
         previous = old.get('search_review') or {}
         current = row.get('search_review') or {}
         if current.get('component_matches'):
-            from .review_context import assessment_status, assessment_verdict
+            from .review_context import assessment_status, assessment_verdict, review_state
             prior = {m['component_id']: m for m in previous.get('component_matches', [])}
             matches = []
             for match in current['component_matches']:
                 saved_match = prior.pop(match['component_id'], {})
-                if saved_match.get('status') == 'source_checked' and match.get('status') != 'source_checked':
+                if (saved_match.get('status') == 'source_checked' and match.get('status') != 'source_checked'
+                        or saved_match and review_state(saved_match) != 'unreviewed' and review_state(match) == 'unreviewed'):
                     match = {**saved_match, 'last_attempt': match}
                 matches.append(match)
             matches.extend(prior.values())
@@ -194,4 +195,4 @@ def save_findings(tools, arguments):
                 for row in rows if row.get('search_review')],
             'excluded_input_documents': exclusions(tools.work_dir),
             **feedback(rows, cutoff=tools.cutoff, focus=review_context(tools.work_dir)),
-            'scope_note': '원문 문자 검증과 AI의 기술적 유사성 판단은 구분됩니다. 불일치는 다음 검색에 반영하세요.'}
+            'scope_note': '원문 문자 검증과 AI의 기술적 유사성 판단은 구분됩니다. 미검토·검증 보완 항목은 현재 상태이며 추가 실행을 요구하지 않습니다.'}

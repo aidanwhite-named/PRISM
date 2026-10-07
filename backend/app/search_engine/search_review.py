@@ -51,11 +51,16 @@ def validate(directory, candidate, review):
     for component in targets:
         entries = [m for m in submitted if isinstance(m, dict) and m.get('component_id') == component['id']]
         match = {'component_id': component['id'], 'symbol': component.get('symbol', ''),
-                 'feature': component['feature'], 'status': 'needs_review', 'passages': []}
+                 'feature': component['feature'], 'status': 'needs_review', 'review_status': 'unreviewed', 'passages': []}
         if len(entries) != 1:
-            match['issues'] = ['이 구성의 대응 판정이 저장되지 않았거나 중복되었습니다.']
+            match['issues'] = ['이 구성은 아직 검토하지 않았습니다.' if not entries else '이 구성의 검토 결과가 중복되어 판정을 확인할 수 없습니다.']
+            if any(item.get('verdict') in (*VERDICTS, 'not_found') and isinstance(item.get('reason'), str)
+                   and item['reason'].strip() for item in entries):
+                match['review_status'] = 'reviewed'
         else:
             item = entries[0]
+            if item.get('verdict') in (*VERDICTS, 'not_found') and isinstance(item.get('reason'), str) and item['reason'].strip():
+                match.update(review_status='reviewed', verdict=item['verdict'], reason=item['reason'], gaps=item.get('gaps', ''))
             refs = item.get('passage_indices', [])
             valid_refs = isinstance(refs, list) and all(type(n) is int and 0 <= n < len(passages) for n in refs)
             if not valid_refs:
@@ -65,7 +70,11 @@ def validate(directory, candidate, review):
                     'verdict': item.get('verdict'), 'reason': item.get('reason'),
                     'gaps': item.get('gaps', ''), 'queries': [],
                     'passages': [passages[n] for n in dict.fromkeys(refs)]})
+                if item.get('verdict') == 'not_found':
+                    assessment = _validate_absence(directory, candidate, item)
                 match.update(assessment)
+                if item.get('verdict') in (*VERDICTS, 'not_found') and isinstance(item.get('reason'), str) and item['reason'].strip():
+                    match['review_status'] = 'unavailable' if assessment.get('status') == 'unavailable' else 'reviewed'
         matches.append(match)
     result = {key: review.get(key, '') if isinstance(review.get(key), str) else ''
               for key in ('reason', 'gaps')}
@@ -75,6 +84,40 @@ def validate(directory, candidate, review):
         issues=[*issues, *(issue for m in matches for issue in m.get('issues', []))], passages=[])
     if issues:
         result['status'] = 'needs_review'
+    return result
+
+
+def _validate_absence(directory, candidate, item):
+    """Validate the inspected scope, never infer document-wide absence."""
+    result = {'verdict': 'not_found', 'reason': item.get('reason', ''), 'gaps': item.get('gaps', ''),
+              'passages': [], 'issues': [], 'reviewed_sources': []}
+    journal = search_manifest.read_tool_journal(directory)
+    index = DocumentIndex(journal)
+    refs = item.get('reviewed_capture_ids', [])
+    if not isinstance(refs, list) or not refs or any(not isinstance(ref, str) for ref in refs):
+        result['issues'].append('대응 근거 없음 판단에는 실제 검토한 본문 수집 번호가 필요합니다.')
+        refs = []
+    for ref in dict.fromkeys(refs):
+        sources = []
+        for call in journal:
+            response = call.get('result') or {}
+            if (not call.get('ok') or call.get('tool') not in ('source_fetch', 'epo_fetch')
+                    or response.get('identifier_matched') is False or response.get('capture_artifact_id') != ref
+                    or response.get('verification_scope') not in ('claims', 'description', 'full_text')):
+                continue
+            for row in response.get('records', []):
+                if index.matches(candidate, row):
+                    sources.extend({'capture_artifact_id': ref, 'url': row['url'], 'scope': field,
+                                    'start': response.get('offset', 0), 'end': response.get('offset', 0) + len(body)}
+                        for field, body in row.get('fields', {}).items()
+                        if field in ('claims', 'description', 'full_text') and isinstance(body, str) and body.strip())
+        if not sources:
+            result['issues'].append('대응 근거 없음 판단의 검토 범위를 후보 문헌의 실제 본문과 연결하지 못했습니다.')
+        result['reviewed_sources'].extend(sources)
+    for key in ('reason', 'gaps'):
+        if not isinstance(result[key], str) or not result[key].strip():
+            result['issues'].append('검토 범위와 대응하지 않는 한정의 설명이 필요합니다.')
+    result['status'] = 'needs_review' if result['issues'] else 'source_checked'
     return result
 
 
@@ -156,18 +199,17 @@ def _validate_review(directory, candidate, review):
                 'relation_missing': '발췌에 청구항 특징·구성 관계의 설명이 누락되었습니다.',
             }
             result['issues'].append(messages[failure])
-            next_action = ('이미 읽은 원문 구간의 passage_id를 선택하고 그 구간 전체를 번역해 다시 저장하세요. '
-                           'quote를 직접 쓰면 생략·변경 없는 연속 원문이어야 합니다.')
+            repair_hint = ('기존 원문의 passage_id와 해당 구간 전체의 번역으로 교정할 수 있습니다. '
+                           '직접 quote를 쓰는 경우 생략·변경 없는 연속 원문이 필요합니다.')
             if failure == 'document_link_failed':
-                next_action = ('해당 문헌의 DOI·arXiv 식별번호와 원문 출처를 확인하세요. '
-                               '필요하면 그 논문의 서지 페이지에서 DOI·원문 연결 정보를 조회하세요. '
-                               '제목 유사성만으로 다른 문헌의 발췌를 붙이지 마세요.')
+                repair_hint = ('DOI·arXiv 식별번호와 서지 페이지의 원문 연결 정보로 문헌을 대조할 수 있습니다. '
+                               '제목 유사성만으로는 다른 문헌의 발췌를 연결할 수 없습니다.')
             elif failure == 'body_unavailable':
-                next_action = '해당 문헌의 연결된 PDF 또는 본문 영역이 있는 arXiv HTML을 읽고 근거를 저장하세요.'
+                repair_hint = '연결된 PDF 또는 arXiv HTML의 본문 영역은 근거 확보에 사용할 수 있는 대체 경로입니다.'
             elif failure == 'capture_missing':
-                next_action = '실제 source_fetch 응답의 capture_artifact_id와 passage_id로 다시 저장하세요.'
+                repair_hint = '실제 source_fetch 응답의 capture_artifact_id와 passage_id로 교정할 수 있습니다.'
             result['passage_issues'].append({'index': index, 'code': failure, 'repair_options': repairs[:2],
-                'next_action': next_action})
+                'repair_hint': repair_hint})
     if result['verdict'] != 'unavailable' and not result['passages']:
         result['issues'].append('원문 근거가 필요합니다. 초록·검색 스니펫은 본문 검증이 아닙니다.')
     if not isinstance(result['reason'], str) or not result['reason'].strip():
@@ -181,7 +223,7 @@ def _validate_review(directory, candidate, review):
 def feedback(rows, *, verification=False, cutoff='', focus=None):
     pending, gaps = [], []
     for row in rows:
-        if row.get('triage_status') == 'rejected' and not row.get('search_review'):
+        if not (focus and focus.get('mode') == 'gap') and row.get('triage_status') == 'rejected' and not row.get('search_review'):
             continue
         review = row.get('search_review') or {}
         item = {'url': row['url'], 'title': row['title']}
@@ -195,10 +237,7 @@ def feedback(rows, *, verification=False, cutoff='', focus=None):
     found_x = has_verified_x(rows, cutoff)
     return {'pending_source_checks': pending[:10], 'search_gaps': gaps[:5],
             'review_summary': summary_counts(rows, focus),
-            'verified_x_found': found_x,
-            'next_action': '검색·원문 확인·분류 저장·재검색 중 다음 행동을 자율적으로 선택하세요. '
-                '판단한 문헌은 수시로 저장하고, 실패한 문헌은 다른 후보 검토를 막지 않습니다. '
-                '충분한 근거가 확보되고 추가 탐색의 가치가 낮으면 저장 후 일찍 종료하세요.'}
+            'verified_x_found': found_x}
 
 
 def summary_counts(rows, focus=None):
@@ -227,19 +266,20 @@ def summary_counts(rows, focus=None):
         result['pending'] = sum(any(not any(m.get('component_id') == c['id'] and
             m.get('status') in ('source_checked', 'unavailable') for m in
             (row.get('search_review') or {}).get('component_matches', [])) for c in targets)
-            for row in rows if row.get('triage_status') != 'rejected')
+            for row in rows)
         result['status'] = 'incomplete' if result['pending'] else 'complete'
         result['components'] = []
         for c in targets:
-            totals = {key: 0 for key in ('strong', 'partial', 'mismatch', 'unavailable', 'pending')}
+            from .review_context import review_state
+            totals = {key: 0 for key in ('strong', 'partial', 'mismatch', 'not_found', 'unavailable', 'pending', 'unreviewed', 'reviewed_pending')}
             for row in rows:
-                if row.get('triage_status') == 'rejected':
-                    continue
                 match = next((m for m in (row.get('search_review') or {}).get('component_matches', [])
                               if m['component_id'] == c['id']), {})
                 key = match.get('verdict') if match.get('status') == 'source_checked' else (
                     'unavailable' if match.get('status') == 'unavailable' else 'pending')
                 totals[key] += 1
+                if key == 'pending':
+                    totals['unreviewed' if review_state(match) == 'unreviewed' else 'reviewed_pending'] += 1
             result['components'].append({'component_id': c['id'], 'symbol': c.get('symbol', ''),
                                          'feature': c['feature'], **totals})
     return result
@@ -259,7 +299,8 @@ def summary_text(rows, focus=None):
     if 'components' in counts:
         return f"저장된 후보 {counts['candidate_count']}건 · " + ' · '.join(
             f"{c['symbol'] or c['component_id']}: 강한 대응 {c['strong']}건 / 부분 대응 {c['partial']}건 / "
-            f"비대응 {c['mismatch']}건 / 미확인 {c['pending']}건 / 원문 확인 불가 {c['unavailable']}건"
+            f"비대응 {c['mismatch']}건 / 검토 범위 내 대응 근거 없음 {c['not_found']}건 / "
+            f"미검토 {c['unreviewed']}건 / 검토함·검증 보완 {c['reviewed_pending']}건 / 검토 불가 {c['unavailable']}건"
             for c in counts['components'])
     return (f"저장된 후보 {counts['candidate_count']}건 · 원문 근거 검증을 통과한 분류: "
             f"X {counts['X']}건, Y {counts['Y']}건, Z {counts['Z']}건 · "

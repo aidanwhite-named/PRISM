@@ -391,6 +391,48 @@ def test_cancellation_stops_before_call_and_saves_audit(tmp_path, review_input):
     assert (tmp_path / 'comparison-review' / 'audit.json').exists()
 
 
+@pytest.mark.parametrize('failure,code,detail', [
+    ({'timed_out': True}, 'TIMED_OUT', '제한 시간'),
+    ({'auth_required': True}, 'AUTH_REQUIRED', '로그인'),
+    ({'rate_limited': True}, 'RATE_LIMITED', '사용량 제한'),
+    ({'tool_uses': ['run_command']}, 'TOOL_POLICY_VIOLATION', 'run_command'),
+    ({'is_error': True, 'errors': ['provider failed']}, 'PROCESS_ERROR', 'provider failed'),
+    (asyncio.TimeoutError(), 'TIMED_OUT', '시간이 초과'),
+])
+def test_runner_preserves_preparation_failure_cause(client, monkeypatch, review_input, failure, code, detail):
+    from pathlib import Path
+    from .fake_provider import DeterministicTestProvider
+    from .conftest import wait_for_job
+    from app.db import session_scope
+    from app.models import ExecutionJob
+
+    components = requirements(review_input)
+    calls = []
+
+    async def execute(self, request, _):
+        calls.append(request.work_dir.name)
+        if request.system_prompt == review.CLAIMS:
+            return ExecutionOutcome(result_text=json.dumps({'components': components}), exit_code=0, tool_policy=NO_TOOLS)
+        if isinstance(failure, Exception):
+            raise failure
+        return ExecutionOutcome(result_text='{}', exit_code=0, tool_policy=NO_TOOLS, **failure)
+
+    monkeypatch.setattr(DeterministicTestProvider, 'execute', execute)
+    batch = client.post('/api/uploads', files=[
+        ('files', ('first.txt', b'The controller changes the gain based on accumulated noise.', 'text/plain'))]).json()
+    created = client.post('/api/jobs', json={'provider': 'test', 'claim_text':
+        '청구항 1\n(A) ' + components[0]['feature'], 'batch_id': batch['batch_id']})
+    assert created.status_code == 201, created.text
+    job = wait_for_job(client, created.json()['id'])
+    assert job['status'] == 'FAILED' and job['error_code'] == code
+    assert any(detail in error for error in job['errors'])
+    assert calls == ['claims', 'document-ATT-01']
+    with session_scope() as session:
+        directory = Path(session.get(ExecutionJob, job['id']).work_dir)
+    audit = json.loads((directory / 'comparison-review' / 'audit.json').read_text('utf-8'))
+    assert audit['error_code'] == code and audit['attempts'][-1]['error_code'] == code
+
+
 @pytest.mark.parametrize('semantic_failure', [False, True])
 @pytest.mark.parametrize('component_failure', [False, True])
 def test_runner_executes_and_persists_all_stages(client, monkeypatch, review_input, semantic_failure, component_failure):

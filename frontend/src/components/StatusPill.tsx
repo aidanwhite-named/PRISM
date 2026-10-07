@@ -24,6 +24,7 @@ export const ERROR_LABEL: Record<string, string> = {
   SEARCH_BUDGET_EXCEEDED: "검색 횟수 상한 초과",
   SEARCH_CHECKPOINT_FAILED: "검색 후보 저장 실패",
   SEARCH_CLASSIFICATION_FAILED: "검색 후보 분류 미완료",
+  SEARCH_REVIEW_INCOMPLETE: "구성 검토 미완료",
   SEARCH_PROMPT_ERROR: "검색 프롬프트 오류",
   SEARCH_PERMISSION_DENIED: "검색 페이지 권한 거부",
   SEARCH_CHANNELS_UNAVAILABLE: "검색 채널 없음",

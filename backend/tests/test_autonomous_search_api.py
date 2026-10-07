@@ -64,6 +64,40 @@ def test_session_timeout_preserves_partial_findings(client, monkeypatch, autonom
     assert job['search_manifest']['engine']['candidates']
 
 
+@pytest.mark.parametrize('source_warning', [False, True])
+def test_search_without_candidates_can_finish_normally(client, monkeypatch, source_warning):
+    from app.search_engine.autonomous import AutonomousSearch
+
+    requests = []
+    async def execute(self, request, emit):
+        requests.append(request)
+        await emit('tool_use', {'name': 'WebSearch', 'input': {'query': 'unusual coupled mechanism'}})
+        return ExecutionOutcome(result_text='검색 방향을 바꾸어 확인했지만 제시할 유사 문헌을 확보하지 못했습니다.',
+                                exit_code=0, tool_calls=[{'name': 'WebSearch'}],
+                                usage={'input_tokens': 10, 'output_tokens': 5})
+
+    run = AutonomousSearch.run
+    async def run_with_warning(self):
+        await run(self)
+        if source_warning:
+            self.warnings.append('일부 저장소는 원문 접근을 허용하지 않았습니다.')
+
+    monkeypatch.setattr(DeterministicSearchProvider, 'execute', execute)
+    monkeypatch.setattr(AutonomousSearch, 'run', run_with_warning)
+    created = client.post('/api/jobs', json={'job_kind': 'similarity_search', 'provider': 'test-search',
+                                           'claim_text': 'A controls B'}).json()
+    job = wait_for_job(client, created['id'])
+    assert job['status'] == 'SUCCEEDED', job['errors']
+    assert job['error_code'] is None and job['search_manifest_error'] is None
+    snapshot = job['search_manifest']['engine']
+    assert snapshot['stop_reason'] == 'model_complete' and snapshot['can_continue']
+    assert snapshot['candidates'] == []
+    assert bool(snapshot['warnings']) == source_warning
+    assert snapshot['usage']['input_tokens'] == 10 and len(requests) == 1
+    assert job['search_manifest']['observed']['search_queries']
+    assert '유사 문헌이 존재하지 않는다는 뜻은 아닙니다' in job['result_text']
+
+
 def test_historical_scope_is_refreshed_on_read_without_rewriting_saved_report(client, autonomous_runtime):
     from app.db import session_scope
     from app.models import ExecutionJob

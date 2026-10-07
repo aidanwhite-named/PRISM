@@ -93,6 +93,7 @@ _MCP_INPUT_KEYS = {
     "epo_search": ("query", "max_results"),
     "epo_fetch": ("publication_number", "constituent"),
     "literature_search": ("query", "max_results", "source", "openalex_mode", "cites_doi"),
+    "kiwee_search": ("query", "query_mode", "max_results", "begin"),
     "literature_fetch": ("doi", "constituent"),
 }
 _MAX_STRUCTURED_INPUT = 2000
@@ -210,8 +211,9 @@ class AgyStreamState:
 
 
 class AgyStreamParser:
-    def __init__(self) -> None:
+    def __init__(self, *, structured_output: bool = False) -> None:
         self.state = AgyStreamState()
+        self.structured_output = structured_output
 
     def feed(self, line: str) -> list[tuple[str, dict]]:
         line = line.strip()
@@ -274,7 +276,12 @@ class AgyStreamParser:
 
         events: list[tuple[str, dict]] = []
         lowered = step_type.lower()
-        if lowered and lowered not in _BENIGN_STEPS:
+        # --json-schema can submit the answer as tool/finish ACTIVE, followed
+        # by a finish DONE step. Only this native completion is exempt; real
+        # tools (including MCP tools named finish) retain their policy checks.
+        schema_finish = (self.structured_output and lowered in _KNOWN_TOOL_STEPS
+                         and body.get("tool_name") == "finish")
+        if lowered and lowered not in _BENIGN_STEPS and not schema_finish:
             if lowered in _KNOWN_TOOL_STEPS or any(
                 hint in lowered for hint in _TOOL_HINTS
             ):

@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { api } from "../lib/api";
 import KiprisSettings from '../components/KiprisSettings';
+import KiweeSettings from '../components/KiweeSettings';
 import { isLogoutSession } from "../lib/types";
 import type {
   AppSettings,
@@ -1053,6 +1054,7 @@ export default function SettingsPage() {
       <div className="settings-columns">
         <div className="settings-stack">
           <KiprisSettings settings={settings} onChange={setSettings} />
+          <KiweeSettings settings={settings} onChange={setSettings} />
           <div className="card settings-storage">
             <h2>저장 위치와 실행 환경</h2>
             <div className="table-scroll">

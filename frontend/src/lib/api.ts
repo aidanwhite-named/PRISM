@@ -1,4 +1,5 @@
 import type {
+  KiweeTrialResult,
   AppSettings,
   CredentialCheck,
   HistoryItem,
@@ -219,6 +220,10 @@ export const api = {
     request<CredentialCheck>("/api/settings/epo/check", { method: "POST" }),
   checkKipris: () =>
     request<CredentialCheck>("/api/settings/kipris/check", { method: "POST" }),
+  searchKiwee: (query: string, query_mode: 'keywords' | 'solr', begin = 1) =>
+    request<KiweeTrialResult>('/api/kiwee/search', {
+      method: 'POST', body: JSON.stringify({ query, query_mode, max_results: 5, begin }),
+    }),
   updateKiprisUsage: (month: string, total_used: number) =>
     request<AppSettings>("/api/settings/kipris/usage", {
       method: "PUT", body: JSON.stringify({ month, total_used }),

@@ -30,6 +30,7 @@ from ..enums import (
     AttachmentRole,
     DeliveryMode,
     DeliveryPlan,
+    ErrorCode,
     JobKind,
     JobStatus,
     OutputMode,
@@ -1143,7 +1144,7 @@ def preflight(payload: JobCreate, session: Session = Depends(get_db)) -> Preflig
             lanes=[PreflightLane(id="autonomous_search", chars=chars, bytes=size)], chars=chars, bytes=size,
             char_budget=max_chars, byte_budget=byte_budget, over_bytes=over_bytes, over_chars=over_chars,
             blocked=over_bytes or over_chars, delivery_plan="autonomous_search",
-            message=f"전체 검색 최대 {seconds}초. 검색·원문 확인·저장·재검색을 자유롭게 진행하고 충분하면 일찍 종료합니다. "
+            message=f"전체 검색 최대 {seconds}초. AI가 탐색과 후보 검토의 가치를 판단해 진행하거나 마무리합니다. "
                 + ("선택한 미대응 구성별로 대응 정도와 근거를 표시합니다." if focus else "X/Y/Z는 결과 분류 기준입니다."))
     tool_policy = getattr(provider, "search_tool_policy", None)
     tool_policy_name = getattr(tool_policy, "name", "") or ""
@@ -1336,7 +1337,8 @@ async def continue_search(job_id: str, session: Session = Depends(get_db)) -> Jo
     values = settings_service.get_all(session)
     snapshot = (source.search_manifest or {}).get('engine') or {}
     resumable_status = (source.status == JobStatus.SUCCEEDED or
-                        source.status == JobStatus.FAILED and snapshot.get('stop_reason') == 'classification_incomplete')
+                        source.status == JobStatus.FAILED and (snapshot.get('stop_reason') == 'classification_incomplete'
+                            or source.error_code == ErrorCode.SEARCH_REVIEW_INCOMPLETE))
     if (source.job_kind != JobKind.SIMILARITY_SEARCH or not resumable_status
             or not snapshot.get('can_continue')):
         raise HTTPException(409, "종료된 검색에 이어가기 자료가 있는 경우 추가 검색을 실행할 수 있습니다.")
